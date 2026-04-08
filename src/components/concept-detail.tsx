@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
+import { QuickGenerateModal } from './quick-generate-modal';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
   const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval } = useAppStore();
@@ -12,6 +13,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing'>('overview');
   const [commentText, setCommentText] = useState('');
   const [editing, setEditing] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
 
   // Editable fields
   const [editName, setEditName] = useState('');
@@ -158,21 +160,53 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <span className="text-xs text-muted block mb-1">Coil</span>
-                <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.coilImageUrl ? (
-                    <img src={concept.coilImageUrl} alt="Coil" className="w-full h-full object-contain" />
+                    <>
+                      <img src={concept.coilImageUrl} alt="Coil" className="w-full h-full object-contain" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={() => setShowGenerate(true)}
+                          className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
+                        >
+                          ✦ Regenerate
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <span className="text-sm text-muted">No image</span>
+                    <button
+                      onClick={() => setShowGenerate(true)}
+                      className="flex flex-col items-center gap-1.5 text-muted hover:text-accent transition-colors"
+                    >
+                      <span className="text-2xl">✦</span>
+                      <span className="text-xs">Generate</span>
+                    </button>
                   )}
                 </div>
               </div>
               <div>
                 <span className="text-xs text-muted block mb-1">Base</span>
-                <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.baseImageUrl ? (
-                    <img src={concept.baseImageUrl} alt="Base" className="w-full h-full object-contain" />
+                    <>
+                      <img src={concept.baseImageUrl} alt="Base" className="w-full h-full object-contain" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          onClick={() => setShowGenerate(true)}
+                          className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
+                        >
+                          ✦ Regenerate
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <span className="text-sm text-muted">No image</span>
+                    <button
+                      onClick={() => setShowGenerate(true)}
+                      className="flex flex-col items-center gap-1.5 text-muted hover:text-accent transition-colors"
+                    >
+                      <span className="text-2xl">✦</span>
+                      <span className="text-xs">Generate</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -187,6 +221,15 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 </div>
               </div>
             </div>
+
+            {/* AI Generate Button */}
+            <button
+              onClick={() => setShowGenerate(true)}
+              className="w-full py-2.5 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <span>✦</span>
+              {concept.coilImageUrl || concept.baseImageUrl ? 'Regenerate Images with AI' : 'Generate Images with AI'}
+            </button>
 
             {/* Description */}
             {editing ? (
@@ -465,6 +508,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Manufacturing */}
       {activeSection === 'manufacturing' && (
         <ManufacturingPanel conceptId={conceptId} />
+      )}
+
+      {/* Quick Generate Modal */}
+      {showGenerate && concept && (
+        <QuickGenerateModal concept={concept} onClose={() => setShowGenerate(false)} />
       )}
     </div>
   );

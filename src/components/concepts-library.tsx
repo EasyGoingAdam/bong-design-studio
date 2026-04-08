@@ -6,6 +6,8 @@ import { ConceptStatus, LifecycleType, PriorityLevel } from '@/lib/types';
 import { ConceptCard } from './concept-card';
 import { Select, EmptyState } from './ui';
 import { NewConceptModal } from './new-concept-modal';
+import { QuickGenerateModal } from './quick-generate-modal';
+import { Concept } from '@/lib/types';
 
 export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts } = useAppStore();
@@ -19,6 +21,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [generateConcept, setGenerateConcept] = useState<Concept | null>(null);
 
   const collections = useMemo(() =>
     [...new Set(concepts.map((c) => c.collection).filter(Boolean))],
@@ -175,7 +178,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((c) => (
-            <ConceptCard key={c.id} concept={c} onClick={() => onOpenConcept(c.id)} />
+            <ConceptCard key={c.id} concept={c} onClick={() => onOpenConcept(c.id)} onGenerate={() => setGenerateConcept(c)} />
           ))}
         </div>
       ) : (
@@ -217,6 +220,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
       )}
 
       {showNewModal && <NewConceptModal onClose={() => setShowNewModal(false)} onCreated={onOpenConcept} />}
+      {generateConcept && <QuickGenerateModal concept={generateConcept} onClose={() => setGenerateConcept(null)} />}
     </div>
   );
 }
