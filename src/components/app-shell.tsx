@@ -6,16 +6,18 @@ import { ConceptsLibrary } from './concepts-library';
 import { WorkflowBoard } from './workflow-board';
 import { SpecsDatabase } from './specs-database';
 import { AIGeneration } from './ai-generation';
+import { AIInspiration } from './ai-inspiration';
 import { ConceptDetail } from './concept-detail';
 import { SettingsModal } from './settings-modal';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'detail';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '◫' },
   { id: 'concepts', label: 'Concepts', icon: '▦' },
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
   { id: 'specs', label: 'Specs DB', icon: '⚙' },
+  { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
 ];
 
@@ -94,6 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
         {activeTab === 'workflow' && <WorkflowBoard onOpenConcept={openConcept} />}
         {activeTab === 'specs' && <SpecsDatabase />}
+        {activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
         {activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
         {activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />

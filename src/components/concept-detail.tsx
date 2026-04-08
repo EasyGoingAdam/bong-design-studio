@@ -314,6 +314,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             {/* Quick Actions */}
             <div className="bg-surface border border-border rounded-xl p-4 space-y-2">
               <h4 className="text-sm font-semibold">Actions</h4>
+              <button
+                onClick={() => setShowGenerate(true)}
+                className="w-full py-2 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg font-medium flex items-center justify-center gap-1.5"
+              >
+                <span>✦</span>
+                {concept.coilImageUrl || concept.baseImageUrl ? 'Regenerate Graphics' : 'Generate Graphics with AI'}
+              </button>
               {concept.status !== 'approved' && (
                 <button onClick={handleApprove} className="w-full py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg">
                   Approve
