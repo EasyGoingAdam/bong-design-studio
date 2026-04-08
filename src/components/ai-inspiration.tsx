@@ -110,11 +110,9 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
         coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
         baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },
       });
-      // Remove from brainstorm list
+      // Remove from brainstorm list — stay on page so user can pick more
       setResults((prev) => prev.filter((_, i) => i !== index));
-      toast('Concept created from brainstorm', 'success');
-      // Navigate to the new concept
-      onOpenConcept(concept.id);
+      toast(`"${result.name}" added to Concepts`, 'success');
     } catch (err) {
       console.error('Failed to create concept:', err);
       setError('Failed to create concept. Please try again.');
