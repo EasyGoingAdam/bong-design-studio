@@ -42,6 +42,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [mode, setMode] = useState<GenerationMode>('production_bw');
   const [contrast, setContrast] = useState('high');
   const [density, setDensity] = useState('medium');
+  const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
 
   const [generating, setGenerating] = useState(false);
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
@@ -78,21 +79,22 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     setGeneratedBaseUrl('');
 
     try {
-      // Generate Coil image
+      // Generate Coil image — rectangle (landscape) or square
+      const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
       const coilRes = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey }),
+        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, size: coilSize }),
       });
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
 
-      // Generate Base image
+      // Generate Base image — always square (circular piece)
       const baseRes = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey }),
+        body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, size: '1024x1024' }),
       });
       const baseData = await baseRes.json();
       if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
@@ -245,7 +247,39 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               </div>
             </div>
 
-            <SliderInput value={complexityLevel} onChange={setComplexityLevel} label="Complexity Level" />
+            <div className="grid grid-cols-2 gap-3">
+              <SliderInput value={complexityLevel} onChange={setComplexityLevel} label="Complexity Level" />
+              <div>
+                <label className="block text-xs text-muted mb-1">Coil Image Shape</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCoilShape('rectangle')}
+                    className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                      coilShape === 'rectangle'
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-background border-border text-muted hover:text-foreground'
+                    }`}
+                  >
+                    <span className="w-10 h-6 border border-current rounded-sm" />
+                    Rectangle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCoilShape('square')}
+                    className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                      coilShape === 'square'
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-background border-border text-muted hover:text-foreground'
+                    }`}
+                  >
+                    <span className="w-6 h-6 border border-current rounded-sm" />
+                    Square
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted mt-1">{coilShape === 'rectangle' ? 'Wider format — better for wraparound coil designs' : 'Square format — equal proportions'}</p>
+              </div>
+            </div>
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, apiKey } = await request.json();
+    const { prompt, apiKey, size = '1024x1024' } = await request.json();
 
     if (!apiKey) {
       return NextResponse.json({ error: 'API key is required' }, { status: 400 });
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         model: 'gpt-image-1',
         prompt: prompt,
         n: 1,
-        size: '1024x1024',
+        size: size,
         quality: 'high',
       }),
     });

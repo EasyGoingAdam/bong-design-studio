@@ -36,6 +36,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [relationship, setRelationship] = useState<CoilBaseRelationship>(concept.specs.coordinationMode || 'thematic');
   const [complexity, setComplexity] = useState<number>(concept.specs.laserComplexity || 3);
   const [contrast, setContrast] = useState('high');
+  const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
@@ -79,17 +80,18 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     setSaved(false);
 
     try {
-      // Generate both images
+      // Generate both images — coil uses selected shape, base always square
+      const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
       const [coilRes, baseRes] = await Promise.all([
         fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey }),
+          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, size: coilSize }),
         }),
         fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey }),
+          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, size: '1024x1024' }),
         }),
       ]);
 
@@ -209,7 +211,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-muted mb-1">Contrast</label>
               <Select
@@ -223,6 +225,19 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
               />
             </div>
             <SliderInput value={complexity} onChange={setComplexity} label="Complexity" />
+            <div>
+              <label className="block text-xs text-muted mb-1">Coil Shape</label>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setCoilShape('rectangle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${coilShape === 'rectangle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-7 h-4 border border-current rounded-sm" />
+                  Wide
+                </button>
+                <button type="button" onClick={() => setCoilShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${coilShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-4 h-4 border border-current rounded-sm" />
+                  Square
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
