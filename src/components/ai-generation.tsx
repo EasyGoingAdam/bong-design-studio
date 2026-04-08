@@ -9,11 +9,11 @@ import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
 
 const MODE_OPTIONS = [
-  { value: 'concept_art', label: 'Concept Art Mode' },
-  { value: 'production_bw', label: 'Production B&W Mode' },
-  { value: 'pattern_wrap', label: 'Pattern / Wrap Mode' },
-  { value: 'premium_luxury', label: 'Premium / Luxury Mode' },
-  { value: 'seasonal_drop', label: 'Seasonal Drop Mode' },
+  { value: 'production_bw', label: 'Production Ready' },
+  { value: 'concept_art', label: 'Concept Exploration' },
+  { value: 'pattern_wrap', label: 'Pattern / Wrap' },
+  { value: 'premium_luxury', label: 'Premium / Luxury' },
+  { value: 'seasonal_drop', label: 'Seasonal Drop' },
 ];
 
 const RELATIONSHIP_OPTIONS = [

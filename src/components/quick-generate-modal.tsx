@@ -9,8 +9,8 @@ import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
 
 const MODE_OPTIONS = [
-  { value: 'production_bw', label: 'Production B&W (Laser-Ready)' },
-  { value: 'concept_art', label: 'Concept Art' },
+  { value: 'production_bw', label: 'Production Ready' },
+  { value: 'concept_art', label: 'Concept Exploration' },
   { value: 'pattern_wrap', label: 'Pattern / Wrap' },
   { value: 'premium_luxury', label: 'Premium / Luxury' },
   { value: 'seasonal_drop', label: 'Seasonal Drop' },

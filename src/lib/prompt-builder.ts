@@ -15,12 +15,14 @@ interface PromptInputs {
   contrast: string;
 }
 
+const BW_BASE = 'Use only pure black lines and fills on a white background. No color, no gradients, no gray tones, no shading, no halftones.';
+
 const MODE_PREFIXES: Record<GenerationMode, string> = {
-  concept_art: 'Create a detailed concept art illustration',
-  production_bw: 'Create a high-contrast black and white design optimized for laser etching on glass. Use only pure black lines on white background, no gradients, no gray tones, no shading',
-  pattern_wrap: 'Create a seamless repeating pattern design that wraps around a cylindrical surface',
-  premium_luxury: 'Create an ornate, luxurious design with fine filigree detail, baroque-inspired scrollwork, and premium aesthetic',
-  seasonal_drop: 'Create a bold, eye-catching seasonal/holiday themed design',
+  concept_art: `Create a detailed black and white concept illustration for laser etching on glass. ${BW_BASE} This is an exploratory concept — creative freedom is encouraged but keep it black and white`,
+  production_bw: `Create a high-contrast black and white design optimized for laser etching on glass. ${BW_BASE} Prioritize clean lines, manufacturing reliability, and production feasibility`,
+  pattern_wrap: `Create a seamless repeating black and white pattern design that wraps around a cylindrical surface. ${BW_BASE}`,
+  premium_luxury: `Create an ornate, luxurious black and white design with fine filigree detail, baroque-inspired scrollwork, and premium aesthetic. ${BW_BASE}`,
+  seasonal_drop: `Create a bold, eye-catching black and white seasonal/holiday themed design for laser etching. ${BW_BASE}`,
 };
 
 const RELATIONSHIP_INSTRUCTIONS: Record<CoilBaseRelationship, string> = {
@@ -68,9 +70,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
     parts.push('Use maximum contrast between black and white areas.');
   }
 
-  if (inputs.mode === 'production_bw' || inputs.mode === 'pattern_wrap') {
-    parts.push(LASER_CONSTRAINTS);
-  }
+  parts.push(LASER_CONSTRAINTS);
 
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
@@ -103,9 +103,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
     parts.push('Use maximum contrast between black and white areas.');
   }
 
-  if (inputs.mode === 'production_bw' || inputs.mode === 'pattern_wrap') {
-    parts.push(LASER_CONSTRAINTS);
-  }
+  parts.push(LASER_CONSTRAINTS);
 
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
