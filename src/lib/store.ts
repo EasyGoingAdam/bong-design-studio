@@ -73,23 +73,25 @@ async function syncConceptToAPI(concept: Concept) {
   }
 }
 
+// Helper to save a setting to the server
+async function saveSetting(key: string, value: string) {
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+  } catch (err) {
+    console.error('Failed to save setting:', err);
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
   concepts: [],
   templates: [],
   users: sampleUsers,
-  currentUser: (() => {
-    // Try to load user name from localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('bds-user-name');
-        if (stored) {
-          return { ...sampleUsers[0], name: stored, avatar: stored.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) };
-        }
-      } catch { /* ignore */ }
-    }
-    return sampleUsers[0];
-  })(),
-  openAIKey: typeof window !== 'undefined' ? localStorage.getItem('bds-openai-key') || '' : '',
+  currentUser: sampleUsers[0],
+  openAIKey: '',
   loading: false,
   initialized: false,
 
@@ -97,10 +99,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (get().initialized) return;
     set({ loading: true });
     try {
-      // Fetch concepts from API
-      const [conceptsRes, templatesRes] = await Promise.all([
+      // Fetch concepts, templates, and settings from API in parallel
+      const [conceptsRes, templatesRes, settingsRes] = await Promise.all([
         fetch('/api/concepts'),
         fetch('/api/templates'),
+        fetch('/api/settings'),
       ]);
 
       if (conceptsRes.ok) {
@@ -112,6 +115,24 @@ export const useAppStore = create<AppState>()((set, get) => ({
         const templatesData = await templatesRes.json();
         if (templatesData.length > 0) {
           set({ templates: templatesData });
+        }
+      }
+
+      // Load settings from server
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        if (settings.openai_key) {
+          set({ openAIKey: settings.openai_key });
+        }
+        if (settings.user_name) {
+          const name = settings.user_name;
+          set({
+            currentUser: {
+              ...get().currentUser,
+              name,
+              avatar: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+            },
+          });
         }
       }
     } catch (err) {
@@ -395,17 +416,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   setOpenAIKey: (key) => {
     set({ openAIKey: key });
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bds-openai-key', key);
-    }
+    saveSetting('openai_key', key);
   },
 
   setCurrentUserName: (name) => {
     set((state) => ({
       currentUser: { ...state.currentUser, name, avatar: name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) },
     }));
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bds-user-name', name);
-    }
+    saveSetting('user_name', name);
   },
 }));
