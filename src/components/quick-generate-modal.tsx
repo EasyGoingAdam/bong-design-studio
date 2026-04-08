@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { Concept, GenerationMode, CoilBaseRelationship } from '@/lib/types';
 import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
+import { ImageDownloadButtons } from './image-download';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production B&W (Laser-Ready)' },
@@ -265,7 +266,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 <span className="text-xs text-muted block mb-2">Generated Images</span>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-[10px] text-muted block mb-1">Coil</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-muted">Coil</span>
+                      {generatedCoilUrl && <ImageDownloadButtons imageUrl={generatedCoilUrl} filename={`${concept.name}-coil`} />}
+                    </div>
                     <div className="aspect-square rounded-lg border border-border overflow-hidden bg-surface">
                       {generatedCoilUrl ? (
                         <img src={generatedCoilUrl} alt="Generated Coil" className="w-full h-full object-contain" />
@@ -275,7 +279,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                     </div>
                   </div>
                   <div>
-                    <span className="text-[10px] text-muted block mb-1">Base</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-muted">Base</span>
+                      {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${concept.name}-base`} />}
+                    </div>
                     <div className="aspect-square rounded-lg border border-border overflow-hidden bg-surface">
                       {generatedBaseUrl ? (
                         <img src={generatedBaseUrl} alt="Generated Base" className="w-full h-full object-contain" />

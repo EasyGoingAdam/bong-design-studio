@@ -6,6 +6,7 @@ import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
+import { ImageDownloadButtons } from './image-download';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
   const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval } = useAppStore();
@@ -159,7 +160,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           <div className="lg:col-span-2 space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <span className="text-xs text-muted block mb-1">Coil</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted">Coil</span>
+                  {concept.coilImageUrl && <ImageDownloadButtons imageUrl={concept.coilImageUrl} filename={`${concept.name}-coil`} />}
+                </div>
                 <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.coilImageUrl ? (
                     <>
@@ -185,7 +189,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 </div>
               </div>
               <div>
-                <span className="text-xs text-muted block mb-1">Base</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted">Base</span>
+                  {concept.baseImageUrl && <ImageDownloadButtons imageUrl={concept.baseImageUrl} filename={`${concept.name}-base`} />}
+                </div>
                 <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.baseImageUrl ? (
                     <>
@@ -211,7 +218,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 </div>
               </div>
               <div>
-                <span className="text-xs text-muted block mb-1">Combined</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted">Combined</span>
+                  {concept.combinedImageUrl && <ImageDownloadButtons imageUrl={concept.combinedImageUrl} filename={`${concept.name}-combined`} />}
+                </div>
                 <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
                   {concept.combinedImageUrl ? (
                     <img src={concept.combinedImageUrl} alt="Combined" className="w-full h-full object-contain" />
