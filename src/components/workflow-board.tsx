@@ -8,12 +8,12 @@ import { ConceptCardMini } from './concept-card';
 import { useToast } from './toast';
 
 const COLUMN_COLORS: Record<ConceptStatus, string> = {
-  ideation: 'border-t-purple-500',
-  in_review: 'border-t-yellow-500',
-  approved: 'border-t-green-500',
-  ready_for_manufacturing: 'border-t-blue-500',
-  manufactured: 'border-t-emerald-500',
-  archived: 'border-t-gray-500',
+  ideation: 'border-t-purple-400',
+  in_review: 'border-t-amber-400',
+  approved: 'border-t-green-400',
+  ready_for_manufacturing: 'border-t-blue-400',
+  manufactured: 'border-t-emerald-400',
+  archived: 'border-t-gray-300',
 };
 
 export function WorkflowBoard({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {

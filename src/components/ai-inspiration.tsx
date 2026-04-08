@@ -194,7 +194,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400 mb-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4">
           {error}
         </div>
       )}

@@ -266,7 +266,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
               {error}
             </div>
           )}
@@ -340,7 +340,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                     </button>
                   </>
                 ) : (
-                  <div className="flex-1 py-2.5 bg-green-600/20 text-green-400 text-sm rounded-lg font-medium text-center border border-green-600/30">
+                  <div className="flex-1 py-2.5 bg-green-50 text-green-700 text-sm rounded-lg font-medium text-center border border-green-200">
                     Saved as Version {concept.versions.length}
                   </div>
                 )}

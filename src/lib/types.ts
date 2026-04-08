@@ -157,19 +157,19 @@ export const STATUS_LABELS: Record<ConceptStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<ConceptStatus, string> = {
-  ideation: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  in_review: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  approved: 'bg-green-500/20 text-green-400 border-green-500/30',
-  ready_for_manufacturing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  manufactured: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  archived: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  ideation: 'bg-purple-100 text-purple-700 border-purple-200',
+  in_review: 'bg-amber-100 text-amber-700 border-amber-200',
+  approved: 'bg-green-100 text-green-700 border-green-200',
+  ready_for_manufacturing: 'bg-blue-100 text-blue-700 border-blue-200',
+  manufactured: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  archived: 'bg-gray-100 text-gray-500 border-gray-200',
 };
 
 export const PRIORITY_COLORS: Record<PriorityLevel, string> = {
-  low: 'bg-slate-500/20 text-slate-400',
-  medium: 'bg-blue-500/20 text-blue-400',
-  high: 'bg-orange-500/20 text-orange-400',
-  urgent: 'bg-red-500/20 text-red-400',
+  low: 'bg-slate-100 text-slate-600',
+  medium: 'bg-blue-100 text-blue-600',
+  high: 'bg-orange-100 text-orange-600',
+  urgent: 'bg-red-100 text-red-700',
 };
 
 export const KANBAN_COLUMNS: ConceptStatus[] = [

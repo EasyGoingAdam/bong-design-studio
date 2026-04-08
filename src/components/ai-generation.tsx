@@ -327,13 +327,13 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
           {!stylePrompt && !themePrompt && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 text-xs text-yellow-400">Tip: Add a style or theme prompt for better results.</div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700">Tip: Add a style or theme prompt for better results.</div>
           )}
 
           <button
