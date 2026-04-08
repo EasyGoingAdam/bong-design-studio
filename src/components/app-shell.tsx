@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
+import { supabase } from '@/lib/supabase';
 import { Dashboard } from './dashboard';
 import { ConceptsLibrary } from './concepts-library';
 import { WorkflowBoard } from './workflow-board';
@@ -10,6 +11,7 @@ import { AIGeneration } from './ai-generation';
 import { AIInspiration } from './ai-inspiration';
 import { ConceptDetail } from './concept-detail';
 import { SettingsModal } from './settings-modal';
+import { LoginPage } from './login-page';
 import { ToastProvider } from './toast';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'detail';
@@ -27,11 +29,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const { initialize, initialized, loading } = useAppStore();
+  const { initialize, initialized, loading, setAuthUser } = useAppStore();
+
+  // Auth state
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthenticated(true);
+        setAuthUser(session.user.id, session.user.email || '');
+        initialize();
+      }
+      setAuthChecked(true);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setAuthenticated(true);
+        setAuthUser(session.user.id, session.user.email || '');
+        initialize();
+      } else if (event === 'SIGNED_OUT') {
+        setAuthenticated(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [initialize, setAuthUser]);
+
+  const handleLogin = () => {
+    // Session will be picked up by onAuthStateChange
+  };
 
   const openConcept = (id: string) => {
     setSelectedConceptId(id);
@@ -42,6 +73,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setSelectedConceptId(null);
     setActiveTab('concepts');
   };
+
+  // Show nothing while checking auth
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!authenticated) {
+    return (
+      <ToastProvider>
+        <LoginPage onLogin={handleLogin} />
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>

@@ -52,6 +52,9 @@ interface AppState {
   updateTemplate: (id: string, updates: Partial<SpecTemplate>) => void;
   deleteTemplate: (id: string) => void;
 
+  // Auth
+  setAuthUser: (userId: string, email: string) => void;
+
   // Settings
   setOpenAIKey: (key: string) => void;
   setCurrentUserName: (name: string) => void;
@@ -94,6 +97,32 @@ export const useAppStore = create<AppState>()((set, get) => ({
   openAIKey: '',
   loading: false,
   initialized: false,
+
+  setAuthUser: (userId, email) => {
+    // Load profile from Supabase
+    fetch(`/api/auth/users`).then(res => res.json()).then(profiles => {
+      const profile = (profiles || []).find((p: { id: string }) => p.id === userId);
+      if (profile) {
+        set({
+          currentUser: {
+            id: profile.id,
+            name: profile.name || email.split('@')[0],
+            role: profile.role || 'designer',
+            avatar: (profile.name || email.split('@')[0]).split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+          },
+        });
+      } else {
+        set({
+          currentUser: {
+            id: userId,
+            name: email.split('@')[0],
+            role: 'designer',
+            avatar: email[0].toUpperCase(),
+          },
+        });
+      }
+    }).catch(console.error);
+  },
 
   initialize: async () => {
     if (get().initialized) return;
@@ -220,8 +249,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
       ),
     }));
 
-    const concept = get().concepts.find((c) => c.id === id);
-    if (concept) syncConceptToAPI(concept);
+    // Send just the updates to the API, not the full concept
+    try {
+      await fetch(`/api/concepts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.error('Failed to update concept:', err);
+    }
   },
 
   deleteConcept: async (id) => {
