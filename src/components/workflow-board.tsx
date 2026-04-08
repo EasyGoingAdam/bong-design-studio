@@ -5,6 +5,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { useAppStore } from '@/lib/store';
 import { KANBAN_COLUMNS, STATUS_LABELS, ConceptStatus } from '@/lib/types';
 import { ConceptCardMini } from './concept-card';
+import { useToast } from './toast';
 
 const COLUMN_COLORS: Record<ConceptStatus, string> = {
   ideation: 'border-t-purple-500',
@@ -17,6 +18,7 @@ const COLUMN_COLORS: Record<ConceptStatus, string> = {
 
 export function WorkflowBoard({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts, moveConcept } = useAppStore();
+  const { toast } = useToast();
 
   const columns = useMemo(() => {
     const map: Record<string, typeof concepts> = {};
@@ -31,6 +33,7 @@ export function WorkflowBoard({ onOpenConcept }: { onOpenConcept: (id: string) =
     const conceptId = result.draggableId;
     const newStatus = result.destination.droppableId as ConceptStatus;
     moveConcept(conceptId, newStatus);
+    toast(`Moved to ${STATUS_LABELS[newStatus]}`, 'success');
   };
 
   return (

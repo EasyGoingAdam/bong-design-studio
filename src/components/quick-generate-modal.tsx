@@ -6,6 +6,7 @@ import { Concept, GenerationMode, CoilBaseRelationship } from '@/lib/types';
 import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
+import { useToast } from './toast';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production B&W (Laser-Ready)' },
@@ -19,11 +20,16 @@ const RELATIONSHIP_OPTIONS = [
   { value: 'exact_match', label: 'Exact Match' },
   { value: 'mirror', label: 'Mirrored' },
   { value: 'thematic', label: 'Thematic' },
+  { value: 'complementary', label: 'Complementary' },
+  { value: 'continuation', label: 'Continuation / Flow' },
+  { value: 'contrast', label: 'Contrast' },
   { value: 'loose', label: 'Loosely Coordinated' },
+  { value: 'independent', label: 'Independent / Standalone' },
 ];
 
 export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onClose: () => void }) {
   const { openAIKey, updateConcept, addAIGeneration, addVersion } = useAppStore();
+  const { toast } = useToast();
 
   // Pre-fill from concept specs
   const [mode, setMode] = useState<GenerationMode>('production_bw');
@@ -128,6 +134,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     });
 
     setSaved(true);
+    toast('Images saved as new version', 'success');
   };
 
   const handleSaveAndClose = () => {
@@ -138,7 +145,13 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4" onClick={() => {
+      if ((generatedCoilUrl || generatedBaseUrl) && !saved) {
+        if (window.confirm('You have unsaved generated images. Close anyway?')) onClose();
+      } else {
+        onClose();
+      }
+    }}>
       <div
         className="bg-surface border border-border rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}

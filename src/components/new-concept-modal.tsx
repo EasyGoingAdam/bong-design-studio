@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Input, TextArea, Select } from './ui';
+import { useToast } from './toast';
 
 export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { addConcept, templates } = useAppStore();
+  const { toast } = useToast();
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState('');
   const [collection, setCollection] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
@@ -16,7 +19,8 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
   const [audience, setAudience] = useState('');
 
   const handleCreate = () => {
-    if (!name.trim()) return;
+    if (!name.trim()) { setNameError('Concept name is required'); return; }
+    setNameError('');
     const template = templates.find((t) => t.id === templateId);
     const concept = addConcept({
       name: name.trim(),
@@ -41,19 +45,28 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
         riskNotes: '',
       } : undefined,
     });
+    toast('Concept created', 'success');
     onClose();
     onCreated(concept.id);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4" onClick={() => {
+      const hasData = !!(name || collection || description || tags || audience);
+      if (hasData) {
+        if (window.confirm('Discard unsaved changes?')) onClose();
+      } else {
+        onClose();
+      }
+    }}>
       <div className="bg-surface border border-border rounded-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">New Concept</h2>
 
         <div className="space-y-3">
           <div>
             <label className="block text-sm text-muted mb-1">Concept Name *</label>
-            <Input value={name} onChange={setName} placeholder="e.g., Sacred Geometry V2" />
+            <Input value={name} onChange={(v: string) => { setName(v); setNameError(''); }} placeholder="e.g., Sacred Geometry V2" />
+            {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
           </div>
           <div>
             <label className="block text-sm text-muted mb-1">Collection / Style Family</label>

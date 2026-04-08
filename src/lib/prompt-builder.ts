@@ -28,6 +28,10 @@ const RELATIONSHIP_INSTRUCTIONS: Record<CoilBaseRelationship, string> = {
   mirror: 'The coil and base designs should mirror each other — one is the reflection/inverse of the other while maintaining the same style.',
   thematic: 'The coil and base should share the same theme and style family but can have distinct compositions that feel like they belong to the same set.',
   loose: 'The coil and base should have a loose visual connection — complementary mood and aesthetic but each can stand on its own.',
+  complementary: 'The coil and base designs should complement each other — where one is detailed the other is minimal, creating visual balance when paired.',
+  contrast: 'The coil and base designs should deliberately contrast — different visual weights, densities, or motifs that create dynamic tension while sharing one unifying element.',
+  continuation: 'The base design should be a visual continuation of the coil — as if the artwork flows from the coil down onto the base, creating one connected composition across both pieces.',
+  independent: 'The coil and base are designed completely independently — each is a standalone artwork with its own identity, no coordination required.',
 };
 
 const LASER_CONSTRAINTS = `

@@ -8,7 +8,7 @@ export type ConceptStatus =
 
 export type LifecycleType = 'seasonal' | 'evergreen' | 'limited_edition' | 'custom';
 export type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
-export type CoilBaseRelationship = 'exact_match' | 'mirror' | 'thematic' | 'loose';
+export type CoilBaseRelationship = 'exact_match' | 'mirror' | 'thematic' | 'loose' | 'complementary' | 'contrast' | 'continuation' | 'independent';
 export type GenerationMode =
   | 'concept_art'
   | 'production_bw'

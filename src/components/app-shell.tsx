@@ -9,6 +9,7 @@ import { AIGeneration } from './ai-generation';
 import { AIInspiration } from './ai-inspiration';
 import { ConceptDetail } from './concept-detail';
 import { SettingsModal } from './settings-modal';
+import { ToastProvider } from './toast';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'detail';
 
@@ -37,6 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Bar */}
       <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-surface shrink-0">
@@ -49,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <button
           onClick={() => setShowSettings(true)}
+          aria-label="Open settings"
           className="text-sm text-muted hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-surface-hover"
         >
           Settings
@@ -56,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Tab Navigation */}
-      <nav className="border-b border-border bg-surface px-6 shrink-0">
+      <nav className="border-b border-border bg-surface px-6 shrink-0" role="navigation" aria-label="Main navigation">
         <div className="flex gap-1">
           {TABS.map((tab) => (
             <button
@@ -105,5 +108,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
+    </ToastProvider>
   );
 }

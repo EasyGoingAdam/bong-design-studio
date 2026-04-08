@@ -7,6 +7,9 @@ import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Selec
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
 import { ImageDownloadButtons } from './image-download';
+import { useToast } from './toast';
+import { ConfirmDialog } from './confirm-dialog';
+import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
   const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval } = useAppStore();
@@ -15,6 +18,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [commentText, setCommentText] = useState('');
   const [editing, setEditing] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const { toast } = useToast();
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   // Editable fields
   const [editName, setEditName] = useState('');
@@ -59,22 +64,26 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       lifecycleType: editLifecycle as typeof concept.lifecycleType,
     });
     setEditing(false);
+    toast('Concept updated', 'success');
   };
 
   const handleComment = () => {
     if (!commentText.trim()) return;
     addComment(concept.id, commentText.trim());
     setCommentText('');
+    toast('Comment added', 'success');
   };
 
   const handleApprove = () => {
     addApproval(concept.id, 'approved', 'Concept approved');
     moveConcept(concept.id, 'approved');
+    toast('Concept approved', 'success');
   };
 
   const handleNeedsRevision = () => {
     addApproval(concept.id, 'needs_revision', 'Needs revision');
     moveConcept(concept.id, 'ideation');
+    toast('Sent back for revision', 'info');
   };
 
   const currentIdx = KANBAN_COLUMNS.indexOf(concept.status);
@@ -119,7 +128,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <button onClick={saveEdits} className="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">Save</button>
             </>
           )}
-          <button onClick={() => { duplicateConcept(concept.id); }} className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover">
+          <button onClick={() => { duplicateConcept(concept.id); toast('Concept duplicated', 'success'); }} className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover">
             Duplicate
           </button>
           {concept.status !== 'approved' && (
@@ -128,7 +137,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             </button>
           )}
           {nextStatus && (
-            <button onClick={() => moveConcept(concept.id, nextStatus)} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg">
+            <button onClick={() => { moveConcept(concept.id, nextStatus); toast(`Moved to ${STATUS_LABELS[nextStatus]}`, 'success'); }} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg">
               Move to {STATUS_LABELS[nextStatus]}
             </button>
           )}
@@ -137,10 +146,12 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
 
       {/* Section Tabs */}
       <div className="border-b border-border mb-4">
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="tablist">
           {sections.map((s) => (
             <button
               key={s.id}
+              role="tab"
+              aria-selected={activeSection === s.id}
               onClick={() => setActiveSection(s.id)}
               className={`px-3 py-2 text-sm transition-colors relative ${
                 activeSection === s.id ? 'text-accent' : 'text-muted hover:text-foreground'
@@ -314,8 +325,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           <div className="space-y-4">
             <div className="bg-surface border border-border rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted">Designer</span><span>{concept.designer}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Created</span><span>{new Date(concept.createdAt).toLocaleDateString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Updated</span><span>{new Date(concept.updatedAt).toLocaleDateString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Created</span><span>{formatDate(concept.createdAt)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Updated</span><span>{formatDate(concept.updatedAt)}</span></div>
               <div className="flex justify-between"><span className="text-muted">Versions</span><span>{concept.versions.length}</span></div>
               <div className="flex justify-between"><span className="text-muted">Comments</span><span>{concept.comments.length}</span></div>
               <div className="flex justify-between"><span className="text-muted">AI Generations</span><span>{concept.aiGenerations.length}</span></div>
@@ -340,11 +351,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 Needs Revision
               </button>
               {nextStatus && (
-                <button onClick={() => moveConcept(concept.id, nextStatus)} className="w-full py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg">
+                <button onClick={() => { moveConcept(concept.id, nextStatus); toast(`Moved to ${STATUS_LABELS[nextStatus]}`, 'success'); }} className="w-full py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg">
                   Move to {STATUS_LABELS[nextStatus]}
                 </button>
               )}
-              <button onClick={() => updateConcept(concept.id, { status: 'archived' })} className="w-full py-1.5 text-sm bg-background border border-border rounded-lg text-muted hover:text-foreground">
+              <button onClick={() => setShowArchiveConfirm(true)} className="w-full py-1.5 text-sm bg-background border border-border rounded-lg text-muted hover:text-foreground">
                 Archive
               </button>
             </div>
@@ -365,7 +376,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         <span className="text-muted">by {log.userName}</span>
                       </div>
                       <p className="text-muted">{log.notes}</p>
-                      <span className="text-muted">{new Date(log.createdAt).toLocaleString()}</span>
+                      <span className="text-muted">{formatDateTime(log.createdAt)}</span>
                     </div>
                   ))}
                 </div>
@@ -433,15 +444,27 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <div key={v.id} className="bg-surface border border-border rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold">Version {v.versionNumber}</h4>
-                  <span className="text-xs text-muted">{new Date(v.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-muted">{formatDateTime(v.createdAt)}</span>
                 </div>
                 <p className="text-sm text-muted mb-3">{v.notes}</p>
                 <div className="flex gap-3">
-                  <div className="w-20 h-20 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
-                    {v.coilImageUrl ? <img src={v.coilImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-[8px] text-muted">Coil</span>}
+                  <div>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className="text-[10px] text-muted">Coil</span>
+                      {v.coilImageUrl && <ImageDownloadButtons imageUrl={v.coilImageUrl} filename={`${concept.name}-v${v.versionNumber}-coil`} />}
+                    </div>
+                    <div className="w-20 h-20 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                      {v.coilImageUrl ? <img src={v.coilImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-[8px] text-muted">Coil</span>}
+                    </div>
                   </div>
-                  <div className="w-20 h-20 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
-                    {v.baseImageUrl ? <img src={v.baseImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-[8px] text-muted">Base</span>}
+                  <div>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className="text-[10px] text-muted">Base</span>
+                      {v.baseImageUrl && <ImageDownloadButtons imageUrl={v.baseImageUrl} filename={`${concept.name}-v${v.versionNumber}-base`} />}
+                    </div>
+                    <div className="w-20 h-20 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                      {v.baseImageUrl ? <img src={v.baseImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-[8px] text-muted">Base</span>}
+                    </div>
                   </div>
                 </div>
                 {v.prompt && (
@@ -473,7 +496,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 <div key={c.id} className="bg-surface border border-border rounded-xl p-4">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium">{c.userName}</span>
-                    <span className="text-xs text-muted">{new Date(c.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-muted">{formatDateTime(c.createdAt)}</span>
                   </div>
                   <p className="text-sm">{c.text}</p>
                 </div>
@@ -493,14 +516,26 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <div key={gen.id} className="bg-surface border border-border rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs text-muted bg-accent/20 text-accent px-2 py-0.5 rounded">{gen.mode}</span>
-                  <span className="text-xs text-muted">{new Date(gen.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-muted">{formatDateTime(gen.createdAt)}</span>
                 </div>
                 <div className="flex gap-3 mb-3">
-                  <div className="w-24 h-24 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
-                    {gen.coilImageUrl ? <img src={gen.coilImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-xs text-muted">Coil</span>}
+                  <div>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className="text-[10px] text-muted">Coil</span>
+                      {gen.coilImageUrl && <ImageDownloadButtons imageUrl={gen.coilImageUrl} filename={`${concept.name}-gen-coil`} />}
+                    </div>
+                    <div className="w-24 h-24 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                      {gen.coilImageUrl ? <img src={gen.coilImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-xs text-muted">Coil</span>}
+                    </div>
                   </div>
-                  <div className="w-24 h-24 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
-                    {gen.baseImageUrl ? <img src={gen.baseImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-xs text-muted">Base</span>}
+                  <div>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className="text-[10px] text-muted">Base</span>
+                      {gen.baseImageUrl && <ImageDownloadButtons imageUrl={gen.baseImageUrl} filename={`${concept.name}-gen-base`} />}
+                    </div>
+                    <div className="w-24 h-24 rounded bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                      {gen.baseImageUrl ? <img src={gen.baseImageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-xs text-muted">Base</span>}
+                    </div>
                   </div>
                 </div>
                 <details>
@@ -526,6 +561,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {activeSection === 'manufacturing' && (
         <ManufacturingPanel conceptId={conceptId} />
       )}
+
+      <ConfirmDialog
+        open={showArchiveConfirm}
+        title="Archive Concept"
+        message="Are you sure you want to archive this concept? It will be hidden from the library."
+        confirmLabel="Archive"
+        confirmVariant="danger"
+        onConfirm={() => { updateConcept(concept.id, { status: 'archived' }); setShowArchiveConfirm(false); toast('Concept archived', 'info'); }}
+        onCancel={() => setShowArchiveConfirm(false)}
+      />
 
       {/* Quick Generate Modal */}
       {showGenerate && concept && (

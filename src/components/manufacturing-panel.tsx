@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Input, TextArea } from './ui';
+import { useToast } from './toast';
 
 export function ManufacturingPanel({ conceptId }: { conceptId: string }) {
   const { concepts, updateManufacturing } = useAppStore();
+  const { toast } = useToast();
   const concept = concepts.find((c) => c.id === conceptId);
   const record = concept?.manufacturingRecord;
 
@@ -18,8 +20,11 @@ export function ManufacturingPanel({ conceptId }: { conceptId: string }) {
   const [mfgDate, setMfgDate] = useState(record?.dateManufactured || '');
   const [quantity, setQuantity] = useState(record?.quantityProduced?.toString() || '');
   const [qcNotes, setQcNotes] = useState(record?.qcNotes || '');
+  const [saving, setSaving] = useState(false);
+  const [quantityError, setQuantityError] = useState('');
 
   const save = () => {
+    setSaving(true);
     updateManufacturing(conceptId, {
       machineReadyNotes: machineNotes,
       targetMaterial: material,
@@ -31,6 +36,8 @@ export function ManufacturingPanel({ conceptId }: { conceptId: string }) {
       quantityProduced: parseInt(quantity) || 0,
       qcNotes,
     });
+    toast('Manufacturing data saved', 'success');
+    setSaving(false);
   };
 
   if (!concept) return null;
@@ -79,7 +86,8 @@ export function ManufacturingPanel({ conceptId }: { conceptId: string }) {
         </div>
         <div>
           <label className="block text-xs text-muted mb-1">Quantity Produced</label>
-          <Input value={quantity} onChange={setQuantity} placeholder="0" type="number" />
+          <Input value={quantity} onChange={(v: string) => { if (v && (isNaN(Number(v)) || Number(v) < 0)) { setQuantityError('Must be a positive number'); } else { setQuantityError(''); setQuantity(v); } }} placeholder="0" type="number" />
+          {quantityError && <p className="text-xs text-red-400 mt-1">{quantityError}</p>}
         </div>
         <div>
           <label className="block text-xs text-muted mb-1">QC Notes</label>
@@ -89,9 +97,10 @@ export function ManufacturingPanel({ conceptId }: { conceptId: string }) {
 
       <button
         onClick={save}
-        className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+        disabled={saving}
+        className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors disabled:opacity-50"
       >
-        Save Manufacturing Data
+        {saving ? 'Saving...' : 'Save Manufacturing Data'}
       </button>
     </div>
   );

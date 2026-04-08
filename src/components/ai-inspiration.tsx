@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { TextArea, Tag } from './ui';
+import { useToast } from './toast';
 import { CoilBaseRelationship } from '@/lib/types';
 
 interface BrainstormResult {
@@ -39,6 +40,7 @@ const QUICK_PICKS = [
 
 export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { addConcept, openAIKey } = useAppStore();
+  const { toast } = useToast();
   const [userPrompt, setUserPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<BrainstormResult[]>([]);
@@ -110,6 +112,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
       });
       // Remove from brainstorm list
       setResults((prev) => prev.filter((_, i) => i !== index));
+      toast('Concept created from brainstorm', 'success');
       // Navigate to the new concept
       onOpenConcept(concept.id);
     } catch (err) {

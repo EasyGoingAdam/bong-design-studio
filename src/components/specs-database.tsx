@@ -4,11 +4,15 @@ import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { SpecTemplate } from '@/lib/types';
 import { Input, TextArea, Select, SliderInput, EmptyState } from './ui';
+import { useToast } from './toast';
+import { ConfirmDialog } from './confirm-dialog';
 
 export function SpecsDatabase() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useAppStore();
+  const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -44,7 +48,7 @@ export function SpecsDatabase() {
                     {editingId === t.id ? 'Close' : 'Edit'}
                   </button>
                   <button
-                    onClick={() => deleteTemplate(t.id)}
+                    onClick={() => setDeleteTargetId(t.id)}
                     className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-surface-hover"
                   >
                     Delete
@@ -103,7 +107,7 @@ export function SpecsDatabase() {
               {editingId === t.id && (
                 <TemplateForm
                   template={t}
-                  onSave={(updates) => { updateTemplate(t.id, updates); setEditingId(null); }}
+                  onSave={(updates) => { updateTemplate(t.id, updates); toast('Template updated', 'success'); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                 />
               )}
@@ -117,12 +121,22 @@ export function SpecsDatabase() {
           <div className="bg-surface border border-border rounded-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold mb-4">New Template</h2>
             <TemplateForm
-              onSave={(t) => { addTemplate(t); setShowNew(false); }}
+              onSave={(t) => { addTemplate(t); toast('Template created', 'success'); setShowNew(false); }}
               onCancel={() => setShowNew(false)}
             />
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        title="Delete Template"
+        message="Are you sure you want to delete this template? This cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        onConfirm={() => { if (deleteTargetId) { deleteTemplate(deleteTargetId); toast('Template deleted', 'success'); } setDeleteTargetId(null); }}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { useState, useMemo } from 'react';
 import { useAppStore } from '@/lib/store';
 import { ConceptStatus, LifecycleType, PriorityLevel } from '@/lib/types';
 import { ConceptCard } from './concept-card';
-import { Select, EmptyState } from './ui';
+import { Select, EmptyState, StatusBadge } from './ui';
+import { formatDate, useDebounce } from '@/lib/utils';
 import { NewConceptModal } from './new-concept-modal';
 import { QuickGenerateModal } from './quick-generate-modal';
 import { Concept } from '@/lib/types';
@@ -12,6 +13,7 @@ import { Concept } from '@/lib/types';
 export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts } = useAppStore();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [collectionFilter, setCollectionFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -41,8 +43,8 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
   const filtered = useMemo(() => {
     let result = concepts.filter((c) => c.status !== 'archived');
 
-    if (search) {
-      const s = search.toLowerCase();
+    if (debouncedSearch) {
+      const s = debouncedSearch.toLowerCase();
       result = result.filter((c) =>
         c.name.toLowerCase().includes(s) ||
         c.description.toLowerCase().includes(s) ||
@@ -63,7 +65,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
     });
 
     return result;
-  }, [concepts, search, statusFilter, collectionFilter, tagFilter, designerFilter, lifecycleFilter, priorityFilter, sortBy]);
+  }, [concepts, debouncedSearch, statusFilter, collectionFilter, tagFilter, designerFilter, lifecycleFilter, priorityFilter, sortBy]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -203,17 +205,9 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
                 ))}
               </div>
               <div className="shrink-0">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                  c.status === 'ideation' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' :
-                  c.status === 'in_review' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                  c.status === 'approved' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                  c.status === 'ready_for_manufacturing' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-                  'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                }`}>
-                  {c.status === 'ideation' ? 'Ideation' : c.status === 'in_review' ? 'In Review' : c.status === 'approved' ? 'Approved' : c.status === 'ready_for_manufacturing' ? 'Ready' : 'Made'}
-                </span>
+                <StatusBadge status={c.status} />
               </div>
-              <span className="text-xs text-muted shrink-0">{new Date(c.updatedAt).toLocaleDateString()}</span>
+              <span className="text-xs text-muted shrink-0">{formatDate(c.updatedAt)}</span>
             </button>
           ))}
         </div>

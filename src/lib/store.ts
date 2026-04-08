@@ -50,6 +50,7 @@ interface AppState {
 
   // Settings
   setOpenAIKey: (key: string) => void;
+  setCurrentUserName: (name: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -256,6 +257,9 @@ export const useAppStore = create<AppState>()(
       },
 
       setOpenAIKey: (key) => set({ openAIKey: key }),
+      setCurrentUserName: (name) => set((state) => ({
+        currentUser: { ...state.currentUser, name, avatar: name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) },
+      })),
     }),
     {
       name: 'bong-design-studio-storage',

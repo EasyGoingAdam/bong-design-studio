@@ -10,7 +10,10 @@ interface ImageDownloadProps {
 async function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // Only set crossOrigin for non-data URIs — data URIs don't need CORS
+    if (!url.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
@@ -21,12 +24,11 @@ async function downloadAs(imageUrl: string, filename: string, format: 'png' | 'j
   try {
     const img = await loadImage(imageUrl);
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
+    canvas.width = img.naturalWidth || img.width || 1024;
+    canvas.height = img.naturalHeight || img.height || 1024;
     const ctx = canvas.getContext('2d')!;
 
     if (format === 'jpg') {
-      // JPG needs white background (no transparency)
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -34,7 +36,6 @@ async function downloadAs(imageUrl: string, filename: string, format: 'png' | 'j
     ctx.drawImage(img, 0, 0);
 
     if (format === 'svg') {
-      // Create an SVG that embeds the raster image
       const dataUrl = canvas.toDataURL('image/png');
       const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -55,11 +56,25 @@ async function downloadAs(imageUrl: string, filename: string, format: 'png' | 'j
       );
     }
   } catch {
-    // Fallback: if canvas fails (CORS), try direct download
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = `${filename}.png`;
-    a.click();
+    // Fallback for data URIs: convert base64 directly to blob
+    if (imageUrl.startsWith('data:')) {
+      try {
+        const res = await fetch(imageUrl);
+        const blob = await res.blob();
+        triggerDownload(blob, `${filename}.png`);
+      } catch {
+        // Last resort
+        const a = document.createElement('a');
+        a.href = imageUrl;
+        a.download = `${filename}.png`;
+        a.click();
+      }
+    } else {
+      const a = document.createElement('a');
+      a.href = imageUrl;
+      a.download = `${filename}.png`;
+      a.click();
+    }
   }
 }
 
@@ -76,6 +91,7 @@ function triggerDownload(blob: Blob, filename: string) {
 
 export function ImageDownloadButtons({ imageUrl, filename }: ImageDownloadProps) {
   const [open, setOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -88,54 +104,43 @@ export function ImageDownloadButtons({ imageUrl, filename }: ImageDownloadProps)
 
   if (!imageUrl) return null;
 
+  const handleDownload = async (fmt: 'png' | 'jpg' | 'svg') => {
+    setDownloading(true);
+    try {
+      await downloadAs(imageUrl, filename, fmt);
+    } finally {
+      setDownloading(false);
+      setOpen(false);
+    }
+  };
+
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         className="text-[10px] text-muted hover:text-foreground bg-background/80 hover:bg-background border border-border px-1.5 py-0.5 rounded transition-colors"
-        title="Download image"
+        aria-label="Download image"
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
-        ↓
+        {downloading ? '...' : '↓'}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-20 py-1 min-w-[100px]">
+        <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-20 py-1 min-w-[120px]" role="menu">
           {(['png', 'jpg', 'svg'] as const).map((fmt) => (
             <button
               key={fmt}
-              onClick={(e) => {
-                e.stopPropagation();
-                downloadAs(imageUrl, filename, fmt);
-                setOpen(false);
-              }}
-              className="w-full text-left px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+              onClick={(e) => { e.stopPropagation(); handleDownload(fmt); }}
+              className="w-full text-left px-3 py-1.5 text-xs text-muted hover:text-foreground hover:bg-surface-hover transition-colors flex items-center gap-2"
+              role="menuitem"
+              disabled={downloading}
             >
-              Download .{fmt.toUpperCase()}
+              <span className="w-8 text-[10px] font-mono uppercase opacity-60">.{fmt}</span>
+              <span>Download {fmt.toUpperCase()}</span>
             </button>
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-export function ImageWithDownload({ imageUrl, label, filename, size = 'full' }: {
-  imageUrl: string;
-  label: string;
-  filename: string;
-  size?: 'full' | 'thumb';
-}) {
-  if (!imageUrl) return null;
-
-  return (
-    <div className="relative group">
-      <img
-        src={imageUrl}
-        alt={label}
-        className={`${size === 'full' ? 'w-full h-full' : 'w-20 h-20'} object-contain`}
-      />
-      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <ImageDownloadButtons imageUrl={imageUrl} filename={filename} />
-      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { GenerationMode, CoilBaseRelationship } from '@/lib/types';
 import { Input, TextArea, Select, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt, SAMPLE_PROMPTS } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
+import { useToast } from './toast';
 
 const MODE_OPTIONS = [
   { value: 'concept_art', label: 'Concept Art Mode' },
@@ -19,11 +20,16 @@ const RELATIONSHIP_OPTIONS = [
   { value: 'exact_match', label: 'Exact Match' },
   { value: 'mirror', label: 'Mirrored' },
   { value: 'thematic', label: 'Thematic' },
+  { value: 'complementary', label: 'Complementary' },
+  { value: 'continuation', label: 'Continuation / Flow' },
+  { value: 'contrast', label: 'Contrast' },
   { value: 'loose', label: 'Loosely Coordinated' },
+  { value: 'independent', label: 'Independent / Standalone' },
 ];
 
 export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts, addConcept, addAIGeneration, addVersion, openAIKey } = useAppStore();
+  const { toast } = useToast();
   const [title, setTitle] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
   const [themePrompt, setThemePrompt] = useState('');
@@ -121,6 +127,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       prompt: coilPrompt,
       notes: 'AI generated initial concept',
     });
+    toast('Concept created from generation', 'success');
     onOpenConcept(concept.id);
   };
 
@@ -140,6 +147,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       prompt: coilPrompt,
       notes: 'AI generated variation',
     });
+    toast('Saved as new version', 'success');
     onOpenConcept(targetConceptId);
   };
 
@@ -290,6 +298,10 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
             </div>
           )}
 
+          {!stylePrompt && !themePrompt && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2 text-xs text-yellow-400">Tip: Add a style or theme prompt for better results.</div>
+          )}
+
           <button
             onClick={handleGenerate}
             disabled={generating || !title.trim()}
@@ -350,12 +362,18 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                 <div className="flex gap-2 items-end bg-background rounded-lg p-4 border border-border">
                   <div className="flex-1">
                     {generatedCoilUrl && <img src={generatedCoilUrl} alt="Coil" className="w-full rounded" />}
-                    <span className="text-[10px] text-muted text-center block mt-1">Coil</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[10px] text-muted text-center block">Coil</span>
+                      {generatedCoilUrl && <ImageDownloadButtons imageUrl={generatedCoilUrl} filename={`${title || 'concept'}-coil-combined`} />}
+                    </div>
                   </div>
                   <div className="text-muted text-lg">+</div>
                   <div className="flex-1">
                     {generatedBaseUrl && <img src={generatedBaseUrl} alt="Base" className="w-full rounded" />}
-                    <span className="text-[10px] text-muted text-center block mt-1">Base</span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[10px] text-muted text-center block">Base</span>
+                      {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${title || 'concept'}-base-combined`} />}
+                    </div>
                   </div>
                 </div>
               </div>
