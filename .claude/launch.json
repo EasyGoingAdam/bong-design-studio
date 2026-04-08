@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "/Users/macmini/local/node/bin/npx",
+      "runtimeArgs": ["next", "dev", "--turbopack"],
+      "port": 3000
+    }
+  ]
+}
