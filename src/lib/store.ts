@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Concept,
@@ -12,7 +11,7 @@ import {
   AIGenerationRecord,
   ManufacturingRecord,
 } from './types';
-import { sampleConcepts, sampleTemplates, sampleUsers } from './sample-data';
+import { sampleUsers } from './sample-data';
 
 interface AppState {
   concepts: Concept[];
@@ -20,12 +19,17 @@ interface AppState {
   users: User[];
   currentUser: User;
   openAIKey: string;
+  loading: boolean;
+  initialized: boolean;
+
+  // Init
+  initialize: () => Promise<void>;
 
   // Concept CRUD
-  addConcept: (concept: Partial<Concept>) => Concept;
-  updateConcept: (id: string, updates: Partial<Concept>) => void;
-  deleteConcept: (id: string) => void;
-  duplicateConcept: (id: string) => Concept;
+  addConcept: (concept: Partial<Concept>) => Promise<Concept>;
+  updateConcept: (id: string, updates: Partial<Concept>) => Promise<void>;
+  deleteConcept: (id: string) => Promise<void>;
+  duplicateConcept: (id: string) => Promise<Concept>;
   moveConcept: (id: string, status: ConceptStatus) => void;
 
   // Comments
@@ -51,218 +55,357 @@ interface AppState {
   // Settings
   setOpenAIKey: (key: string) => void;
   setCurrentUserName: (name: string) => void;
+
+  // Refresh from server
+  refreshConcepts: () => Promise<void>;
 }
 
-export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      concepts: sampleConcepts,
-      templates: sampleTemplates,
-      users: sampleUsers,
-      currentUser: sampleUsers[0],
-      openAIKey: '',
+// Helper to sync a concept update to the API (fire-and-forget for speed)
+async function syncConceptToAPI(concept: Concept) {
+  try {
+    await fetch(`/api/concepts/${concept.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(concept),
+    });
+  } catch (err) {
+    console.error('Failed to sync concept:', err);
+  }
+}
 
-      addConcept: (partial) => {
-        const now = new Date().toISOString();
-        const concept: Concept = {
-          id: uuidv4(),
-          name: partial.name || 'Untitled Concept',
-          collection: partial.collection || '',
-          status: partial.status || 'ideation',
-          createdAt: now,
-          updatedAt: now,
-          designer: get().currentUser.name,
-          tags: partial.tags || [],
-          description: partial.description || '',
-          intendedAudience: partial.intendedAudience || '',
-          manufacturingNotes: partial.manufacturingNotes || '',
-          coilImageUrl: partial.coilImageUrl || '',
-          baseImageUrl: partial.baseImageUrl || '',
-          combinedImageUrl: partial.combinedImageUrl || '',
-          specs: partial.specs || {
-            designStyleName: '',
-            designTheme: '',
-            patternDensity: 'medium',
-            laserComplexity: 3,
-            estimatedEtchingTime: '',
-            surfaceCoverage: 50,
-            lineThickness: '',
-            bwContrastGuidance: '',
-            symmetryRequirement: 'none',
-            coordinationMode: 'thematic',
-            productionFeasibility: 3,
-            riskNotes: '',
-          },
-          coilSpecs: partial.coilSpecs || { dimensions: '', printableArea: '', notes: '' },
-          baseSpecs: partial.baseSpecs || { dimensions: '', printableArea: '', notes: '' },
-          priority: partial.priority || 'medium',
-          lifecycleType: partial.lifecycleType || 'evergreen',
-          versions: [],
-          comments: [],
-          approvalLogs: [],
-          aiGenerations: [],
-          ...partial,
-        };
-        set((state) => ({ concepts: [...state.concepts, concept] }));
-        return concept;
-      },
-
-      updateConcept: (id, updates) => {
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
-          ),
-        }));
-      },
-
-      deleteConcept: (id) => {
-        set((state) => ({ concepts: state.concepts.filter((c) => c.id !== id) }));
-      },
-
-      duplicateConcept: (id) => {
-        const original = get().concepts.find((c) => c.id === id);
-        if (!original) throw new Error('Concept not found');
-        const newConcept = get().addConcept({
-          ...original,
-          id: undefined as unknown as string,
-          name: `${original.name} (Copy)`,
-          status: 'ideation',
-          versions: [],
-          comments: [],
-          approvalLogs: [],
-          aiGenerations: [],
-        });
-        return newConcept;
-      },
-
-      moveConcept: (id, status) => {
-        const concept = get().concepts.find((c) => c.id === id);
-        if (!concept) return;
-        const fromStage = concept.status;
-        get().updateConcept(id, { status });
-        get().addApproval(id, 'moved_stage', `Moved from ${fromStage} to ${status}`, fromStage, status);
-      },
-
-      addComment: (conceptId, text) => {
-        const comment: Comment = {
-          id: uuidv4(),
-          conceptId,
-          userId: get().currentUser.id,
-          userName: get().currentUser.name,
-          text,
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === conceptId ? { ...c, comments: [...c.comments, comment] } : c
-          ),
-        }));
-      },
-
-      addApproval: (conceptId, action, notes, fromStage, toStage) => {
-        const log: ApprovalLog = {
-          id: uuidv4(),
-          conceptId,
-          userId: get().currentUser.id,
-          userName: get().currentUser.name,
-          action,
-          fromStage,
-          toStage,
-          notes,
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === conceptId ? { ...c, approvalLogs: [...c.approvalLogs, log] } : c
-          ),
-        }));
-      },
-
-      addVersion: (conceptId, version) => {
-        const concept = get().concepts.find((c) => c.id === conceptId);
-        if (!concept) return;
-        const ver: ConceptVersion = {
-          id: uuidv4(),
-          conceptId,
-          versionNumber: concept.versions.length + 1,
-          coilImageUrl: version.coilImageUrl || '',
-          baseImageUrl: version.baseImageUrl || '',
-          combinedImageUrl: version.combinedImageUrl || '',
-          prompt: version.prompt,
-          notes: version.notes || '',
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === conceptId ? { ...c, versions: [...c.versions, ver] } : c
-          ),
-        }));
-      },
-
-      addAIGeneration: (conceptId, record) => {
-        const gen: AIGenerationRecord = {
-          id: uuidv4(),
-          conceptId,
-          prompt: record.prompt || '',
-          coilPrompt: record.coilPrompt || '',
-          basePrompt: record.basePrompt || '',
-          mode: record.mode || 'concept_art',
-          coilImageUrl: record.coilImageUrl || '',
-          baseImageUrl: record.baseImageUrl || '',
-          combinedImageUrl: record.combinedImageUrl || '',
-          createdAt: new Date().toISOString(),
-          variationOf: record.variationOf,
-        };
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === conceptId ? { ...c, aiGenerations: [...c.aiGenerations, gen] } : c
-          ),
-        }));
-      },
-
-      updateManufacturing: (conceptId, record) => {
-        set((state) => ({
-          concepts: state.concepts.map((c) =>
-            c.id === conceptId
-              ? {
-                  ...c,
-                  manufacturingRecord: { ...c.manufacturingRecord, conceptId, ...record } as ManufacturingRecord,
-                }
-              : c
-          ),
-        }));
-      },
-
-      addTemplate: (partial) => {
-        const template: SpecTemplate = {
-          id: uuidv4(),
-          name: partial.name || 'Untitled Template',
-          category: partial.category || '',
-          description: partial.description || '',
-          specs: partial.specs || {},
-          coilSpecs: partial.coilSpecs || {},
-          baseSpecs: partial.baseSpecs || {},
-        };
-        set((state) => ({ templates: [...state.templates, template] }));
-      },
-
-      updateTemplate: (id, updates) => {
-        set((state) => ({
-          templates: state.templates.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-        }));
-      },
-
-      deleteTemplate: (id) => {
-        set((state) => ({ templates: state.templates.filter((t) => t.id !== id) }));
-      },
-
-      setOpenAIKey: (key) => set({ openAIKey: key }),
-      setCurrentUserName: (name) => set((state) => ({
-        currentUser: { ...state.currentUser, name, avatar: name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) },
-      })),
-    }),
-    {
-      name: 'bong-design-studio-storage',
+export const useAppStore = create<AppState>()((set, get) => ({
+  concepts: [],
+  templates: [],
+  users: sampleUsers,
+  currentUser: (() => {
+    // Try to load user name from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('bds-user-name');
+        if (stored) {
+          return { ...sampleUsers[0], name: stored, avatar: stored.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) };
+        }
+      } catch { /* ignore */ }
     }
-  )
-);
+    return sampleUsers[0];
+  })(),
+  openAIKey: typeof window !== 'undefined' ? localStorage.getItem('bds-openai-key') || '' : '',
+  loading: false,
+  initialized: false,
+
+  initialize: async () => {
+    if (get().initialized) return;
+    set({ loading: true });
+    try {
+      // Fetch concepts from API
+      const [conceptsRes, templatesRes] = await Promise.all([
+        fetch('/api/concepts'),
+        fetch('/api/templates'),
+      ]);
+
+      if (conceptsRes.ok) {
+        const conceptsData = await conceptsRes.json();
+        set({ concepts: conceptsData });
+      }
+
+      if (templatesRes.ok) {
+        const templatesData = await templatesRes.json();
+        if (templatesData.length > 0) {
+          set({ templates: templatesData });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to initialize from API:', err);
+    } finally {
+      set({ loading: false, initialized: true });
+    }
+  },
+
+  refreshConcepts: async () => {
+    try {
+      const res = await fetch('/api/concepts');
+      if (res.ok) {
+        const data = await res.json();
+        set({ concepts: data });
+      }
+    } catch (err) {
+      console.error('Failed to refresh concepts:', err);
+    }
+  },
+
+  addConcept: async (partial) => {
+    const now = new Date().toISOString();
+    const concept: Concept = {
+      id: uuidv4(),
+      name: partial.name || 'Untitled Concept',
+      collection: partial.collection || '',
+      status: partial.status || 'ideation',
+      createdAt: now,
+      updatedAt: now,
+      designer: get().currentUser.name,
+      tags: partial.tags || [],
+      description: partial.description || '',
+      intendedAudience: partial.intendedAudience || '',
+      manufacturingNotes: partial.manufacturingNotes || '',
+      coilImageUrl: partial.coilImageUrl || '',
+      baseImageUrl: partial.baseImageUrl || '',
+      combinedImageUrl: partial.combinedImageUrl || '',
+      specs: partial.specs || {
+        designStyleName: '',
+        designTheme: '',
+        patternDensity: 'medium',
+        laserComplexity: 3,
+        estimatedEtchingTime: '',
+        surfaceCoverage: 50,
+        lineThickness: '',
+        bwContrastGuidance: '',
+        symmetryRequirement: 'none',
+        coordinationMode: 'thematic',
+        productionFeasibility: 3,
+        riskNotes: '',
+      },
+      coilSpecs: partial.coilSpecs || { dimensions: '', printableArea: '', notes: '' },
+      baseSpecs: partial.baseSpecs || { dimensions: '', printableArea: '', notes: '' },
+      priority: partial.priority || 'medium',
+      lifecycleType: partial.lifecycleType || 'evergreen',
+      versions: [],
+      comments: [],
+      approvalLogs: [],
+      aiGenerations: [],
+      ...partial,
+    };
+
+    // Optimistic update
+    set((state) => ({ concepts: [...state.concepts, concept] }));
+
+    // Persist to API
+    try {
+      await fetch('/api/concepts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(concept),
+      });
+    } catch (err) {
+      console.error('Failed to save concept to API:', err);
+    }
+
+    return concept;
+  },
+
+  updateConcept: async (id, updates) => {
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+      ),
+    }));
+
+    const concept = get().concepts.find((c) => c.id === id);
+    if (concept) syncConceptToAPI(concept);
+  },
+
+  deleteConcept: async (id) => {
+    set((state) => ({ concepts: state.concepts.filter((c) => c.id !== id) }));
+    try {
+      await fetch(`/api/concepts/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete concept:', err);
+    }
+  },
+
+  duplicateConcept: async (id) => {
+    const original = get().concepts.find((c) => c.id === id);
+    if (!original) throw new Error('Concept not found');
+    const newConcept = await get().addConcept({
+      ...original,
+      id: undefined as unknown as string,
+      name: `${original.name} (Copy)`,
+      status: 'ideation',
+      versions: [],
+      comments: [],
+      approvalLogs: [],
+      aiGenerations: [],
+    });
+    return newConcept;
+  },
+
+  moveConcept: (id, status) => {
+    const concept = get().concepts.find((c) => c.id === id);
+    if (!concept) return;
+    const fromStage = concept.status;
+    get().updateConcept(id, { status });
+    get().addApproval(id, 'moved_stage', `Moved from ${fromStage} to ${status}`, fromStage, status);
+  },
+
+  addComment: (conceptId, text) => {
+    const comment: Comment = {
+      id: uuidv4(),
+      conceptId,
+      userId: get().currentUser.id,
+      userName: get().currentUser.name,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === conceptId ? { ...c, comments: [...c.comments, comment] } : c
+      ),
+    }));
+    // Persist
+    fetch(`/api/concepts/${conceptId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(comment),
+    }).catch(console.error);
+  },
+
+  addApproval: (conceptId, action, notes, fromStage, toStage) => {
+    const log: ApprovalLog = {
+      id: uuidv4(),
+      conceptId,
+      userId: get().currentUser.id,
+      userName: get().currentUser.name,
+      action,
+      fromStage,
+      toStage,
+      notes,
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === conceptId ? { ...c, approvalLogs: [...c.approvalLogs, log] } : c
+      ),
+    }));
+    fetch(`/api/concepts/${conceptId}/approvals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(log),
+    }).catch(console.error);
+  },
+
+  addVersion: (conceptId, version) => {
+    const concept = get().concepts.find((c) => c.id === conceptId);
+    if (!concept) return;
+    const ver: ConceptVersion = {
+      id: uuidv4(),
+      conceptId,
+      versionNumber: concept.versions.length + 1,
+      coilImageUrl: version.coilImageUrl || '',
+      baseImageUrl: version.baseImageUrl || '',
+      combinedImageUrl: version.combinedImageUrl || '',
+      prompt: version.prompt,
+      notes: version.notes || '',
+      createdAt: new Date().toISOString(),
+    };
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === conceptId ? { ...c, versions: [...c.versions, ver] } : c
+      ),
+    }));
+    fetch(`/api/concepts/${conceptId}/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ver),
+    }).catch(console.error);
+  },
+
+  addAIGeneration: (conceptId, record) => {
+    const gen: AIGenerationRecord = {
+      id: uuidv4(),
+      conceptId,
+      prompt: record.prompt || '',
+      coilPrompt: record.coilPrompt || '',
+      basePrompt: record.basePrompt || '',
+      mode: record.mode || 'concept_art',
+      coilImageUrl: record.coilImageUrl || '',
+      baseImageUrl: record.baseImageUrl || '',
+      combinedImageUrl: record.combinedImageUrl || '',
+      createdAt: new Date().toISOString(),
+      variationOf: record.variationOf,
+    };
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === conceptId ? { ...c, aiGenerations: [...c.aiGenerations, gen] } : c
+      ),
+    }));
+    fetch(`/api/concepts/${conceptId}/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gen),
+    }).catch(console.error);
+  },
+
+  updateManufacturing: (conceptId, record) => {
+    set((state) => ({
+      concepts: state.concepts.map((c) =>
+        c.id === conceptId
+          ? {
+              ...c,
+              manufacturingRecord: { ...c.manufacturingRecord, conceptId, ...record } as ManufacturingRecord,
+            }
+          : c
+      ),
+    }));
+    fetch(`/api/concepts/${conceptId}/manufacturing`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conceptId, ...record }),
+    }).catch(console.error);
+  },
+
+  addTemplate: (partial) => {
+    const template: SpecTemplate = {
+      id: uuidv4(),
+      name: partial.name || 'Untitled Template',
+      category: partial.category || '',
+      description: partial.description || '',
+      specs: partial.specs || {},
+      coilSpecs: partial.coilSpecs || {},
+      baseSpecs: partial.baseSpecs || {},
+    };
+    set((state) => ({ templates: [...state.templates, template] }));
+    fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(template),
+    }).catch(console.error);
+  },
+
+  updateTemplate: (id, updates) => {
+    set((state) => ({
+      templates: state.templates.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    }));
+    const template = get().templates.find((t) => t.id === id);
+    if (template) {
+      fetch('/api/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(template),
+      }).catch(console.error);
+    }
+  },
+
+  deleteTemplate: (id) => {
+    set((state) => ({ templates: state.templates.filter((t) => t.id !== id) }));
+    fetch('/api/templates', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(console.error);
+  },
+
+  setOpenAIKey: (key) => {
+    set({ openAIKey: key });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bds-openai-key', key);
+    }
+  },
+
+  setCurrentUserName: (name) => {
+    set((state) => ({
+      currentUser: { ...state.currentUser, name, avatar: name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) },
+    }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bds-user-name', name);
+    }
+  },
+}));

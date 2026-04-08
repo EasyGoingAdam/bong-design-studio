@@ -18,11 +18,11 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
   const [templateId, setTemplateId] = useState('');
   const [audience, setAudience] = useState('');
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) { setNameError('Concept name is required'); return; }
     setNameError('');
     const template = templates.find((t) => t.id === templateId);
-    const concept = addConcept({
+    const concept = await addConcept({
       name: name.trim(),
       collection: collection.trim(),
       description: description.trim(),

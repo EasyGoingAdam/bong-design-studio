@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAppStore } from '@/lib/store';
 import { Dashboard } from './dashboard';
 import { ConceptsLibrary } from './concepts-library';
 import { WorkflowBoard } from './workflow-board';
@@ -26,6 +27,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const { initialize, initialized, loading } = useAppStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   const openConcept = (id: string) => {
     setSelectedConceptId(id);
@@ -95,13 +101,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        {activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
-        {activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
-        {activeTab === 'workflow' && <WorkflowBoard onOpenConcept={openConcept} />}
-        {activeTab === 'specs' && <SpecsDatabase />}
-        {activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
-        {activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
-        {activeTab === 'detail' && selectedConceptId && (
+        {loading && !initialized && (
+          <div className="flex items-center justify-center py-20">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-muted">Loading design studio...</span>
+            </div>
+          </div>
+        )}
+        {initialized && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'workflow' && <WorkflowBoard onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'specs' && <SpecsDatabase />}
+        {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
         )}
       </main>

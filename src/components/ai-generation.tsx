@@ -107,8 +107,8 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     }
   };
 
-  const handleSaveAsNewConcept = () => {
-    const concept = addConcept({
+  const handleSaveAsNewConcept = async () => {
+    const concept = await addConcept({
       name: title,
       description: `AI Generated: ${stylePrompt} / ${themePrompt}`,
       tags: [mode, relationship],

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { uploadImage } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, apiKey, size = '1024x1024' } = await request.json();
+    const { prompt, apiKey, size = '1024x1024', folder = 'generated', filename = 'image' } = await request.json();
 
     if (!apiKey) {
       return NextResponse.json({ error: 'API key is required' }, { status: 400 });
@@ -36,19 +37,31 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    // The API returns base64 data for gpt-image-1
     const imageData = data.data?.[0];
-    let imageUrl = '';
 
-    if (imageData?.b64_json) {
-      imageUrl = `data:image/png;base64,${imageData.b64_json}`;
-    } else if (imageData?.url) {
-      imageUrl = imageData.url;
+    if (!imageData?.b64_json && !imageData?.url) {
+      return NextResponse.json({ error: 'No image data in response' }, { status: 500 });
     }
 
-    if (!imageUrl) {
-      return NextResponse.json({ error: 'No image data in response' }, { status: 500 });
+    // Get base64 data
+    let base64Data: string;
+    if (imageData.b64_json) {
+      base64Data = `data:image/png;base64,${imageData.b64_json}`;
+    } else {
+      // Fetch URL and convert to base64
+      const imgRes = await fetch(imageData.url);
+      const imgBuffer = await imgRes.arrayBuffer();
+      base64Data = `data:image/png;base64,${Buffer.from(imgBuffer).toString('base64')}`;
+    }
+
+    // Upload to Supabase Storage for permanent storage
+    let imageUrl: string;
+    try {
+      imageUrl = await uploadImage(base64Data, folder, filename);
+    } catch (uploadErr) {
+      console.error('Supabase upload failed, returning base64 fallback:', uploadErr);
+      // Fallback: return base64 if upload fails (still works, just not persistent)
+      imageUrl = base64Data;
     }
 
     return NextResponse.json({ imageUrl });

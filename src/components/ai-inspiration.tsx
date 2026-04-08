@@ -83,9 +83,9 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
     }
   };
 
-  const handleUseThis = (result: BrainstormResult, index: number) => {
+  const handleUseThis = async (result: BrainstormResult, index: number) => {
     try {
-      const concept = addConcept({
+      const concept = await addConcept({
         name: result.name,
         collection: result.collection || '',
         description: result.description,
