@@ -81,33 +81,41 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
     }
   };
 
-  const handleUseThis = (result: BrainstormResult) => {
-    const concept = addConcept({
-      name: result.name,
-      collection: result.collection || '',
-      description: result.description,
-      tags: result.tags || [],
-      intendedAudience: result.audience || '',
-      priority: (result.priority as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
-      lifecycleType: (result.lifecycle as 'seasonal' | 'evergreen' | 'limited_edition' | 'custom') || 'evergreen',
-      specs: {
-        designStyleName: result.style || '',
-        designTheme: result.theme || '',
-        patternDensity: (result.density as 'low' | 'medium' | 'high' | 'very_high') || 'medium',
-        laserComplexity: (result.complexity as 1 | 2 | 3 | 4 | 5) || 3,
-        estimatedEtchingTime: '',
-        surfaceCoverage: 50,
-        lineThickness: '',
-        bwContrastGuidance: '',
-        symmetryRequirement: 'none',
-        coordinationMode: (result.coordination as CoilBaseRelationship) || 'thematic',
-        productionFeasibility: 3,
-        riskNotes: '',
-      },
-      coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
-      baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },
-    });
-    onOpenConcept(concept.id);
+  const handleUseThis = (result: BrainstormResult, index: number) => {
+    try {
+      const concept = addConcept({
+        name: result.name,
+        collection: result.collection || '',
+        description: result.description,
+        tags: result.tags || [],
+        intendedAudience: result.audience || '',
+        priority: (result.priority as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
+        lifecycleType: (result.lifecycle as 'seasonal' | 'evergreen' | 'limited_edition' | 'custom') || 'evergreen',
+        specs: {
+          designStyleName: result.style || '',
+          designTheme: result.theme || '',
+          patternDensity: (result.density as 'low' | 'medium' | 'high' | 'very_high') || 'medium',
+          laserComplexity: (result.complexity as 1 | 2 | 3 | 4 | 5) || 3,
+          estimatedEtchingTime: '',
+          surfaceCoverage: 50,
+          lineThickness: '',
+          bwContrastGuidance: '',
+          symmetryRequirement: 'none',
+          coordinationMode: (result.coordination as CoilBaseRelationship) || 'thematic',
+          productionFeasibility: 3,
+          riskNotes: '',
+        },
+        coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
+        baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },
+      });
+      // Remove from brainstorm list
+      setResults((prev) => prev.filter((_, i) => i !== index));
+      // Navigate to the new concept
+      onOpenConcept(concept.id);
+    } catch (err) {
+      console.error('Failed to create concept:', err);
+      setError('Failed to create concept. Please try again.');
+    }
   };
 
   return (
@@ -220,7 +228,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
                   </div>
                 </div>
                 <button
-                  onClick={() => handleUseThis(result)}
+                  onClick={(e) => { e.stopPropagation(); handleUseThis(result, i); }}
                   className="shrink-0 px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg font-medium transition-colors"
                 >
                   Use This →
