@@ -19,6 +19,7 @@ interface AppState {
   users: User[];
   currentUser: User;
   openAIKey: string;
+  geminiKey: string;
   loading: boolean;
   initialized: boolean;
 
@@ -57,6 +58,7 @@ interface AppState {
 
   // Settings
   setOpenAIKey: (key: string) => void;
+  setGeminiKey: (key: string) => void;
   setCurrentUserName: (name: string) => void;
 
   // Refresh from server
@@ -95,6 +97,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   users: sampleUsers,
   currentUser: sampleUsers[0],
   openAIKey: '',
+  geminiKey: '',
   loading: false,
   initialized: false,
 
@@ -152,6 +155,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
         const settings = await settingsRes.json();
         if (settings.openai_key) {
           set({ openAIKey: settings.openai_key });
+        }
+        if (settings.gemini_key) {
+          set({ geminiKey: settings.gemini_key });
         }
         if (settings.user_name) {
           const name = settings.user_name;
@@ -454,6 +460,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setOpenAIKey: (key) => {
     set({ openAIKey: key });
     saveSetting('openai_key', key);
+  },
+
+  setGeminiKey: (key) => {
+    set({ geminiKey: key });
+    saveSetting('gemini_key', key);
   },
 
   setCurrentUserName: (name) => {

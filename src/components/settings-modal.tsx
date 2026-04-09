@@ -14,9 +14,10 @@ interface Profile {
 }
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
-  const { openAIKey, setOpenAIKey, currentUser, setCurrentUserName } = useAppStore();
+  const { openAIKey, setOpenAIKey, geminiKey, setGeminiKey, currentUser, setCurrentUserName } = useAppStore();
   const { toast } = useToast();
   const [key, setKey] = useState(openAIKey);
+  const [gKey, setGKey] = useState(geminiKey);
   const [name, setName] = useState(currentUser.name);
   const [activeSection, setActiveSection] = useState<'general' | 'team'>('general');
 
@@ -42,6 +43,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const handleSave = () => {
     setOpenAIKey(key);
+    setGeminiKey(gKey);
     setCurrentUserName(name);
     toast('Settings saved', 'success');
     onClose();
@@ -152,7 +154,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 placeholder="sk-..."
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
               />
-              <p className="text-xs text-muted mt-1">Used for AI image generation and brainstorm. Stored securely on the server.</p>
+              <p className="text-xs text-muted mt-1">Used for AI image generation and brainstorm.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1.5">Gemini API Key</label>
+              <input
+                type="password"
+                value={gKey}
+                onChange={(e) => setGKey(e.target.value)}
+                placeholder="AIza..."
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              />
+              <p className="text-xs text-muted mt-1">Optional. Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-accent hover:underline">aistudio.google.com</a></p>
             </div>
 
             <div className="flex justify-between pt-2">

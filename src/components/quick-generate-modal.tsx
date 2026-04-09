@@ -28,7 +28,7 @@ const RELATIONSHIP_OPTIONS = [
 ];
 
 export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onClose: () => void }) {
-  const { openAIKey, updateConcept, addAIGeneration, addVersion } = useAppStore();
+  const { openAIKey, geminiKey, updateConcept, addAIGeneration, addVersion } = useAppStore();
   const { toast } = useToast();
 
   // Pre-fill from concept specs
@@ -37,6 +37,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [complexity, setComplexity] = useState<number>(concept.specs.laserComplexity || 3);
   const [contrast, setContrast] = useState('high');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
+  const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
@@ -68,8 +69,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
 
   const handleGenerate = async () => {
-    if (!openAIKey) {
+    if (aiModel === 'openai' && !openAIKey) {
       setError('Please set your OpenAI API key in Settings first.');
+      return;
+    }
+    if (aiModel === 'gemini' && !geminiKey) {
+      setError('Please set your Gemini API key in Settings first.');
       return;
     }
 
@@ -86,12 +91,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, size: coilSize }),
+          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel }),
         }),
         fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, size: '1024x1024' }),
+          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: '1024x1024', model: aiModel }),
         }),
       ]);
 
@@ -198,6 +203,19 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
               </div>
             </div>
           )}
+
+          {/* AI Model */}
+          <div>
+            <label className="block text-xs text-muted mb-1">AI Model</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAiModel('openai')} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors font-medium ${aiModel === 'openai' ? 'bg-accent/10 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                OpenAI GPT Image
+              </button>
+              <button type="button" onClick={() => setAiModel('gemini')} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors font-medium ${aiModel === 'gemini' ? 'bg-blue-500/10 border-blue-400 text-blue-600' : 'bg-background border-border text-muted'}`}>
+                Gemini
+              </button>
+            </div>
+          </div>
 
           {/* Quick Settings */}
           <div className="grid grid-cols-2 gap-3">
