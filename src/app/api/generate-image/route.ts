@@ -41,7 +41,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string, size: string):
 
 async function generateWithGemini(prompt: string, apiKey: string, aspectRatio: string): Promise<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`,
     {
       method: 'POST',
       headers: {
