@@ -13,23 +13,10 @@ When brainstorming design concepts, consider:
 - Each concept should have a distinct creative identity and target audience
 - Consider production feasibility (very fine details can be hard to etch cleanly)
 
-Return ONLY a valid JSON array. No markdown, no code fences, no explanation. Each object in the array must have exactly these fields:
-{
-  "name": "short evocative design name",
-  "collection": "series/collection name",
-  "description": "2-3 sentences describing the visual concept for both coil and base",
-  "theme": "one-line theme description",
-  "style": "design style name",
-  "tags": ["array", "of", "relevant", "tags"],
-  "audience": "target audience description",
-  "priority": "medium",
-  "lifecycle": "evergreen or seasonal or limited_edition",
-  "complexity": 3,
-  "density": "medium",
-  "coordination": "thematic",
-  "coilNotes": "specific notes for the coil piece design",
-  "baseNotes": "specific notes for the base piece design"
-}`;
+You MUST respond with a JSON object containing a "concepts" key with an array of concept objects. Example format:
+{"concepts": [{"name": "...", "collection": "...", "description": "...", "theme": "...", "style": "...", "tags": ["..."], "audience": "...", "priority": "medium", "lifecycle": "evergreen", "complexity": 3, "density": "medium", "coordination": "thematic", "coilNotes": "...", "baseNotes": "..."}]}
+
+Each concept must have all these fields. Be wildly creative and never repeat ideas.`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,8 +46,9 @@ export async function POST(request: NextRequest) {
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userMessage },
         ],
-        temperature: 1.2,
-        max_tokens: 3000,
+        temperature: 1.0,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' },
       }),
     });
 
@@ -79,13 +67,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No response from AI' }, { status: 500 });
     }
 
-    // Parse the JSON response, handling potential markdown code fences
+    // Parse the JSON response
     let concepts;
     try {
       const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      concepts = JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
+      // Handle both { concepts: [...] } and direct array formats
+      concepts = Array.isArray(parsed) ? parsed : (parsed.concepts || []);
     } catch {
       return NextResponse.json({ error: 'Failed to parse AI response', raw: content }, { status: 500 });
+    }
+
+    if (!Array.isArray(concepts) || concepts.length === 0) {
+      return NextResponse.json({ error: 'No concepts generated', raw: content }, { status: 500 });
     }
 
     return NextResponse.json({ concepts });
