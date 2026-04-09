@@ -40,18 +40,22 @@ const LASER_CONSTRAINTS = `
 CRITICAL LASER ETCHING CONSTRAINTS:
 - Output must be pure black lines/fills on white background
 - NO gradients, NO gray values, NO halftones
-- Minimum line thickness: 0.25mm
-- Minimum gap between lines: 0.3mm
-- Avoid areas of solid black larger than 5mm²
-- All details must be visible at actual print size
 - Design must work as a vector-ready illustration
+
+CRITICAL OUTPUT RULES:
+- DO NOT include any text, words, letters, or numbers in the image
+- DO NOT include measurements, dimensions, rulers, or size annotations
+- DO NOT include labels, titles, watermarks, or captions
+- DO NOT include borders, frames, or outlines around the design
+- The output must be ONLY the artwork itself — pure design, nothing else
+- Fill the entire image with the design — no margins or padding
 `;
 
 export function buildCoilPrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
 
   parts.push(MODE_PREFIXES[inputs.mode]);
-  parts.push(`for the COIL piece (cylindrical sleeve, 45mm tall x 120mm wrap circumference) of a glass product.`);
+  parts.push(`for the COIL piece (a cylindrical wraparound sleeve) of a glass product.`);
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
@@ -75,7 +79,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
 
-  parts.push('The design should wrap seamlessly around a cylinder. Output as a flat rectangular design ready to wrap.');
+  parts.push('The design should wrap seamlessly around a cylinder. Output as a flat rectangular artwork. No text, no labels, no measurements — pure artwork only.');
 
   return parts.join('\n\n');
 }
@@ -84,7 +88,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
 
   parts.push(MODE_PREFIXES[inputs.mode]);
-  parts.push(`for the BASE piece (circular top-down view, 65mm diameter) of a glass product.`);
+  parts.push(`for the BASE piece (a circular top-down view) of a glass product.`);
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
@@ -108,7 +112,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
 
-  parts.push('The design should be circular and viewed from directly above. Center the main element.');
+  parts.push('The design should be circular and viewed from directly above. Center the main element. No text, no labels, no measurements — pure artwork only.');
 
   return parts.join('\n\n');
 }
