@@ -89,6 +89,27 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export async function invertImage(imageUrl: string): Promise<string> {
+  const img = await loadImage(imageUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width || 1024;
+  canvas.height = img.naturalHeight || img.height || 1024;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i];       // R
+    data[i + 1] = 255 - data[i + 1]; // G
+    data[i + 2] = 255 - data[i + 2]; // B
+    // Alpha stays the same
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return canvas.toDataURL('image/png');
+}
+
 export function ImageDownloadButtons({ imageUrl, filename }: ImageDownloadProps) {
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);

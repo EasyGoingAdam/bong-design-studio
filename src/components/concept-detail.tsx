@@ -6,7 +6,7 @@ import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
-import { ImageDownloadButtons } from './image-download';
+import { ImageDownloadButtons, invertImage } from './image-download';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -20,6 +20,33 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [showGenerate, setShowGenerate] = useState(false);
   const { toast } = useToast();
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+
+  const [inverting, setInverting] = useState<string | null>(null);
+
+  const handleInvert = async (part: 'coil' | 'base') => {
+    if (!concept) return;
+    const url = part === 'coil' ? concept.coilImageUrl : concept.baseImageUrl;
+    if (!url) return;
+    setInverting(part);
+    try {
+      const invertedBase64 = await invertImage(url);
+      // Upload inverted image to Supabase
+      const uploadRes = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: invertedBase64, folder: 'inverted', filename: `${concept.name}-${part}` }),
+      });
+      const { url: newUrl } = await uploadRes.json();
+      if (newUrl) {
+        updateConcept(concept.id, part === 'coil' ? { coilImageUrl: newUrl } : { baseImageUrl: newUrl });
+        toast(`${part === 'coil' ? 'Coil' : 'Base'} colors inverted`, 'success');
+      }
+    } catch {
+      toast('Failed to invert image', 'error');
+    } finally {
+      setInverting(null);
+    }
+  };
 
   // Editable fields
   const [editName, setEditName] = useState('');
@@ -173,7 +200,19 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Coil</span>
-                  {concept.coilImageUrl && <ImageDownloadButtons imageUrl={concept.coilImageUrl} filename={`${concept.name}-coil`} />}
+                  <div className="flex items-center gap-1">
+                    {concept.coilImageUrl && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleInvert('coil'); }}
+                        disabled={inverting === 'coil'}
+                        className="text-[10px] text-muted hover:text-foreground bg-background/80 hover:bg-background border border-border px-1.5 py-0.5 rounded transition-colors disabled:opacity-50"
+                        title="Invert black/white colors"
+                      >
+                        {inverting === 'coil' ? '...' : '◐'}
+                      </button>
+                    )}
+                    {concept.coilImageUrl && <ImageDownloadButtons imageUrl={concept.coilImageUrl} filename={`${concept.name}-coil`} />}
+                  </div>
                 </div>
                 <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.coilImageUrl ? (
@@ -202,7 +241,19 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Base</span>
-                  {concept.baseImageUrl && <ImageDownloadButtons imageUrl={concept.baseImageUrl} filename={`${concept.name}-base`} />}
+                  <div className="flex items-center gap-1">
+                    {concept.baseImageUrl && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleInvert('base'); }}
+                        disabled={inverting === 'base'}
+                        className="text-[10px] text-muted hover:text-foreground bg-background/80 hover:bg-background border border-border px-1.5 py-0.5 rounded transition-colors disabled:opacity-50"
+                        title="Invert black/white colors"
+                      >
+                        {inverting === 'base' ? '...' : '◐'}
+                      </button>
+                    )}
+                    {concept.baseImageUrl && <ImageDownloadButtons imageUrl={concept.baseImageUrl} filename={`${concept.name}-base`} />}
+                  </div>
                 </div>
                 <div className="aspect-square rounded-xl bg-surface placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
                   {concept.baseImageUrl ? (
