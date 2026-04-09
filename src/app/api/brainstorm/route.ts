@@ -39,9 +39,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'API key is required' }, { status: 400 });
     }
 
+    // Add randomness seed to ensure different results every time
+    const seed = Math.random().toString(36).substring(2, 10);
+    const timeStamp = new Date().toISOString();
+
     const userMessage = prompt
-      ? `Generate ${count} unique design concepts inspired by: "${prompt}"`
-      : `Generate ${count} unique and creative design concepts. Be diverse in style and theme. Surprise me with original ideas.`;
+      ? `Generate ${count} unique design concepts inspired by: "${prompt}". Be wildly creative and unexpected. Every concept must be completely different from each other. Seed: ${seed} Time: ${timeStamp}`
+      : `Generate ${count} unique and creative design concepts. Be wildly diverse — mix completely different styles, themes, cultures, and aesthetics. Surprise me with original ideas I would never think of. Seed: ${seed} Time: ${timeStamp}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userMessage },
         ],
-        temperature: 0.9,
+        temperature: 1.2,
         max_tokens: 3000,
       }),
     });
