@@ -58,7 +58,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
 
   parts.push(NO_TEXT_RULE);
   parts.push(MODE_PREFIXES[inputs.mode]);
-  parts.push(`for the COIL piece (a cylindrical wraparound sleeve) of a glass product.`);
+  parts.push('Output a single flat rectangular artwork that fills the entire image edge to edge. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one flat design.');
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
@@ -82,7 +82,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
 
-  parts.push('The design should wrap seamlessly around a cylinder. Output as a flat rectangular artwork. No text, no labels, no measurements — pure artwork only.');
+  parts.push('The artwork must fill the entire image from edge to edge. No borders, no margins, no mockups. One single flat design only.');
 
   return parts.join('\n\n');
 }
@@ -92,7 +92,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
 
   parts.push(NO_TEXT_RULE);
   parts.push(MODE_PREFIXES[inputs.mode]);
-  parts.push(`for the BASE piece (a circular top-down view) of a glass product.`);
+  parts.push('Output a single flat circular artwork that fills the entire image. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one circular design viewed from above.');
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
@@ -116,7 +116,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
   if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
   if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
 
-  parts.push('The design should be circular and viewed from directly above. Center the main element. No text, no labels, no measurements — pure artwork only.');
+  parts.push('The circular artwork must fill the entire image. No borders, no margins, no mockups. One single flat design only.');
 
   return parts.join('\n\n');
 }
