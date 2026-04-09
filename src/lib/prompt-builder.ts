@@ -15,6 +15,8 @@ interface PromptInputs {
   contrast: string;
 }
 
+const NO_TEXT_RULE = 'IMPORTANT: The image must contain ZERO text, ZERO words, ZERO letters, ZERO numbers, ZERO measurements, ZERO labels, ZERO annotations. Output ONLY pure artwork with no writing of any kind anywhere in the image.';
+
 const BW_BASE = 'Use only pure black lines and fills on a white background. No color, no gradients, no gray tones, no shading, no halftones.';
 
 const MODE_PREFIXES: Record<GenerationMode, string> = {
@@ -54,6 +56,7 @@ CRITICAL OUTPUT RULES:
 export function buildCoilPrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
 
+  parts.push(NO_TEXT_RULE);
   parts.push(MODE_PREFIXES[inputs.mode]);
   parts.push(`for the COIL piece (a cylindrical wraparound sleeve) of a glass product.`);
 
@@ -87,6 +90,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
 export function buildBasePrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
 
+  parts.push(NO_TEXT_RULE);
   parts.push(MODE_PREFIXES[inputs.mode]);
   parts.push(`for the BASE piece (a circular top-down view) of a glass product.`);
 
