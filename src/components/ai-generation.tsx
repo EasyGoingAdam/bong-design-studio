@@ -90,25 +90,28 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     setGeneratedBaseUrl('');
 
     try {
-      // Generate Coil image — rectangle (landscape) or square
+      // Generate BOTH images in parallel (faster + same cost)
       const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
-      const coilRes = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel }),
-      });
+      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
+      const baseSize = baseSizeMap[baseShape] || '1024x1024';
+
+      const [coilRes, baseRes] = await Promise.all([
+        fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'standard' }),
+        }),
+        fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'standard' }),
+        }),
+      ]);
+
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
 
-      // Generate Base image — size based on shape
-      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
-      const baseSize = baseSizeMap[baseShape] || '1024x1024';
-      const baseRes = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel }),
-      });
       const baseData = await baseRes.json();
       if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
       setGeneratedBaseUrl(baseData.imageUrl);

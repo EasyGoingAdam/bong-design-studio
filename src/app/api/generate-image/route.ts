@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
 
-async function generateWithOpenAI(prompt: string, apiKey: string, size: string): Promise<string> {
+async function generateWithOpenAI(prompt: string, apiKey: string, size: string, quality: string = 'standard'): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -13,7 +13,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string, size: string):
       prompt,
       n: 1,
       size,
-      quality: 'high',
+      quality,
     }),
   });
 
@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       filename = 'image',
       model = 'openai',
       geminiKey,
+      quality = 'standard',
     } = await request.json();
 
     if (model === 'gemini' && !geminiKey) {
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
       const aspectRatio = size === '1536x1024' ? '3:2' : '1:1';
       base64Data = await generateWithGemini(prompt, geminiKey, aspectRatio);
     } else {
-      base64Data = await generateWithOpenAI(prompt, apiKey, size);
+      base64Data = await generateWithOpenAI(prompt, apiKey, size, quality);
     }
 
     // Upload to Supabase Storage
