@@ -13,19 +13,38 @@ interface PromptInputs {
   mode: GenerationMode;
   patternDensity: string;
   contrast: string;
+  baseShape?: 'circle' | 'square' | 'rectangle';
 }
 
 const NO_TEXT_RULE = 'IMPORTANT: The image must contain ZERO text, ZERO words, ZERO letters, ZERO numbers, ZERO measurements, ZERO labels, ZERO annotations. Output ONLY pure artwork with no writing of any kind anywhere in the image.';
 
 const BW_BASE = 'Use only pure black lines and fills on a white background. No color, no gradients, no gray tones, no shading, no halftones.';
 
-const MODE_PREFIXES: Record<GenerationMode, string> = {
-  concept_art: `Create a detailed black and white concept illustration for laser etching on glass. ${BW_BASE} This is an exploratory concept — creative freedom is encouraged but keep it black and white`,
-  production_bw: `Create a high-contrast black and white design optimized for laser etching on glass. ${BW_BASE} Prioritize clean lines, manufacturing reliability, and production feasibility`,
-  pattern_wrap: `Create a seamless repeating black and white pattern design that wraps around a cylindrical surface. ${BW_BASE}`,
-  premium_luxury: `Create an ornate, luxurious black and white design with fine filigree detail, baroque-inspired scrollwork, and premium aesthetic. ${BW_BASE}`,
-  seasonal_drop: `Create a bold, eye-catching black and white seasonal/holiday themed design for laser etching. ${BW_BASE}`,
-};
+const PREMIUM_MOTIFS = [
+  'Art Deco geometric patterns with bold angular lines and sunburst motifs',
+  'Baroque filigree with ornate scrollwork and intricate curving flourishes',
+  'Rococo floral arrangements with delicate asymmetric botanical details',
+  'Greek key meander patterns with classical architectural border elements',
+  'Minimalist luxury with clean geometric lines and strategic negative space',
+  'Damask pattern with interlocking floral and vine repeats',
+  'Filigree lace with ultra-fine interconnected thread-like patterns',
+  'Art Nouveau organic flowing lines with stylized natural forms',
+  'Gothic cathedral tracery with pointed arches and rose window elements',
+  'Japanese Mon-style crests with geometric family crest motifs',
+  'Celtic knotwork with continuous interlacing band patterns',
+  'Moroccan zellige-inspired geometric tile patterns',
+];
+
+function getModePrefix(mode: GenerationMode): string {
+  const prefixes: Record<GenerationMode, string> = {
+    concept_art: `Create a detailed black and white concept illustration for laser etching on glass. ${BW_BASE} This is an exploratory concept — creative freedom is encouraged but keep it black and white`,
+    production_bw: `Create a high-contrast black and white design optimized for laser etching on glass. ${BW_BASE} Prioritize clean lines, manufacturing reliability, and production feasibility`,
+    pattern_wrap: `Create a seamless repeating black and white pattern design that wraps around a cylindrical surface. ${BW_BASE}`,
+    premium_luxury: `Create an ornate, luxurious black and white design featuring ${PREMIUM_MOTIFS[Math.floor(Math.random() * PREMIUM_MOTIFS.length)]}. Premium aesthetic with masterful craftsmanship feel. ${BW_BASE}`,
+    seasonal_drop: `Create a bold, eye-catching black and white seasonal/holiday themed design for laser etching. ${BW_BASE}`,
+  };
+  return prefixes[mode];
+}
 
 const RELATIONSHIP_INSTRUCTIONS: Record<CoilBaseRelationship, string> = {
   exact_match: 'The coil and base designs must be perfectly coordinated — same visual language, matching elements, unified composition when viewed together.',
@@ -57,7 +76,16 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
 
   parts.push(NO_TEXT_RULE);
-  parts.push(MODE_PREFIXES[inputs.mode]);
+  parts.push(getModePrefix(inputs.mode));
+
+  // Insert user directions prominently right after mode prefix
+  if (inputs.references || inputs.constraints) {
+    const userDirections: string[] = [];
+    if (inputs.references) userDirections.push(inputs.references);
+    if (inputs.constraints) userDirections.push(inputs.constraints);
+    parts.push(`USER DIRECTIONS (these MUST be followed precisely): ${userDirections.join('. ')}`);
+  }
+
   parts.push('Output a single flat rectangular artwork that fills the entire image edge to edge. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one flat design.');
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
@@ -79,9 +107,6 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
 
   parts.push(LASER_CONSTRAINTS);
 
-  if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
-  if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
-
   parts.push('The artwork must fill the entire image from edge to edge. No borders, no margins, no mockups. One single flat design only.');
 
   return parts.join('\n\n');
@@ -89,10 +114,32 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
 
 export function buildBasePrompt(inputs: PromptInputs): string {
   const parts: string[] = [];
+  const shape = inputs.baseShape || 'circle';
+
+  const shapeDescriptions: Record<string, string> = {
+    circle: 'Output a single flat circular artwork that fills the entire image. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one circular design viewed from above.',
+    square: 'Output a single flat square artwork that fills the entire image. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one flat square design.',
+    rectangle: 'Output a single flat rectangular artwork (wider than tall) that fills the entire image. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one flat rectangular design.',
+  };
+
+  const closingDescriptions: Record<string, string> = {
+    circle: 'The circular artwork must fill the entire image. No borders, no margins, no mockups. One single flat design only.',
+    square: 'The square artwork must fill the entire image. No borders, no margins, no mockups. One single flat design only.',
+    rectangle: 'The rectangular artwork must fill the entire image. No borders, no margins, no mockups. One single flat design only.',
+  };
 
   parts.push(NO_TEXT_RULE);
-  parts.push(MODE_PREFIXES[inputs.mode]);
-  parts.push('Output a single flat circular artwork that fills the entire image. Do NOT show any 3D objects, mockups, product renders, or multiple items. Just one circular design viewed from above.');
+  parts.push(getModePrefix(inputs.mode));
+
+  // Insert user directions prominently right after mode prefix
+  if (inputs.references || inputs.constraints) {
+    const userDirections: string[] = [];
+    if (inputs.references) userDirections.push(inputs.references);
+    if (inputs.constraints) userDirections.push(inputs.constraints);
+    parts.push(`USER DIRECTIONS (these MUST be followed precisely): ${userDirections.join('. ')}`);
+  }
+
+  parts.push(shapeDescriptions[shape]);
 
   if (inputs.title) parts.push(`Design concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
@@ -113,10 +160,7 @@ export function buildBasePrompt(inputs: PromptInputs): string {
 
   parts.push(LASER_CONSTRAINTS);
 
-  if (inputs.references) parts.push(`Inspiration/references: ${inputs.references}.`);
-  if (inputs.constraints) parts.push(`Additional constraints: ${inputs.constraints}.`);
-
-  parts.push('The circular artwork must fill the entire image. No borders, no margins, no mockups. One single flat design only.');
+  parts.push(closingDescriptions[shape]);
 
   return parts.join('\n\n');
 }

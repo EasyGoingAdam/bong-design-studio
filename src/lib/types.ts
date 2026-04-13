@@ -29,6 +29,7 @@ export interface ConceptSpecs {
   coordinationMode: CoilBaseRelationship;
   productionFeasibility: 1 | 2 | 3 | 4 | 5;
   riskNotes: string;
+  baseShape?: 'circle' | 'square' | 'rectangle';
 }
 
 export interface CoilSpecs {

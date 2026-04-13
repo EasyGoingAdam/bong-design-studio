@@ -20,6 +20,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [showGenerate, setShowGenerate] = useState(false);
   const { toast } = useToast();
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingSpecs, setEditingSpecs] = useState(false);
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const [editSpecs, setEditSpecs] = useState<any>({});
+  const [editCoilSpecs, setEditCoilSpecs] = useState<any>({});
+  const [editBaseSpecs, setEditBaseSpecs] = useState<any>({});
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const [inverting, setInverting] = useState<string | null>(null);
 
@@ -409,6 +416,12 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <button onClick={() => setShowArchiveConfirm(true)} className="w-full py-1.5 text-sm bg-background border border-border rounded-lg text-muted hover:text-foreground">
                 Archive
               </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full py-1.5 text-sm bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+              >
+                Delete Permanently
+              </button>
             </div>
 
             {/* Approval Log */}
@@ -439,24 +452,47 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
 
       {/* Specs */}
       {activeSection === 'specs' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div className="flex justify-end mb-3">
+            {!editingSpecs ? (
+              <button onClick={() => { setEditingSpecs(true); setEditSpecs({...concept.specs}); setEditCoilSpecs({...concept.coilSpecs}); setEditBaseSpecs({...concept.baseSpecs}); }} className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover">Edit Specs</button>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={() => setEditingSpecs(false)} className="px-3 py-1.5 text-sm text-muted">Cancel</button>
+                <button onClick={() => { updateConcept(concept.id, { specs: editSpecs as unknown as typeof concept.specs, coilSpecs: editCoilSpecs as unknown as typeof concept.coilSpecs, baseSpecs: editBaseSpecs as unknown as typeof concept.baseSpecs }); setEditingSpecs(false); toast('Specs updated', 'success'); }} className="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">Save Specs</button>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-surface border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold mb-3">Design Specifications</h3>
             <div className="space-y-2 text-sm">
-              {[
-                ['Style', concept.specs.designStyleName],
-                ['Theme', concept.specs.designTheme],
+              {([
+                ['Style', 'designStyleName'],
+                ['Theme', 'designTheme'],
+                ['Etching Time', 'estimatedEtchingTime'],
+                ['Surface Coverage', 'surfaceCoverage'],
+                ['Line Thickness', 'lineThickness'],
+                ['B/W Guidance', 'bwContrastGuidance'],
+                ['Risk Notes', 'riskNotes'],
+              ] as [string, string][]).map(([label, key]) => (
+                <div key={label} className="flex justify-between gap-4 items-center">
+                  <span className="text-muted shrink-0">{label}</span>
+                  {editingSpecs ? (
+                    <input value={String((editSpecs as Record<string, unknown>)[key] ?? '')} onChange={(e) => setEditSpecs({...editSpecs, [key]: key === 'surfaceCoverage' ? Number(e.target.value) || 0 : e.target.value})} className="w-48 bg-background border border-border rounded px-2 py-1 text-sm text-right" />
+                  ) : (
+                    <span className="text-right">{key === 'surfaceCoverage' ? `${concept.specs.surfaceCoverage}%` : (concept.specs as unknown as Record<string, string>)[key] || '—'}</span>
+                  )}
+                </div>
+              ))}
+              {/* Read-only computed fields */}
+              {([
                 ['Density', concept.specs.patternDensity],
                 ['Complexity', '●'.repeat(concept.specs.laserComplexity) + '○'.repeat(5 - concept.specs.laserComplexity)],
-                ['Etching Time', concept.specs.estimatedEtchingTime],
-                ['Surface Coverage', `${concept.specs.surfaceCoverage}%`],
-                ['Line Thickness', concept.specs.lineThickness],
-                ['B/W Guidance', concept.specs.bwContrastGuidance],
                 ['Symmetry', concept.specs.symmetryRequirement],
                 ['Coordination', concept.specs.coordinationMode],
                 ['Feasibility', '★'.repeat(concept.specs.productionFeasibility) + '☆'.repeat(5 - concept.specs.productionFeasibility)],
-                ['Risk Notes', concept.specs.riskNotes],
-              ].map(([label, value]) => (
+              ] as [string, string][]).map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-4">
                   <span className="text-muted shrink-0">{label}</span>
                   <span className="text-right">{value || '—'}</span>
@@ -468,20 +504,35 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             <div className="bg-surface border border-border rounded-xl p-4">
               <h3 className="text-sm font-semibold mb-3">Coil Specs</h3>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted">Dimensions</span><span>{concept.coilSpecs.dimensions || '—'}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Printable Area</span><span>{concept.coilSpecs.printableArea || '—'}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Notes</span><span>{concept.coilSpecs.notes || '—'}</span></div>
+                {(['dimensions', 'printableArea', 'notes'] as const).map((field) => (
+                  <div key={field} className="flex justify-between items-center">
+                    <span className="text-muted">{field === 'printableArea' ? 'Printable Area' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                    {editingSpecs ? (
+                      <input value={String((editCoilSpecs as Record<string, unknown>)[field] ?? '')} onChange={(e) => setEditCoilSpecs({...editCoilSpecs, [field]: e.target.value})} className="w-48 bg-background border border-border rounded px-2 py-1 text-sm text-right" />
+                    ) : (
+                      <span>{concept.coilSpecs[field] || '—'}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4">
               <h3 className="text-sm font-semibold mb-3">Base Specs</h3>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted">Dimensions</span><span>{concept.baseSpecs.dimensions || '—'}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Printable Area</span><span>{concept.baseSpecs.printableArea || '—'}</span></div>
-                <div className="flex justify-between"><span className="text-muted">Notes</span><span>{concept.baseSpecs.notes || '—'}</span></div>
+                {(['dimensions', 'printableArea', 'notes'] as const).map((field) => (
+                  <div key={field} className="flex justify-between items-center">
+                    <span className="text-muted">{field === 'printableArea' ? 'Printable Area' : field.charAt(0).toUpperCase() + field.slice(1)}</span>
+                    {editingSpecs ? (
+                      <input value={String((editBaseSpecs as Record<string, unknown>)[field] ?? '')} onChange={(e) => setEditBaseSpecs({...editBaseSpecs, [field]: e.target.value})} className="w-48 bg-background border border-border rounded px-2 py-1 text-sm text-right" />
+                    ) : (
+                      <span>{concept.baseSpecs[field] || '—'}</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -621,6 +672,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         confirmVariant="danger"
         onConfirm={() => { updateConcept(concept.id, { status: 'archived' }); setShowArchiveConfirm(false); toast('Concept archived', 'info'); }}
         onCancel={() => setShowArchiveConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Concept"
+        message="This will permanently delete this concept and all its versions, images, comments, and AI generations. This cannot be undone."
+        confirmLabel="Delete Permanently"
+        confirmVariant="danger"
+        onConfirm={() => { deleteConcept(concept.id); setShowDeleteConfirm(false); toast('Concept deleted', 'success'); onBack(); }}
+        onCancel={() => setShowDeleteConfirm(false)}
       />
 
       {/* Quick Generate Modal */}

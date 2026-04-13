@@ -106,6 +106,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
           coordinationMode: (result.coordination as CoilBaseRelationship) || 'thematic',
           productionFeasibility: 3,
           riskNotes: '',
+          baseShape: 'circle',
         },
         coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
         baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },

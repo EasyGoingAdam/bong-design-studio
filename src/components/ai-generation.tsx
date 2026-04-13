@@ -43,7 +43,9 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [contrast, setContrast] = useState('high');
   const [density, setDensity] = useState('medium');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
+  const [baseShape, setBaseShape] = useState<'circle' | 'square' | 'rectangle'>('circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
+  const [refineMode, setRefineMode] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
@@ -55,14 +57,18 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   // Which existing concept to generate for (optional)
   const [targetConceptId, setTargetConceptId] = useState('');
 
+  const effectiveConstraints = refineMode && generatedCoilUrl
+    ? `REFINE the existing design composition. Do NOT create a completely new design. Keep the same overall layout and theme but apply these specific modifications: ${constraints}`
+    : constraints;
+
   const inputs = {
-    title, stylePrompt, themePrompt, references, constraints,
+    title, stylePrompt, themePrompt, references, constraints: effectiveConstraints,
     complexityLevel, coilInstructions, baseInstructions,
-    relationship, mode, patternDensity: density, contrast,
+    relationship, mode, patternDensity: density, contrast, baseShape,
   };
 
-  const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, constraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast]);
-  const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, constraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast]);
+  const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape]);
+  const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape]);
 
   const handleGenerate = async () => {
     if (aiModel === 'openai' && !openAIKey) {
@@ -95,11 +101,13 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
 
-      // Generate Base image — always square (circular piece)
+      // Generate Base image — size based on shape
+      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
+      const baseSize = baseSizeMap[baseShape] || '1024x1024';
       const baseRes = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: '1024x1024', model: aiModel }),
+        body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel }),
       });
       const baseData = await baseRes.json();
       if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
@@ -320,6 +328,49 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                 <p className="text-[10px] text-muted mt-1">{coilShape === 'rectangle' ? 'Wider format — better for wraparound coil designs' : 'Square format — equal proportions'}</p>
               </div>
             </div>
+
+            <div>
+              <label className="block text-xs text-muted mb-1">Base Image Shape</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBaseShape('circle')}
+                  className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                    baseShape === 'circle'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  <span className="w-6 h-6 border border-current rounded-full" />
+                  Circle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBaseShape('square')}
+                  className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                    baseShape === 'square'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  <span className="w-6 h-6 border border-current rounded-sm" />
+                  Square
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBaseShape('rectangle')}
+                  className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                    baseShape === 'rectangle'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  <span className="w-10 h-6 border border-current rounded-sm" />
+                  Rectangle
+                </button>
+              </div>
+              <p className="text-[10px] text-muted mt-1">{baseShape === 'circle' ? 'Circular base — classic round coaster' : baseShape === 'square' ? 'Square base — equal proportions' : 'Rectangular base — wider than tall'}</p>
+            </div>
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
@@ -369,6 +420,40 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
               {error}
+            </div>
+          )}
+
+          {/* Refine vs New Design toggle — only shown when images exist */}
+          {generatedCoilUrl && (
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <label className="block text-xs text-muted mb-2">Generation Mode</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRefineMode(false)}
+                  className={`flex-1 py-2 text-sm rounded-lg border transition-colors font-medium ${
+                    !refineMode
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  New Design
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRefineMode(true)}
+                  className={`flex-1 py-2 text-sm rounded-lg border transition-colors font-medium ${
+                    refineMode
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  Refine Existing
+                </button>
+              </div>
+              {refineMode && (
+                <p className="text-[10px] text-muted mt-1">Will keep the same overall layout and theme, applying your constraints as modifications.</p>
+              )}
             </div>
           )}
 

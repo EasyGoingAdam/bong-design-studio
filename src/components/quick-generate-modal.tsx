@@ -37,6 +37,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [complexity, setComplexity] = useState<number>(concept.specs.laserComplexity || 3);
   const [contrast, setContrast] = useState('high');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
+  const [baseShape, setBaseShape] = useState<'circle' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
@@ -63,7 +64,8 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     mode,
     patternDensity: concept.specs.patternDensity || 'medium',
     contrast,
-  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes]);
+    baseShape,
+  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape]);
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [inputs]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
@@ -85,8 +87,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     setSaved(false);
 
     try {
-      // Generate both images — coil uses selected shape, base always square
+      // Generate both images — coil uses selected shape, base uses baseShape
       const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
+      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
+      const baseSize = baseSizeMap[baseShape] || '1024x1024';
       const [coilRes, baseRes] = await Promise.all([
         fetch('/api/generate-image', {
           method: 'POST',
@@ -96,7 +100,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: '1024x1024', model: aiModel }),
+          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel }),
         }),
       ]);
 
@@ -255,6 +259,24 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                   Square
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Base Image Shape</label>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setBaseShape('circle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'circle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                <span className="w-4 h-4 border border-current rounded-full" />
+                Circle
+              </button>
+              <button type="button" onClick={() => setBaseShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                <span className="w-4 h-4 border border-current rounded-sm" />
+                Square
+              </button>
+              <button type="button" onClick={() => setBaseShape('rectangle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'rectangle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                <span className="w-7 h-4 border border-current rounded-sm" />
+                Wide
+              </button>
             </div>
           </div>
 

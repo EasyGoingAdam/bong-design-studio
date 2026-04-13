@@ -44,6 +44,16 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
         productionFeasibility: template.specs.productionFeasibility || 3,
         riskNotes: '',
       } : undefined,
+      coilSpecs: template?.coilSpecs ? {
+        dimensions: template.coilSpecs.dimensions || '',
+        printableArea: template.coilSpecs.printableArea || '',
+        notes: template.coilSpecs.notes || '',
+      } : undefined,
+      baseSpecs: template?.baseSpecs ? {
+        dimensions: template.baseSpecs.dimensions || '',
+        printableArea: template.baseSpecs.printableArea || '',
+        notes: template.baseSpecs.notes || '',
+      } : undefined,
     });
     toast('Concept created', 'success');
     onClose();

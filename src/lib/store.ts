@@ -219,6 +219,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         coordinationMode: 'thematic',
         productionFeasibility: 3,
         riskNotes: '',
+        baseShape: 'circle',
       },
       coilSpecs: partial.coilSpecs || { dimensions: '', printableArea: '', notes: '' },
       baseSpecs: partial.baseSpecs || { dimensions: '', printableArea: '', notes: '' },
@@ -279,11 +280,24 @@ export const useAppStore = create<AppState>()((set, get) => ({
   duplicateConcept: async (id) => {
     const original = get().concepts.find((c) => c.id === id);
     if (!original) throw new Error('Concept not found');
+    // Deep-copy all nested objects to avoid shared references
     const newConcept = await get().addConcept({
-      ...original,
-      id: undefined as unknown as string,
       name: `${original.name} (Copy)`,
+      collection: original.collection,
       status: 'ideation',
+      designer: get().currentUser.name,
+      tags: [...original.tags],
+      description: original.description,
+      intendedAudience: original.intendedAudience,
+      manufacturingNotes: original.manufacturingNotes,
+      coilImageUrl: original.coilImageUrl,
+      baseImageUrl: original.baseImageUrl,
+      combinedImageUrl: original.combinedImageUrl,
+      priority: original.priority,
+      lifecycleType: original.lifecycleType,
+      specs: { ...original.specs },
+      coilSpecs: { ...original.coilSpecs },
+      baseSpecs: { ...original.baseSpecs },
       versions: [],
       comments: [],
       approvalLogs: [],
