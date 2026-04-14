@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
+import { validateParams, getOpenAIRequestBody, getGeminiRequestBody, getEndpoint, getAuthHeaders } from '@/lib/ai-providers';
 
-async function generateWithOpenAI(prompt: string, apiKey: string, size: string, quality: string = 'standard'): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/images/generations', {
+async function generateWithOpenAI(params: ReturnType<typeof validateParams>): Promise<string> {
+  const response = await fetch(getEndpoint('openai'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-image-1',
-      prompt,
-      n: 1,
-      size,
-      quality,
-    }),
+    headers: getAuthHeaders(params),
+    body: JSON.stringify(getOpenAIRequestBody(params)),
   });
 
   if (!response.ok) {
@@ -33,39 +25,21 @@ async function generateWithOpenAI(prompt: string, apiKey: string, size: string, 
     return `data:image/png;base64,${imageData.b64_json}`;
   }
 
-  // Fetch URL and convert to base64
   const imgRes = await fetch(imageData.url);
   const imgBuffer = await imgRes.arrayBuffer();
   return `data:image/png;base64,${Buffer.from(imgBuffer).toString('base64')}`;
 }
 
-async function generateWithGemini(prompt: string, apiKey: string, aspectRatio: string): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }],
-        }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE'],
-          imageConfig: {
-            aspectRatio,
-          },
-        },
-      }),
-    }
-  );
+async function generateWithGemini(params: ReturnType<typeof validateParams>): Promise<string> {
+  const response = await fetch(getEndpoint('gemini'), {
+    method: 'POST',
+    headers: getAuthHeaders(params),
+    body: JSON.stringify(getGeminiRequestBody(params)),
+  });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const msg = errorData?.error?.message || `Gemini API error: ${response.status}`;
-    throw new Error(msg);
+    throw new Error(errorData?.error?.message || `Gemini API error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -74,7 +48,6 @@ async function generateWithGemini(prompt: string, apiKey: string, aspectRatio: s
     throw new Error('No content in Gemini response');
   }
 
-  // Find the image part
   for (const part of candidate.content.parts) {
     if (part.inlineData?.data) {
       const mimeType = part.inlineData.mimeType || 'image/png';
@@ -87,41 +60,28 @@ async function generateWithGemini(prompt: string, apiKey: string, aspectRatio: s
 
 export async function POST(request: NextRequest) {
   try {
-    const {
-      prompt,
-      apiKey,
-      size = '1024x1024',
-      folder = 'generated',
-      filename = 'image',
-      model = 'openai',
-      geminiKey,
-      quality = 'medium',
-    } = await request.json();
+    const raw = await request.json();
 
-    if (model === 'gemini' && !geminiKey) {
-      return NextResponse.json({ error: 'Gemini API key is required. Set it in Settings.' }, { status: 400 });
-    }
-    if (model === 'openai' && !apiKey) {
-      return NextResponse.json({ error: 'OpenAI API key is required. Set it in Settings.' }, { status: 400 });
-    }
-    if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
-    }
+    // Validate ALL parameters through centralized config — prevents invalid param errors
+    const params = validateParams({
+      prompt: raw.prompt,
+      provider: raw.model,
+      apiKey: raw.apiKey,
+      geminiKey: raw.geminiKey,
+      size: raw.size,
+      quality: raw.quality,
+      folder: raw.folder,
+      filename: raw.filename,
+    });
 
-    let base64Data: string;
-
-    if (model === 'gemini') {
-      // Convert size to aspect ratio for Gemini
-      const aspectRatio = size === '1536x1024' ? '3:2' : '1:1';
-      base64Data = await generateWithGemini(prompt, geminiKey, aspectRatio);
-    } else {
-      base64Data = await generateWithOpenAI(prompt, apiKey, size, quality);
-    }
+    const base64Data = params.provider === 'gemini'
+      ? await generateWithGemini(params)
+      : await generateWithOpenAI(params);
 
     // Upload to Supabase Storage
     let imageUrl: string;
     try {
-      imageUrl = await uploadImage(base64Data, folder, filename);
+      imageUrl = await uploadImage(base64Data, params.folder, params.filename);
     } catch (uploadErr) {
       console.error('Supabase upload failed, returning base64 fallback:', uploadErr);
       imageUrl = base64Data;
