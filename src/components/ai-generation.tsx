@@ -43,7 +43,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [contrast, setContrast] = useState('high');
   const [density, setDensity] = useState('medium');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
-  const [baseShape, setBaseShape] = useState<'circle' | 'square' | 'rectangle'>('circle');
+  const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>('circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
   const [refineMode, setRefineMode] = useState(false);
 
@@ -92,7 +92,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     try {
       // Generate BOTH images in parallel (faster + same cost)
       const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
-      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
+      const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
       const baseSize = baseSizeMap[baseShape] || '1024x1024';
 
       const [coilRes, baseRes] = await Promise.all([
@@ -349,6 +349,18 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                 </button>
                 <button
                   type="button"
+                  onClick={() => setBaseShape('oval')}
+                  className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
+                    baseShape === 'oval'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  <span className="w-9 h-6 border border-current rounded-full" />
+                  Oval
+                </button>
+                <button
+                  type="button"
                   onClick={() => setBaseShape('square')}
                   className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
                     baseShape === 'square'
@@ -372,7 +384,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                   Rectangle
                 </button>
               </div>
-              <p className="text-[10px] text-muted mt-1">{baseShape === 'circle' ? 'Circular base — classic round coaster' : baseShape === 'square' ? 'Square base — equal proportions' : 'Rectangular base — wider than tall'}</p>
+              <p className="text-[10px] text-muted mt-1">{baseShape === 'circle' ? 'Circular base — classic round coaster' : baseShape === 'oval' ? 'Oval base — elliptical shape' : baseShape === 'square' ? 'Square base — equal proportions' : 'Rectangular base — wider than tall'}</p>
             </div>
           </div>
 

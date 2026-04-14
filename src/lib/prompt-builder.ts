@@ -13,7 +13,7 @@ interface PromptInputs {
   mode: GenerationMode;
   patternDensity: string;
   contrast: string;
-  baseShape?: 'circle' | 'square' | 'rectangle';
+  baseShape?: 'circle' | 'oval' | 'square' | 'rectangle';
 }
 
 // Core rules — shared, not duplicated
@@ -79,7 +79,7 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
 
 export function buildBasePrompt(inputs: PromptInputs): string {
   const shape = inputs.baseShape || 'circle';
-  const shapeWord = shape === 'circle' ? 'circular' : shape === 'square' ? 'square' : 'rectangular (wider than tall)';
+  const shapeWord = shape === 'circle' ? 'circular' : shape === 'oval' ? 'oval (elliptical)' : shape === 'square' ? 'square' : 'rectangular (wider than tall)';
   const parts: string[] = [CORE, getModeDesc(inputs.mode)];
 
   if (inputs.references || inputs.constraints) {

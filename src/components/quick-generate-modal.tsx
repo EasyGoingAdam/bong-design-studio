@@ -37,7 +37,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [complexity, setComplexity] = useState<number>(concept.specs.laserComplexity || 3);
   const [contrast, setContrast] = useState('high');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
-  const [baseShape, setBaseShape] = useState<'circle' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
+  const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
@@ -89,7 +89,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     try {
       // Generate both images — coil uses selected shape, base uses baseShape
       const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
-      const baseSizeMap: Record<string, string> = { circle: '1024x1024', square: '1024x1024', rectangle: '1536x1024' };
+      const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
       const baseSize = baseSizeMap[baseShape] || '1024x1024';
       const [coilRes, baseRes] = await Promise.all([
         fetch('/api/generate-image', {
@@ -268,6 +268,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
               <button type="button" onClick={() => setBaseShape('circle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'circle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
                 <span className="w-4 h-4 border border-current rounded-full" />
                 Circle
+              </button>
+              <button type="button" onClick={() => setBaseShape('oval')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'oval' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                <span className="w-6 h-4 border border-current rounded-full" />
+                Oval
               </button>
               <button type="button" onClick={() => setBaseShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
                 <span className="w-4 h-4 border border-current rounded-sm" />
