@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
 
-async function generateWithOpenAI(prompt: string, apiKey: string, size: string, quality: string = 'standard'): Promise<string> {
+async function generateWithOpenAI(prompt: string, apiKey: string, size: string, quality: string = 'auto'): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       filename = 'image',
       model = 'openai',
       geminiKey,
-      quality = 'standard',
+      quality = 'auto',
     } = await request.json();
 
     if (model === 'gemini' && !geminiKey) {
