@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       filename = 'image',
       model = 'openai',
       geminiKey,
-      quality = 'standard',
+      quality = 'medium',
     } = await request.json();
 
     if (model === 'gemini' && !geminiKey) {
