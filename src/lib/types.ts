@@ -116,6 +116,7 @@ export interface Concept {
   description: string;
   intendedAudience: string;
   manufacturingNotes: string;
+  marketingStory: string;
   coilImageUrl: string;
   baseImageUrl: string;
   combinedImageUrl: string;

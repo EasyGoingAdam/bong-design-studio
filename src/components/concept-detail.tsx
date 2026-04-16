@@ -12,7 +12,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
-  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval } = useAppStore();
+  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, openAIKey } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing'>('overview');
   const [commentText, setCommentText] = useState('');
@@ -62,6 +62,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [editCollection, setEditCollection] = useState('');
   const [editAudience, setEditAudience] = useState('');
   const [editMfgNotes, setEditMfgNotes] = useState('');
+  const [editMarketingStory, setEditMarketingStory] = useState('');
+  const [generatingStory, setGeneratingStory] = useState(false);
   const [editPriority, setEditPriority] = useState('');
   const [editLifecycle, setEditLifecycle] = useState('');
 
@@ -81,6 +83,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
     setEditCollection(concept.collection);
     setEditAudience(concept.intendedAudience);
     setEditMfgNotes(concept.manufacturingNotes);
+    setEditMarketingStory(concept.marketingStory || '');
     setEditPriority(concept.priority);
     setEditLifecycle(concept.lifecycleType);
     setEditing(true);
@@ -94,6 +97,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       collection: editCollection,
       intendedAudience: editAudience,
       manufacturingNotes: editMfgNotes,
+      marketingStory: editMarketingStory,
       priority: editPriority as typeof concept.priority,
       lifecycleType: editLifecycle as typeof concept.lifecycleType,
     });
@@ -337,6 +341,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   <label className="text-xs text-muted block mb-1">Manufacturing Notes</label>
                   <TextArea value={editMfgNotes} onChange={setEditMfgNotes} rows={2} />
                 </div>
+                <div>
+                  <label className="text-xs text-muted block mb-1">Marketing Story</label>
+                  <TextArea value={editMarketingStory} onChange={setEditMarketingStory} placeholder="A short, relatable origin story for this design..." rows={3} />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-muted block mb-1">Priority</label>
@@ -367,6 +375,48 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 <div>
                   <span className="text-xs text-muted">Manufacturing Notes</span>
                   <p className="text-sm mt-0.5">{concept.manufacturingNotes || 'None'}</p>
+                </div>
+                <div className="bg-accent/5 border border-accent/20 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-accent">Marketing Story</span>
+                    <button
+                      onClick={async () => {
+                        setGeneratingStory(true);
+                        try {
+                          const res = await fetch('/api/generate-story', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              conceptName: concept.name,
+                              description: concept.description,
+                              style: concept.specs.designStyleName,
+                              theme: concept.specs.designTheme,
+                              tags: concept.tags,
+                              audience: concept.intendedAudience,
+                              apiKey: openAIKey,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (data.story) {
+                            updateConcept(concept.id, { marketingStory: data.story });
+                            toast('Marketing story generated', 'success');
+                          } else {
+                            toast(data.error || 'Failed to generate story', 'error');
+                          }
+                        } catch { toast('Failed to generate story', 'error'); }
+                        finally { setGeneratingStory(false); }
+                      }}
+                      disabled={generatingStory}
+                      className="text-[10px] text-accent hover:text-accent-hover bg-accent/10 hover:bg-accent/20 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                    >
+                      {generatingStory ? 'Generating...' : concept.marketingStory ? '✦ Regenerate' : '✦ Generate Story'}
+                    </button>
+                  </div>
+                  {concept.marketingStory ? (
+                    <p className="text-sm italic">{concept.marketingStory}</p>
+                  ) : (
+                    <p className="text-sm text-muted italic">No marketing story yet. Click Generate to create one.</p>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs text-muted">Tags</span>

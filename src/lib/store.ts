@@ -203,6 +203,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       description: partial.description || '',
       intendedAudience: partial.intendedAudience || '',
       manufacturingNotes: partial.manufacturingNotes || '',
+      marketingStory: partial.marketingStory || '',
       coilImageUrl: partial.coilImageUrl || '',
       baseImageUrl: partial.baseImageUrl || '',
       combinedImageUrl: partial.combinedImageUrl || '',
