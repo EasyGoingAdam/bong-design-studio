@@ -91,13 +91,21 @@ function triggerDownload(blob: Blob, filename: string) {
 
 export async function invertImage(imageUrl: string): Promise<string> {
   const img = await loadImage(imageUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || img.width || 1024;
-  canvas.height = img.naturalHeight || img.height || 1024;
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
+  // Use the FULL original resolution — never downscale
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) throw new Error('Could not determine image dimensions');
 
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+
+  // Disable any smoothing to preserve pixel-perfect quality
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, w, h);
+
+  const imageData = ctx.getImageData(0, 0, w, h);
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     data[i] = 255 - data[i];       // R
@@ -107,7 +115,19 @@ export async function invertImage(imageUrl: string): Promise<string> {
   }
   ctx.putImageData(imageData, 0, 0);
 
-  return canvas.toDataURL('image/png');
+  // Use toBlob for maximum quality PNG output (toDataURL can compress)
+  return new Promise<string>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) { reject(new Error('Failed to create blob')); return; }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read blob'));
+        reader.readAsDataURL(blob);
+      },
+      'image/png'  // Lossless PNG format
+    );
+  });
 }
 
 export function ImageDownloadButtons({ imageUrl, filename }: ImageDownloadProps) {

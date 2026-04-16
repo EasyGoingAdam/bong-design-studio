@@ -93,6 +93,7 @@ export function getOpenAIRequestBody(params: ImageGenParams) {
     n: 1,
     size: params.size,
     quality: params.quality,
+    output_format: 'b64_json',
   };
 }
 
