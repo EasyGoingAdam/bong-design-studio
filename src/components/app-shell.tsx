@@ -12,9 +12,10 @@ import { AIInspiration } from './ai-inspiration';
 import { ConceptDetail } from './concept-detail';
 import { SettingsModal } from './settings-modal';
 import { LoginPage } from './login-page';
+import { ArchiveBrowser } from './archive-browser';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'detail';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '◫' },
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'specs', label: 'Specs DB', icon: '⚙' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
+  { id: 'archive', label: 'Archive', icon: '📦' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -164,6 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {initialized && activeTab === 'specs' && <SpecsDatabase />}
         {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
         {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
         {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
         )}

@@ -41,7 +41,12 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
   );
 
   const filtered = useMemo(() => {
-    let result = concepts.filter((c) => c.status !== 'archived');
+    // Show archived only when explicitly filtered, otherwise hide them
+    let result = statusFilter === 'archived'
+      ? concepts.filter((c) => c.status === 'archived')
+      : statusFilter
+        ? concepts.filter((c) => c.status === statusFilter)
+        : concepts.filter((c) => c.status !== 'archived');
 
     if (debouncedSearch) {
       const s = debouncedSearch.toLowerCase();
@@ -51,7 +56,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
         c.tags.some((t) => t.toLowerCase().includes(s))
       );
     }
-    if (statusFilter) result = result.filter((c) => c.status === statusFilter);
+    // statusFilter already applied above
     if (collectionFilter) result = result.filter((c) => c.collection === collectionFilter);
     if (tagFilter) result = result.filter((c) => c.tags.includes(tagFilter));
     if (designerFilter) result = result.filter((c) => c.designer === designerFilter);
@@ -102,6 +107,7 @@ export function ConceptsLibrary({ onOpenConcept }: { onOpenConcept: (id: string)
             { value: 'approved', label: 'Approved' },
             { value: 'ready_for_manufacturing', label: 'Ready for Mfg' },
             { value: 'manufactured', label: 'Manufactured' },
+            { value: 'archived', label: 'Archived' },
           ]}
         />
         <Select
