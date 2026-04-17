@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/lib/store';
 import { TextArea, Tag } from './ui';
 import { useToast } from './toast';
 import { CoilBaseRelationship } from '@/lib/types';
+import { formatDate } from '@/lib/utils';
 
 interface BrainstormResult {
+  id?: string; // db id from archive
   name: string;
   collection: string;
   description: string;
@@ -23,29 +25,124 @@ interface BrainstormResult {
   baseNotes: string;
 }
 
-const QUICK_PICKS = [
+interface ArchivedIdea extends BrainstormResult {
+  id: string;
+  sourcePrompt: string;
+  usedAt: string | null;
+  conceptId: string | null;
+  createdAt: string;
+}
+
+// Large pool of quick-pick prompts — randomly surface 12 per visit
+const QUICK_PICK_POOL: { label: string; prompt: string }[] = [
   { label: 'Geometric', prompt: 'clean geometric patterns, mathematical precision, sacred geometry' },
+  { label: 'Sacred Geometry', prompt: 'flower of life, metatron cube, mandalas, spiritual mathematics' },
   { label: 'Nature', prompt: 'organic nature-inspired designs, botanical, leaves, flowers' },
+  { label: 'Forest', prompt: 'deep forest mystery, trees, woodland, pine needles, ferns' },
+  { label: 'Ocean', prompt: 'ocean waves, marine life, coral reefs, deep sea creatures' },
+  { label: 'Mountain', prompt: 'mountain peaks, ridgelines, alpine wilderness, geological strata' },
+  { label: 'Desert', prompt: 'desert dunes, cacti, southwestern patterns, arid landscape' },
+  { label: 'Celestial', prompt: 'stars, constellations, planets, cosmic phenomena' },
+  { label: 'Lunar', prompt: 'moon phases, lunar eclipses, night sky, crescent motifs' },
   { label: 'Dark / Edgy', prompt: 'dark edgy aesthetic, skulls, gothic, tattoo-inspired' },
+  { label: 'Gothic', prompt: 'gothic cathedral architecture, pointed arches, stained glass' },
+  { label: 'Occult', prompt: 'occult symbols, alchemy, tarot, mystical iconography' },
   { label: 'Luxury', prompt: 'ornate luxury premium baroque filigree gold-leaf inspired' },
+  { label: 'Baroque', prompt: 'baroque ornamentation, curving scrollwork, dramatic flourishes' },
+  { label: 'Art Deco', prompt: 'Art Deco geometry, sunbursts, stepped forms, 1920s glamour' },
+  { label: 'Victorian', prompt: 'Victorian ornamentation, intricate damask, antique elegance' },
   { label: 'Patriotic', prompt: 'American patriotic, eagles, flags, stars and stripes' },
+  { label: 'Military', prompt: 'military heraldry, stenciled insignia, tactical aesthetic' },
   { label: 'Abstract', prompt: 'abstract flowing forms, smoke, vapor, organic movement' },
+  { label: 'Surreal', prompt: 'surrealist imagery, dreamscapes, impossible compositions' },
   { label: 'Psychedelic', prompt: 'psychedelic trippy patterns, optical illusions, mind-bending' },
   { label: 'Japanese', prompt: 'Japanese-inspired, koi, waves, cherry blossom, ukiyo-e' },
+  { label: 'Japanese Mon', prompt: 'Japanese family crest motifs, kamon, traditional symbols' },
+  { label: 'Chinese', prompt: 'Chinese dragons, cloud patterns, imperial motifs' },
   { label: 'Tribal', prompt: 'tribal patterns, Polynesian, Maori, bold black work' },
+  { label: 'Polynesian', prompt: 'Polynesian tribal patterns, waves, tiki, ocean voyaging' },
+  { label: 'African', prompt: 'African tribal patterns, wildlife, savanna silhouettes' },
+  { label: 'Norse', prompt: 'Norse runes, valknut, Viking knotwork, mythology' },
+  { label: 'Celtic', prompt: 'Celtic knotwork, triskeles, interlaced band patterns' },
   { label: 'Minimalist', prompt: 'ultra minimalist clean lines, negative space, simple elegance' },
+  { label: 'Brutalist', prompt: 'brutalist architecture, concrete geometry, stark forms' },
+  { label: 'Steampunk', prompt: 'steampunk gears, Victorian machinery, clockwork' },
+  { label: 'Cyberpunk', prompt: 'cyberpunk circuitry, neon grids, futuristic urban decay' },
   { label: 'Seasonal', prompt: 'seasonal holiday themed, could be any holiday or season' },
-  { label: 'Surprise Me', prompt: '' },
+  { label: 'Winter', prompt: 'winter snowflakes, frost patterns, ice crystals' },
+  { label: 'Summer', prompt: 'summer tropical, palm trees, sun rays, beach vibes' },
+  { label: 'Mythology', prompt: 'Greek and Roman mythology, gods, legendary creatures' },
+  { label: 'Egyptian', prompt: 'Egyptian hieroglyphs, pyramids, pharaohs, ankh symbols' },
+  { label: 'Serpents', prompt: 'snakes, serpents, scales, coiled reptiles' },
+  { label: 'Birds', prompt: 'birds in flight, feathers, phoenix, eagles, ravens' },
+  { label: 'Marine Life', prompt: 'jellyfish, octopus, whales, deep ocean creatures' },
+  { label: 'Mandala', prompt: 'intricate mandalas, meditation circles, radial symmetry' },
+  { label: 'Alchemy', prompt: 'alchemical symbols, elements, magical transformation' },
+  { label: 'Arabesque', prompt: 'Middle Eastern arabesque, interlacing vines, Islamic geometry' },
+  { label: 'Mexican Folk', prompt: 'Mexican folk art, sugar skulls, papel picado, Day of the Dead' },
+  { label: 'Indian Mandala', prompt: 'Hindu mandalas, henna patterns, paisley, sacred art' },
+  { label: 'Space', prompt: 'space exploration, galaxies, nebulae, cosmic dust' },
+  { label: 'Fantasy', prompt: 'fantasy creatures, dragons, castles, mythical realms' },
+  { label: 'Cannabis Culture', prompt: 'cannabis leaf patterns, smoke culture, bohemian' },
+  { label: 'Smoke & Fire', prompt: 'swirling smoke, flickering flames, ember patterns' },
+  { label: 'Architectural', prompt: 'architectural blueprints, city skylines, building facades' },
+  { label: 'Graffiti', prompt: 'street art, graffiti-inspired, urban wildstyle' },
+  { label: 'Renaissance', prompt: 'Renaissance art, Da Vinci sketches, anatomical studies' },
 ];
+
+// Hooks for shuffling: pick N random items from array, stable per-render
+function shuffleAndPick<T>(pool: T[], n: number, seed: number): T[] {
+  // Deterministic shuffle based on seed so same visit = same picks
+  const arr = [...pool];
+  let s = seed;
+  for (let i = arr.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
+}
+
+type View = 'brainstorm' | 'archive';
 
 export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { addConcept, openAIKey } = useAppStore();
   const { toast } = useToast();
+
+  const [view, setView] = useState<View>('brainstorm');
   const [userPrompt, setUserPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState<BrainstormResult[]>([]);
   const [error, setError] = useState('');
-  const [count, setCount] = useState(3);
+  const [count, setCount] = useState(5);
+  const [pickSeed, setPickSeed] = useState(() => Math.floor(Math.random() * 1e9));
+
+  // Archive state
+  const [archiveIdeas, setArchiveIdeas] = useState<ArchivedIdea[]>([]);
+  const [archiveFilter, setArchiveFilter] = useState<'all' | 'unused' | 'used'>('unused');
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
+  // Randomly pick 12 quick-picks per seed change
+  const quickPicks = useMemo(() => shuffleAndPick(QUICK_PICK_POOL, 12, pickSeed), [pickSeed]);
+
+  // Load archive on mount AND when switching to archive view
+  useEffect(() => {
+    if (view === 'archive') loadArchive();
+  }, [view]);
+
+  const loadArchive = async () => {
+    setLoadingArchive(true);
+    try {
+      const res = await fetch('/api/brainstorm-ideas');
+      const data = await res.json();
+      if (Array.isArray(data)) setArchiveIdeas(data);
+    } catch {
+      toast('Failed to load archive', 'error');
+    } finally {
+      setLoadingArchive(false);
+    }
+  };
 
   const handleBrainstorm = async (overridePrompt?: string) => {
     if (!openAIKey) {
@@ -73,6 +170,13 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
 
       if (Array.isArray(data.concepts)) {
         setResults(data.concepts);
+        if (data.concepts.length === 0) {
+          toast('No new ideas — all generated ideas were already in your archive. Try a different prompt.', 'info');
+        } else if (data.filteredOut > 0) {
+          toast(`${data.concepts.length} new ideas (${data.filteredOut} filtered as duplicates)`, 'success');
+        } else {
+          toast(`${data.concepts.length} fresh ideas generated`, 'success');
+        }
       } else {
         throw new Error('Unexpected response format');
       }
@@ -83,89 +187,332 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
     }
   };
 
+  const buildConceptFromIdea = (result: BrainstormResult) => ({
+    name: result.name,
+    collection: result.collection || '',
+    description: result.description,
+    tags: result.tags || [],
+    intendedAudience: result.audience || '',
+    priority: (result.priority as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
+    lifecycleType: (result.lifecycle as 'seasonal' | 'evergreen' | 'limited_edition' | 'custom') || 'evergreen',
+    specs: {
+      designStyleName: result.style || '',
+      designTheme: result.theme || '',
+      patternDensity: (result.density as 'low' | 'medium' | 'high' | 'very_high') || 'medium',
+      laserComplexity: (result.complexity as 1 | 2 | 3 | 4 | 5) || 3,
+      estimatedEtchingTime: '',
+      surfaceCoverage: 50,
+      lineThickness: '',
+      bwContrastGuidance: '',
+      symmetryRequirement: 'none' as const,
+      coordinationMode: (result.coordination as CoilBaseRelationship) || 'thematic',
+      productionFeasibility: 3 as const,
+      riskNotes: '',
+    },
+    coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
+    baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },
+  });
+
   const handleUseThis = async (result: BrainstormResult, index: number) => {
     try {
-      const concept = await addConcept({
-        name: result.name,
-        collection: result.collection || '',
-        description: result.description,
-        tags: result.tags || [],
-        intendedAudience: result.audience || '',
-        priority: (result.priority as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
-        lifecycleType: (result.lifecycle as 'seasonal' | 'evergreen' | 'limited_edition' | 'custom') || 'evergreen',
-        specs: {
-          designStyleName: result.style || '',
-          designTheme: result.theme || '',
-          patternDensity: (result.density as 'low' | 'medium' | 'high' | 'very_high') || 'medium',
-          laserComplexity: (result.complexity as 1 | 2 | 3 | 4 | 5) || 3,
-          estimatedEtchingTime: '',
-          surfaceCoverage: 50,
-          lineThickness: '',
-          bwContrastGuidance: '',
-          symmetryRequirement: 'none',
-          coordinationMode: (result.coordination as CoilBaseRelationship) || 'thematic',
-          productionFeasibility: 3,
-          riskNotes: '',
-          baseShape: 'circle',
-        },
-        coilSpecs: { dimensions: '45mm x 120mm wrap', printableArea: '42mm x 115mm', notes: result.coilNotes || '' },
-        baseSpecs: { dimensions: '65mm diameter circle', printableArea: '60mm diameter', notes: result.baseNotes || '' },
-      });
-      // Remove from brainstorm list — stay on page so user can pick more
+      const concept = await addConcept(buildConceptFromIdea(result));
+      // Mark idea as used in archive (if it has a db id)
+      if (result.id) {
+        fetch(`/api/brainstorm-ideas/${result.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conceptId: concept.id }),
+        }).catch(console.error);
+      }
       setResults((prev) => prev.filter((_, i) => i !== index));
       toast(`"${result.name}" added to Concepts`, 'success');
-    } catch (err) {
-      console.error('Failed to create concept:', err);
+    } catch {
       setError('Failed to create concept. Please try again.');
     }
   };
 
+  const handleUseArchived = async (idea: ArchivedIdea) => {
+    try {
+      const concept = await addConcept(buildConceptFromIdea(idea));
+      await fetch(`/api/brainstorm-ideas/${idea.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conceptId: concept.id }),
+      });
+      setArchiveIdeas((prev) =>
+        prev.map((i) => (i.id === idea.id ? { ...i, usedAt: new Date().toISOString(), conceptId: concept.id } : i))
+      );
+      toast(`"${idea.name}" added to Concepts`, 'success');
+    } catch {
+      toast('Failed to create concept', 'error');
+    }
+  };
+
+  const handleDeleteArchived = async (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}" from archive? This cannot be undone.`)) return;
+    try {
+      await fetch(`/api/brainstorm-ideas/${id}`, { method: 'DELETE' });
+      setArchiveIdeas((prev) => prev.filter((i) => i.id !== id));
+      toast('Idea removed from archive', 'success');
+    } catch {
+      toast('Failed to delete idea', 'error');
+    }
+  };
+
+  const filteredArchive = useMemo(() => {
+    let list = archiveIdeas;
+    if (archiveFilter === 'used') list = list.filter((i) => i.usedAt);
+    if (archiveFilter === 'unused') list = list.filter((i) => !i.usedAt);
+    if (archiveSearch.trim()) {
+      const q = archiveSearch.toLowerCase();
+      list = list.filter((i) =>
+        i.name.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q) ||
+        i.style.toLowerCase().includes(q) ||
+        (i.tags || []).some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [archiveIdeas, archiveFilter, archiveSearch]);
+
+  // ========== ARCHIVE VIEW ==========
+  if (view === 'archive') {
+    const usedCount = archiveIdeas.filter((i) => i.usedAt).length;
+    const unusedCount = archiveIdeas.length - usedCount;
+
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold">Archive Ideas</h2>
+            <p className="text-sm text-muted">Every idea ever brainstormed — revisit, reuse, or remove.</p>
+          </div>
+          <button
+            onClick={() => setView('brainstorm')}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+          >
+            ← Back to Brainstorm
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-0.5">
+            <button
+              onClick={() => setArchiveFilter('unused')}
+              className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'unused' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+            >
+              Unused ({unusedCount})
+            </button>
+            <button
+              onClick={() => setArchiveFilter('used')}
+              className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'used' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+            >
+              Used ({usedCount})
+            </button>
+            <button
+              onClick={() => setArchiveFilter('all')}
+              className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'all' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+            >
+              All ({archiveIdeas.length})
+            </button>
+          </div>
+          <input
+            type="text"
+            value={archiveSearch}
+            onChange={(e) => setArchiveSearch(e.target.value)}
+            placeholder="Search ideas..."
+            className="flex-1 min-w-[200px] bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+          />
+          <button
+            onClick={loadArchive}
+            className="px-3 py-1.5 text-xs bg-background border border-border rounded-lg hover:bg-surface-hover transition-colors text-muted"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+
+        {loadingArchive ? (
+          <div className="text-center py-16">
+            <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
+        ) : filteredArchive.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="text-5xl mb-4 opacity-40">📦</div>
+            <h3 className="text-lg font-medium mb-1">No ideas {archiveFilter !== 'all' ? archiveFilter : 'yet'}</h3>
+            <p className="text-sm text-muted">
+              {archiveIdeas.length === 0
+                ? 'Generate some ideas on the Brainstorm page to build your archive.'
+                : 'Try a different filter or search.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredArchive.map((idea) => (
+              <div
+                key={idea.id}
+                className={`bg-surface border rounded-xl p-4 transition-colors ${
+                  idea.usedAt ? 'border-border opacity-70' : 'border-border hover:border-border-light'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-base font-semibold">{idea.name}</h4>
+                      {idea.usedAt && (
+                        <span className="text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                          ✓ Used
+                        </span>
+                      )}
+                      {idea.collection && (
+                        <span className="text-xs text-muted bg-border/50 px-2 py-0.5 rounded">{idea.collection}</span>
+                      )}
+                      {idea.style && (
+                        <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded">{idea.style}</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted mt-0.5">
+                      Created {formatDate(idea.createdAt)}
+                      {idea.usedAt && ` · Used ${formatDate(idea.usedAt)}`}
+                      {idea.sourcePrompt && ` · From: "${idea.sourcePrompt}"`}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    {idea.usedAt && idea.conceptId ? (
+                      <button
+                        onClick={() => onOpenConcept(idea.conceptId!)}
+                        className="px-3 py-1.5 bg-background border border-border text-sm rounded-lg hover:bg-surface-hover transition-colors"
+                      >
+                        Open Concept →
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUseArchived(idea)}
+                        className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+                      >
+                        Use This →
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteArchived(idea.id, idea.name)}
+                      className="px-2 py-1.5 text-xs text-red-500 hover:text-red-700 border border-transparent hover:border-red-200 rounded-lg transition-colors"
+                      title="Delete from archive"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-sm mt-2">{idea.description}</p>
+
+                {idea.theme && <p className="text-xs text-muted mt-1">Theme: {idea.theme}</p>}
+
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  {idea.coilNotes && (
+                    <div className="bg-background border border-border rounded-lg p-2.5">
+                      <span className="text-[10px] text-muted uppercase tracking-wide">Coil</span>
+                      <p className="text-xs mt-0.5">{idea.coilNotes}</p>
+                    </div>
+                  )}
+                  {idea.baseNotes && (
+                    <div className="bg-background border border-border rounded-lg p-2.5">
+                      <span className="text-[10px] text-muted uppercase tracking-wide">Base</span>
+                      <p className="text-xs mt-0.5">{idea.baseNotes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {idea.tags && idea.tags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    {idea.tags.map((t) => <Tag key={t} label={t} />)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ========== BRAINSTORM VIEW ==========
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">AI Brainstorm</h2>
-        <p className="text-sm text-muted">Can't decide what to make? Let AI suggest design concepts for you.</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold">AI Brainstorm</h2>
+          <p className="text-sm text-muted">Fresh ideas every time. Used ideas archive automatically — never repeats.</p>
+        </div>
+        <button
+          onClick={() => setView('archive')}
+          className="px-4 py-2 bg-background border border-border text-sm rounded-lg hover:bg-surface-hover transition-colors flex items-center gap-2"
+        >
+          📦 Archive Ideas
+          {archiveIdeas.length > 0 && (
+            <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">
+              {archiveIdeas.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Input Section */}
       <div className="bg-surface border border-border rounded-xl p-5 mb-6">
-        <label className="block text-sm font-medium mb-2">Describe a vibe, theme, or idea (or leave blank for surprise)</label>
+        <label className="block text-sm font-medium mb-2">Describe a vibe, theme, or idea (or leave blank)</label>
         <TextArea
           value={userPrompt}
           onChange={setUserPrompt}
-          placeholder='e.g., "something nature-inspired but modern and edgy" or "a limited drop for Halloween" or just hit Surprise Me below...'
+          placeholder='e.g., "something nature-inspired but modern and edgy" or "a limited drop for Halloween"...'
           rows={3}
         />
 
         {/* Quick Picks */}
-        <div className="mt-3">
-          <span className="text-xs text-muted block mb-2">Quick picks — click to brainstorm instantly:</span>
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted">
+              Quick picks — click to brainstorm instantly · {QUICK_PICK_POOL.length} total themes, showing 12
+            </span>
+            <button
+              onClick={() => setPickSeed(Math.floor(Math.random() * 1e9))}
+              disabled={generating}
+              className="text-xs text-accent hover:text-accent-hover disabled:opacity-50 flex items-center gap-1"
+              title="Shuffle quick picks"
+            >
+              ↻ Shuffle
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
-            {QUICK_PICKS.map((pick) => (
+            {quickPicks.map((pick) => (
               <button
                 key={pick.label}
                 onClick={() => {
-                  if (pick.prompt) setUserPrompt(pick.prompt);
+                  setUserPrompt(pick.prompt);
                   handleBrainstorm(pick.prompt);
                 }}
                 disabled={generating}
-                className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                  pick.label === 'Surprise Me'
-                    ? 'bg-accent/20 border-accent/40 text-accent hover:bg-accent/30'
-                    : 'bg-background border-border text-muted hover:text-foreground hover:border-border-light'
-                } disabled:opacity-50`}
+                className="px-3 py-1.5 text-xs rounded-lg border bg-background border-border text-muted hover:text-foreground hover:border-border-light transition-colors disabled:opacity-50"
               >
-                {pick.label === 'Surprise Me' ? '✦ ' : ''}{pick.label}
+                {pick.label}
               </button>
             ))}
+            <button
+              onClick={() => {
+                setUserPrompt('');
+                handleBrainstorm('');
+              }}
+              disabled={generating}
+              className="px-3 py-1.5 text-xs rounded-lg border bg-accent/20 border-accent/40 text-accent hover:bg-accent/30 transition-colors disabled:opacity-50"
+            >
+              ✦ Surprise Me
+            </button>
           </div>
         </div>
 
         {/* Count selector + Generate */}
-        <div className="flex items-center gap-3 mt-4">
+        <div className="flex items-center gap-3 mt-5 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">Ideas:</span>
-            {[1, 3, 5].map((n) => (
+            {[1, 3, 5, 7, 10].map((n) => (
               <button
                 key={n}
                 onClick={() => setCount(n)}
@@ -180,15 +527,15 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
           <button
             onClick={() => handleBrainstorm()}
             disabled={generating}
-            className="flex-1 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="flex-1 min-w-[200px] py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {generating ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Brainstorming...
+                Brainstorming {count} {count === 1 ? 'idea' : 'ideas'}...
               </span>
             ) : (
-              '✦ Brainstorm Design Concepts'
+              `✦ Brainstorm ${count} ${count === 1 ? 'Idea' : 'Ideas'}`
             )}
           </button>
         </div>
@@ -204,7 +551,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
       {results.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">{results.length} Concept{results.length !== 1 ? 's' : ''} Generated</h3>
+            <h3 className="text-lg font-semibold">{results.length} Fresh {results.length === 1 ? 'Concept' : 'Concepts'}</h3>
             <button
               onClick={() => handleBrainstorm()}
               disabled={generating}
@@ -215,17 +562,19 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
           </div>
 
           {results.map((result, i) => (
-            <div key={i} className="bg-surface border border-border rounded-xl p-5 hover:border-border-light transition-colors">
+            <div key={result.id || i} className="bg-surface border border-border rounded-xl p-5 hover:border-border-light transition-colors">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <h4 className="text-lg font-semibold">{result.name}</h4>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {result.collection && (
                       <span className="text-xs text-muted bg-border/50 px-2 py-0.5 rounded">{result.collection}</span>
                     )}
-                    <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded">{result.style}</span>
+                    {result.style && (
+                      <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded">{result.style}</span>
+                    )}
                     {result.lifecycle && result.lifecycle !== 'evergreen' && (
-                      <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded capitalize">{result.lifecycle.replace('_', ' ')}</span>
+                      <span className="text-xs text-orange-700 bg-orange-100 px-2 py-0.5 rounded capitalize">{result.lifecycle.replace('_', ' ')}</span>
                     )}
                   </div>
                 </div>
@@ -239,11 +588,8 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
 
               <p className="text-sm mt-3">{result.description}</p>
 
-              {result.theme && (
-                <p className="text-xs text-muted mt-2">Theme: {result.theme}</p>
-              )}
+              {result.theme && <p className="text-xs text-muted mt-2">Theme: {result.theme}</p>}
 
-              {/* Coil + Base notes */}
               <div className="grid grid-cols-2 gap-3 mt-3">
                 {result.coilNotes && (
                   <div className="bg-background border border-border rounded-lg p-2.5">
@@ -259,7 +605,6 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
                 )}
               </div>
 
-              {/* Tags + Specs */}
               <div className="flex flex-wrap items-center gap-2 mt-3">
                 {result.tags?.map((t) => <Tag key={t} label={t} />)}
               </div>
@@ -278,10 +623,10 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
       {!generating && results.length === 0 && !error && (
         <div className="text-center py-16">
           <div className="text-5xl mb-4 opacity-40">✦</div>
-          <h3 className="text-lg font-medium mb-1">No ideas yet</h3>
+          <h3 className="text-lg font-medium mb-1">Ready when you are</h3>
           <p className="text-sm text-muted max-w-md mx-auto">
-            Type a vibe or click one of the quick picks above to get AI-generated design concepts.
-            Each concept comes with a name, description, specs, and notes for both coil and base.
+            Every idea ever generated is saved to your archive — no repeats, ever.
+            Pick a category above or type your own vibe. Need up to 10 ideas at once.
           </p>
         </div>
       )}
