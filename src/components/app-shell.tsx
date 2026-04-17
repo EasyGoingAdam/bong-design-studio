@@ -17,18 +17,22 @@ import { ToastProvider } from './toast';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'detail';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◫' },
-  { id: 'concepts', label: 'Concepts', icon: '▦' },
+const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
-  { id: 'specs', label: 'Specs DB', icon: '⚙' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
+  { id: 'specs', label: 'Specs DB', icon: '⚙' },
   { id: 'archive', label: 'Archive', icon: '📦' },
 ];
 
+const SECONDARY_TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: '◫' },
+  { id: 'concepts', label: 'Concepts', icon: '▦' },
+];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>('workflow');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
@@ -73,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const goBack = () => {
     setSelectedConceptId(null);
-    setActiveTab('concepts');
+    setActiveTab('workflow');
   };
 
   // Show nothing while checking auth
@@ -117,12 +121,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Tab Navigation */}
       <nav className="border-b border-border bg-surface px-6 shrink-0" role="navigation" aria-label="Main navigation">
-        <div className="flex gap-1">
-          {TABS.map((tab) => (
+        <div className="flex gap-1 items-center">
+          {PRIMARY_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
+                setShowMoreMenu(false);
                 if (tab.id !== 'detail') setSelectedConceptId(null);
               }}
               className={`px-4 py-3 text-sm font-medium transition-colors relative ${
@@ -147,6 +152,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full" />
             </button>
           )}
+
+          {/* More dropdown (pushed to the right) */}
+          <div className="ml-auto relative">
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              onBlur={() => setTimeout(() => setShowMoreMenu(false), 150)}
+              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                SECONDARY_TABS.some((t) => t.id === activeTab)
+                  ? 'text-accent'
+                  : 'text-muted hover:text-foreground'
+              }`}
+              aria-haspopup="menu"
+              aria-expanded={showMoreMenu}
+            >
+              <span className="mr-1.5">⋯</span>
+              More
+              {SECONDARY_TABS.some((t) => t.id === activeTab) && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full" />
+              )}
+            </button>
+            {showMoreMenu && (
+              <div
+                className="absolute right-0 top-full mt-0 bg-surface border border-border rounded-b-lg shadow-xl z-30 min-w-[180px] py-1"
+                role="menu"
+              >
+                {SECONDARY_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setActiveTab(tab.id);
+                      setShowMoreMenu(false);
+                      setSelectedConceptId(null);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-2 ${
+                      activeTab === tab.id
+                        ? 'text-accent bg-accent/5'
+                        : 'text-muted hover:text-foreground hover:bg-surface-hover'
+                    }`}
+                    role="menuitem"
+                  >
+                    <span>{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
