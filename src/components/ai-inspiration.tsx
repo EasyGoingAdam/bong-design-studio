@@ -6,6 +6,7 @@ import { TextArea, Tag } from './ui';
 import { useToast } from './toast';
 import { CoilBaseRelationship } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
+import { QUICK_PICK_POOL } from '@/lib/quick-picks';
 
 interface BrainstormResult {
   id?: string; // db id from archive
@@ -32,63 +33,6 @@ interface ArchivedIdea extends BrainstormResult {
   conceptId: string | null;
   createdAt: string;
 }
-
-// Large pool of quick-pick prompts — randomly surface 12 per visit
-const QUICK_PICK_POOL: { label: string; prompt: string }[] = [
-  { label: 'Geometric', prompt: 'clean geometric patterns, mathematical precision, sacred geometry' },
-  { label: 'Sacred Geometry', prompt: 'flower of life, metatron cube, mandalas, spiritual mathematics' },
-  { label: 'Nature', prompt: 'organic nature-inspired designs, botanical, leaves, flowers' },
-  { label: 'Forest', prompt: 'deep forest mystery, trees, woodland, pine needles, ferns' },
-  { label: 'Ocean', prompt: 'ocean waves, marine life, coral reefs, deep sea creatures' },
-  { label: 'Mountain', prompt: 'mountain peaks, ridgelines, alpine wilderness, geological strata' },
-  { label: 'Desert', prompt: 'desert dunes, cacti, southwestern patterns, arid landscape' },
-  { label: 'Celestial', prompt: 'stars, constellations, planets, cosmic phenomena' },
-  { label: 'Lunar', prompt: 'moon phases, lunar eclipses, night sky, crescent motifs' },
-  { label: 'Dark / Edgy', prompt: 'dark edgy aesthetic, skulls, gothic, tattoo-inspired' },
-  { label: 'Gothic', prompt: 'gothic cathedral architecture, pointed arches, stained glass' },
-  { label: 'Occult', prompt: 'occult symbols, alchemy, tarot, mystical iconography' },
-  { label: 'Luxury', prompt: 'ornate luxury premium baroque filigree gold-leaf inspired' },
-  { label: 'Baroque', prompt: 'baroque ornamentation, curving scrollwork, dramatic flourishes' },
-  { label: 'Art Deco', prompt: 'Art Deco geometry, sunbursts, stepped forms, 1920s glamour' },
-  { label: 'Victorian', prompt: 'Victorian ornamentation, intricate damask, antique elegance' },
-  { label: 'Patriotic', prompt: 'American patriotic, eagles, flags, stars and stripes' },
-  { label: 'Military', prompt: 'military heraldry, stenciled insignia, tactical aesthetic' },
-  { label: 'Abstract', prompt: 'abstract flowing forms, smoke, vapor, organic movement' },
-  { label: 'Surreal', prompt: 'surrealist imagery, dreamscapes, impossible compositions' },
-  { label: 'Psychedelic', prompt: 'psychedelic trippy patterns, optical illusions, mind-bending' },
-  { label: 'Japanese', prompt: 'Japanese-inspired, koi, waves, cherry blossom, ukiyo-e' },
-  { label: 'Japanese Mon', prompt: 'Japanese family crest motifs, kamon, traditional symbols' },
-  { label: 'Chinese', prompt: 'Chinese dragons, cloud patterns, imperial motifs' },
-  { label: 'Tribal', prompt: 'tribal patterns, Polynesian, Maori, bold black work' },
-  { label: 'Polynesian', prompt: 'Polynesian tribal patterns, waves, tiki, ocean voyaging' },
-  { label: 'African', prompt: 'African tribal patterns, wildlife, savanna silhouettes' },
-  { label: 'Norse', prompt: 'Norse runes, valknut, Viking knotwork, mythology' },
-  { label: 'Celtic', prompt: 'Celtic knotwork, triskeles, interlaced band patterns' },
-  { label: 'Minimalist', prompt: 'ultra minimalist clean lines, negative space, simple elegance' },
-  { label: 'Brutalist', prompt: 'brutalist architecture, concrete geometry, stark forms' },
-  { label: 'Steampunk', prompt: 'steampunk gears, Victorian machinery, clockwork' },
-  { label: 'Cyberpunk', prompt: 'cyberpunk circuitry, neon grids, futuristic urban decay' },
-  { label: 'Seasonal', prompt: 'seasonal holiday themed, could be any holiday or season' },
-  { label: 'Winter', prompt: 'winter snowflakes, frost patterns, ice crystals' },
-  { label: 'Summer', prompt: 'summer tropical, palm trees, sun rays, beach vibes' },
-  { label: 'Mythology', prompt: 'Greek and Roman mythology, gods, legendary creatures' },
-  { label: 'Egyptian', prompt: 'Egyptian hieroglyphs, pyramids, pharaohs, ankh symbols' },
-  { label: 'Serpents', prompt: 'snakes, serpents, scales, coiled reptiles' },
-  { label: 'Birds', prompt: 'birds in flight, feathers, phoenix, eagles, ravens' },
-  { label: 'Marine Life', prompt: 'jellyfish, octopus, whales, deep ocean creatures' },
-  { label: 'Mandala', prompt: 'intricate mandalas, meditation circles, radial symmetry' },
-  { label: 'Alchemy', prompt: 'alchemical symbols, elements, magical transformation' },
-  { label: 'Arabesque', prompt: 'Middle Eastern arabesque, interlacing vines, Islamic geometry' },
-  { label: 'Mexican Folk', prompt: 'Mexican folk art, sugar skulls, papel picado, Day of the Dead' },
-  { label: 'Indian Mandala', prompt: 'Hindu mandalas, henna patterns, paisley, sacred art' },
-  { label: 'Space', prompt: 'space exploration, galaxies, nebulae, cosmic dust' },
-  { label: 'Fantasy', prompt: 'fantasy creatures, dragons, castles, mythical realms' },
-  { label: 'Cannabis Culture', prompt: 'cannabis leaf patterns, smoke culture, bohemian' },
-  { label: 'Smoke & Fire', prompt: 'swirling smoke, flickering flames, ember patterns' },
-  { label: 'Architectural', prompt: 'architectural blueprints, city skylines, building facades' },
-  { label: 'Graffiti', prompt: 'street art, graffiti-inspired, urban wildstyle' },
-  { label: 'Renaissance', prompt: 'Renaissance art, Da Vinci sketches, anatomical studies' },
-];
 
 // Hooks for shuffling: pick N random items from array, stable per-render
 function shuffleAndPick<T>(pool: T[], n: number, seed: number): T[] {
@@ -448,11 +392,6 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
           className="px-4 py-2 bg-background border border-border text-sm rounded-lg hover:bg-surface-hover transition-colors flex items-center gap-2"
         >
           📦 Archive Ideas
-          {archiveIdeas.length > 0 && (
-            <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">
-              {archiveIdeas.length}
-            </span>
-          )}
         </button>
       </div>
 
@@ -470,7 +409,7 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-muted">
-              Quick picks — click to brainstorm instantly · {QUICK_PICK_POOL.length} total themes, showing 12
+              Quick picks — click to brainstorm instantly
             </span>
             <button
               onClick={() => setPickSeed(Math.floor(Math.random() * 1e9))}
