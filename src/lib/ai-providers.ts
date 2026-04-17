@@ -19,15 +19,30 @@ export interface ImageGenParams {
   filename: string;
 }
 
-// Valid parameters per provider
+/**
+ * VALID PARAMETERS PER PROVIDER
+ *
+ * gpt-image-1 API accepts ONLY these params in the request body:
+ *   model, prompt, n, size, quality
+ *   - quality: 'low' | 'medium' | 'high' | 'auto'
+ *   - size: '1024x1024' | '1536x1024' | '1024x1536'
+ *   - Returns base64 by default (b64_json in response)
+ *   - Do NOT pass: output_format, response_format, style, or any other param
+ *
+ * Gemini generateContent accepts:
+ *   contents, generationConfig (with responseModalities, imageConfig.aspectRatio)
+ */
 const PROVIDER_CONFIG = {
   openai: {
     model: 'gpt-image-1',
     endpoint: 'https://api.openai.com/v1/images/generations',
+    // EXHAUSTIVE list of valid values — anything else will cause API errors
     validQualities: ['low', 'medium', 'high', 'auto'] as const,
     defaultQuality: 'medium',
     validSizes: ['1024x1024', '1536x1024', '1024x1536'] as const,
     defaultSize: '1024x1024',
+    // These are the ONLY keys allowed in the request body:
+    allowedBodyKeys: ['model', 'prompt', 'n', 'size', 'quality'] as const,
   },
   gemini: {
     model: 'gemini-2.5-flash-image',
@@ -84,17 +99,31 @@ export function validateParams(raw: Partial<ImageGenParams> & { prompt: string }
 }
 
 /**
- * Get OpenAI-specific request body
+ * Get OpenAI-specific request body.
+ * SAFETY: Only includes keys listed in allowedBodyKeys. Any extra keys are silently dropped.
+ * This prevents "Invalid value" errors from unexpected parameters.
  */
-export function getOpenAIRequestBody(params: ImageGenParams) {
-  return {
+export function getOpenAIRequestBody(params: ImageGenParams): Record<string, unknown> {
+  const body: Record<string, unknown> = {
     model: PROVIDER_CONFIG.openai.model,
     prompt: params.prompt,
     n: 1,
     size: params.size,
     quality: params.quality,
-    output_format: 'b64_json',
   };
+
+  // SAFETY NET: Strip any keys that aren't in the allowed list.
+  // This is the last line of defense against invalid-parameter errors.
+  const allowed = new Set<string>(PROVIDER_CONFIG.openai.allowedBodyKeys);
+  const filtered: Record<string, unknown> = {};
+  for (const key of Object.keys(body)) {
+    if (allowed.has(key)) {
+      filtered[key] = body[key];
+    } else {
+      console.warn(`[ai-providers] Dropping unexpected OpenAI body key: ${key}`);
+    }
+  }
+  return filtered;
 }
 
 /**
