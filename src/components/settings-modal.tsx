@@ -11,7 +11,12 @@ interface Profile {
   name: string;
   role: string;
   created_at: string;
+  confirmedAt?: string | null;
+  lastSignInAt?: string | null;
+  pending?: boolean;
 }
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { openAIKey, setOpenAIKey, geminiKey, setGeminiKey, currentUser, setCurrentUserName } = useAppStore();
@@ -27,17 +32,28 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [inviteRole, setInviteRole] = useState('designer');
   const [inviting, setInviting] = useState(false);
   const [loadingTeam, setLoadingTeam] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteWarning, setInviteWarning] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState('');
 
   const isAdmin = currentUser.role === 'admin';
 
+  const loadTeam = async () => {
+    setLoadingTeam(true);
+    try {
+      const res = await fetch('/api/auth/users');
+      const data = await res.json();
+      if (Array.isArray(data)) setTeamMembers(data);
+    } catch {
+      toast('Failed to load team', 'error');
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin && activeSection === 'team') {
-      setLoadingTeam(true);
-      fetch('/api/auth/users')
-        .then(res => res.json())
-        .then(data => setTeamMembers(data || []))
-        .catch(console.error)
-        .finally(() => setLoadingTeam(false));
+      loadTeam();
     }
   }, [isAdmin, activeSection]);
 
@@ -55,23 +71,57 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    setEmailError('');
+    setInviteLink(null);
+    setInviteWarning(null);
+
+    const email = inviteEmail.trim().toLowerCase();
+
+    if (!email) {
+      setEmailError('Please enter an email address');
+      return;
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      setEmailError('Invalid email format');
+      return;
+    }
+
+    // Check for local duplicates
+    if (teamMembers.some((m) => m.email.toLowerCase() === email)) {
+      setEmailError('This user is already on the team');
+      return;
+    }
+
     setInviting(true);
     try {
       const res = await fetch('/api/auth/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+        body: JSON.stringify({ email, role: inviteRole }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      toast(`Invite sent to ${inviteEmail}`, 'success');
+
+      if (!res.ok) {
+        setEmailError(data.error || 'Failed to invite');
+        return;
+      }
+
+      // Success messages based on return
+      if (data.existed) {
+        toast(`${email} was already on the team — role updated`, 'info');
+      } else if (data.emailSent === false && data.inviteLink) {
+        setInviteLink(data.inviteLink);
+        setInviteWarning(data.warning || 'Email delivery failed. Share this link manually.');
+        toast('Invite created — share the link manually', 'info');
+      } else {
+        toast(`Invite sent to ${email}`, 'success');
+      }
+
       setInviteEmail('');
       // Refresh team list
-      const usersRes = await fetch('/api/auth/users');
-      setTeamMembers(await usersRes.json());
-    } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : 'Failed to invite', 'error');
+      await loadTeam();
+    } catch {
+      setEmailError('Network error. Please try again.');
     } finally {
       setInviting(false);
     }
@@ -86,10 +136,32 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ userId }),
       });
       if (!res.ok) throw new Error('Failed to remove user');
-      setTeamMembers(prev => prev.filter(m => m.id !== userId));
+      setTeamMembers((prev) => prev.filter((m) => m.id !== userId));
       toast(`${email} removed`, 'success');
     } catch {
       toast('Failed to remove user', 'error');
+    }
+  };
+
+  const handleRoleChange = async (userId: string, role: string) => {
+    try {
+      const res = await fetch('/api/auth/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role }),
+      });
+      if (!res.ok) throw new Error('Failed to update role');
+      setTeamMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, role } : m)));
+      toast('Role updated', 'success');
+    } catch {
+      toast('Failed to update role', 'error');
+    }
+  };
+
+  const copyInviteLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      toast('Invite link copied to clipboard', 'success');
     }
   };
 
@@ -194,20 +266,23 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         {activeSection === 'team' && isAdmin && (
           <div className="space-y-4">
             {/* Invite form */}
-            <div className="bg-background border border-border rounded-lg p-3 space-y-3">
+            <div className="bg-background border border-border rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-semibold">Invite Team Member</h3>
               <div className="flex gap-2">
                 <input
                   type="email"
                   value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onChange={(e) => { setInviteEmail(e.target.value); setEmailError(''); setInviteLink(null); setInviteWarning(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !inviting) handleInvite(); }}
                   placeholder="email@company.com"
-                  className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  className={`flex-1 bg-surface border rounded-lg px-3 py-2 text-sm focus:outline-none ${emailError ? 'border-red-400 focus:border-red-500' : 'border-border focus:border-accent'}`}
+                  disabled={inviting}
                 />
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
                   className="bg-surface border border-border rounded-lg px-2 py-2 text-sm"
+                  disabled={inviting}
                 >
                   <option value="designer">Designer</option>
                   <option value="reviewer">Reviewer</option>
@@ -216,45 +291,110 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={handleInvite}
                   disabled={inviting || !inviteEmail.trim()}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg disabled:opacity-50"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg disabled:opacity-50 min-w-[80px]"
                 >
-                  {inviting ? '...' : 'Invite'}
+                  {inviting ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </span>
+                  ) : 'Invite'}
                 </button>
               </div>
-              <p className="text-xs text-muted">They'll receive an email to set their password and access the app.</p>
+              {emailError && (
+                <p className="text-xs text-red-600">{emailError}</p>
+              )}
+              {!emailError && (
+                <p className="text-xs text-muted">They'll receive an email to set their password and access the app.</p>
+              )}
+
+              {/* Manual invite link fallback */}
+              {inviteLink && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                  <p className="text-xs text-amber-800 font-medium">{inviteWarning}</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={inviteLink}
+                      onFocus={(e) => e.target.select()}
+                      className="flex-1 bg-white border border-amber-200 rounded px-2 py-1.5 text-xs font-mono"
+                    />
+                    <button
+                      onClick={copyInviteLink}
+                      className="px-3 py-1 bg-accent hover:bg-accent-hover text-white text-xs rounded"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-amber-700">Send this link to the user — it lets them set their password and sign in.</p>
+                </div>
+              )}
             </div>
 
             {/* Team list */}
             <div>
-              <h3 className="text-sm font-semibold mb-2">Team ({teamMembers.length})</h3>
-              {loadingTeam ? (
-                <p className="text-sm text-muted text-center py-4">Loading...</p>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Team ({teamMembers.length})</h3>
+                <button
+                  onClick={loadTeam}
+                  disabled={loadingTeam}
+                  className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                >
+                  {loadingTeam ? '...' : '↻ Refresh'}
+                </button>
+              </div>
+              {loadingTeam && teamMembers.length === 0 ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : teamMembers.length === 0 ? (
+                <p className="text-sm text-muted text-center py-4">No team members yet</p>
               ) : (
                 <div className="space-y-2">
-                  {teamMembers.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between bg-background border border-border rounded-lg p-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center text-xs font-bold">
-                          {(member.name || member.email[0]).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  {teamMembers.map((member) => {
+                    const isCurrentUser = member.id === currentUser.id;
+                    return (
+                      <div key={member.id} className="flex items-center justify-between bg-background border border-border rounded-lg p-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center text-xs font-bold shrink-0">
+                            {(member.name || member.email[0]).split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium truncate">{member.name || member.email.split('@')[0]}</span>
+                              {isCurrentUser && <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">You</span>}
+                              {member.pending && <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Pending</span>}
+                            </div>
+                            <div className="text-xs text-muted truncate">{member.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-sm font-medium">{member.name || member.email}</div>
-                          <div className="text-xs text-muted">{member.email}</div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isCurrentUser ? (
+                            <span className="text-xs text-muted capitalize bg-border/50 px-2 py-0.5 rounded">{member.role}</span>
+                          ) : (
+                            <select
+                              value={member.role}
+                              onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                              className="text-xs bg-background border border-border rounded px-1.5 py-0.5 capitalize"
+                            >
+                              <option value="designer">Designer</option>
+                              <option value="reviewer">Reviewer</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          )}
+                          {!isCurrentUser && (
+                            <button
+                              onClick={() => handleRemoveUser(member.id, member.email)}
+                              className="text-xs text-red-500 hover:text-red-700 px-2 py-1"
+                              title="Remove from team"
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted capitalize bg-border/50 px-2 py-0.5 rounded">{member.role}</span>
-                        {member.id !== currentUser.id && (
-                          <button
-                            onClick={() => handleRemoveUser(member.id, member.email)}
-                            className="text-xs text-red-500 hover:text-red-700 px-2 py-1"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
