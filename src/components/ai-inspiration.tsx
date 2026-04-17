@@ -221,9 +221,6 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
 
   // ========== ARCHIVE VIEW ==========
   if (view === 'archive') {
-    const usedCount = archiveIdeas.filter((i) => i.usedAt).length;
-    const unusedCount = archiveIdeas.length - usedCount;
-
     return (
       <div className="p-6 max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-4">
@@ -246,19 +243,19 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
               onClick={() => setArchiveFilter('unused')}
               className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'unused' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
             >
-              Unused ({unusedCount})
+              Unused
             </button>
             <button
               onClick={() => setArchiveFilter('used')}
               className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'used' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
             >
-              Used ({usedCount})
+              Used
             </button>
             <button
               onClick={() => setArchiveFilter('all')}
               className={`px-3 py-1.5 text-xs rounded transition-colors ${archiveFilter === 'all' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
             >
-              All ({archiveIdeas.length})
+              All
             </button>
           </div>
           <input
