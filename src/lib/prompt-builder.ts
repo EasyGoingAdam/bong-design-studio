@@ -100,19 +100,6 @@ export function buildBasePrompt(inputs: PromptInputs): string {
   return parts.join(' ');
 }
 
-export function buildRefinementPrompt(action: string, originalPrompt: string): string {
-  const refinements: Record<string, string> = {
-    'generate_more': `New variation, same theme: ${originalPrompt}`,
-    'refine': `Refine and polish: ${originalPrompt}`,
-    'simplify_laser': `Simplify for laser etching — thicker lines, fewer details: ${originalPrompt}`,
-    'coordinate_more': `Make coil and base more visually coordinated: ${originalPrompt}`,
-    'complement_base': `Adjust base to complement the coil: ${originalPrompt}`,
-    'higher_contrast': `Increase contrast — pure black and white: ${originalPrompt}`,
-    'reduce_detail': `Reduce detail for manufacturing: ${originalPrompt}`,
-  };
-  return refinements[action] || originalPrompt;
-}
-
 export const SAMPLE_PROMPTS = {
   matching: {
     title: 'Matching Coil + Base Concept',

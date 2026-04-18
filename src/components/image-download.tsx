@@ -89,47 +89,6 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export async function invertImage(imageUrl: string): Promise<string> {
-  const img = await loadImage(imageUrl);
-  // Use the FULL original resolution — never downscale
-  const w = img.naturalWidth || img.width;
-  const h = img.naturalHeight || img.height;
-  if (!w || !h) throw new Error('Could not determine image dimensions');
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-
-  // Disable any smoothing to preserve pixel-perfect quality
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = 255 - data[i];       // R
-    data[i + 1] = 255 - data[i + 1]; // G
-    data[i + 2] = 255 - data[i + 2]; // B
-    // Alpha stays the same
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  // Use toBlob for maximum quality PNG output (toDataURL can compress)
-  return new Promise<string>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) { reject(new Error('Failed to create blob')); return; }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Failed to read blob'));
-        reader.readAsDataURL(blob);
-      },
-      'image/png'  // Lossless PNG format
-    );
-  });
-}
-
 export function ImageDownloadButtons({ imageUrl, filename }: ImageDownloadProps) {
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
