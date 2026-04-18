@@ -25,6 +25,7 @@ interface ManufacturedRef {
 interface ReviewResult {
   score: number;
   comment: string;
+  recommendations: string[];
   similarTo?: string; // name of a manufactured design this is similar to, if any
   error?: string;
 }
@@ -99,25 +100,44 @@ async function reviewWithPersona(
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      return { score: 0, comment: '', error: err?.error?.message || `OpenAI error ${response.status}` };
+      return { score: 0, comment: '', recommendations: [], error: err?.error?.message || `OpenAI error ${response.status}` };
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) return { score: 0, comment: '', error: 'Empty response' };
+    if (!content) return { score: 0, comment: '', recommendations: [], error: 'Empty response' };
 
     try {
       const parsed = JSON.parse(content);
       const score = Math.max(1, Math.min(10, Number(parsed.score) || 0));
       const comment = String(parsed.comment || '').trim();
       const similarTo = parsed.similarTo ? String(parsed.similarTo).trim() : undefined;
-      if (!score || !comment) return { score: 0, comment: '', error: 'Malformed review' };
-      return { score, comment, similarTo };
+
+      // Normalize recommendations into an array of short strings
+      let recommendations: string[] = [];
+      if (Array.isArray(parsed.recommendations)) {
+        recommendations = parsed.recommendations
+          .map((r: unknown) => String(r || '').trim())
+          .filter((r: string) => r.length > 0)
+          .slice(0, 3);
+      } else if (typeof parsed.recommendations === 'string' && parsed.recommendations.trim()) {
+        recommendations = [parsed.recommendations.trim()];
+      }
+
+      if (!score || !comment) {
+        return { score: 0, comment: '', recommendations: [], error: 'Malformed review' };
+      }
+      return { score, comment, recommendations, similarTo };
     } catch {
-      return { score: 0, comment: '', error: 'Failed to parse review' };
+      return { score: 0, comment: '', recommendations: [], error: 'Failed to parse review' };
     }
   } catch (err) {
-    return { score: 0, comment: '', error: err instanceof Error ? err.message : 'Review failed' };
+    return {
+      score: 0,
+      comment: '',
+      recommendations: [],
+      error: err instanceof Error ? err.message : 'Review failed',
+    };
   }
 }
 

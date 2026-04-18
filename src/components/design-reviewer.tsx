@@ -70,6 +70,8 @@ function PersonaRow({
     );
   }
 
+  const recs = review.recommendations || [];
+
   return (
     <div className={`border rounded-lg p-2 ${scoreBorder(review.score)}`}>
       <div className="flex items-start gap-2">
@@ -84,8 +86,25 @@ function PersonaRow({
             <span className="text-[9px] opacity-50 truncate">{personaName}</span>
           </div>
           <p className="text-[11px] leading-snug mt-0.5 text-foreground/90">&quot;{review.comment}&quot;</p>
+
+          {recs.length > 0 && (
+            <div className="mt-1.5 pt-1.5 border-t border-current/10">
+              <div className="text-[9px] font-semibold uppercase tracking-wider opacity-60 mb-1">
+                Recommendations
+              </div>
+              <ul className="space-y-0.5">
+                {recs.map((rec, i) => (
+                  <li key={i} className="text-[11px] leading-snug text-foreground/85 flex gap-1.5">
+                    <span className="opacity-60 shrink-0">→</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {similarTo && (
-            <div className="mt-1.5 text-[10px] text-amber-700 bg-amber-100/60 border border-amber-200 rounded px-1.5 py-0.5 inline-block">
+            <div className="mt-1.5 text-[10px] text-amber-800 bg-amber-100/70 border border-amber-200 rounded px-1.5 py-0.5 inline-block">
               Similar to: <span className="font-semibold">{similarTo}</span>
             </div>
           )}

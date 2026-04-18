@@ -107,6 +107,7 @@ export interface ConceptVersion {
 export interface PersonaReview {
   score: number;
   comment: string;
+  recommendations?: string[];
   similarTo?: string;
   error?: string;
 }
