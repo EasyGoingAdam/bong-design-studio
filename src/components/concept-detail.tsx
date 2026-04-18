@@ -6,7 +6,8 @@ import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
-import { ImageDownloadButtons, invertImage } from './image-download';
+import { ImageDownloadButtons } from './image-download';
+import { DesignReviewer } from './design-reviewer';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -36,20 +37,27 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
     if (!url) return;
     setInverting(part);
     try {
-      const invertedBase64 = await invertImage(url);
-      // Upload inverted image to Supabase
-      const uploadRes = await fetch('/api/upload-image', {
+      // Server-side pixel-perfect invert using sharp (lossless PNG, preserves dimensions)
+      const res = await fetch('/api/invert-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64: invertedBase64, folder: 'inverted', filename: `${concept.name}-${part}` }),
+        body: JSON.stringify({
+          imageUrl: url,
+          folder: 'inverted',
+          filename: `${concept.name}-${part}`,
+        }),
       });
-      const { url: newUrl } = await uploadRes.json();
-      if (newUrl) {
-        updateConcept(concept.id, part === 'coil' ? { coilImageUrl: newUrl } : { baseImageUrl: newUrl });
-        toast(`${part === 'coil' ? 'Coil' : 'Base'} colors inverted`, 'success');
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'Invert failed');
       }
-    } catch {
-      toast('Failed to invert image', 'error');
+      updateConcept(
+        concept.id,
+        part === 'coil' ? { coilImageUrl: data.url } : { baseImageUrl: data.url }
+      );
+      toast(`${part === 'coil' ? 'Coil' : 'Base'} colors inverted`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to invert image', 'error');
     } finally {
       setInverting(null);
     }
@@ -313,6 +321,19 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               <span>✦</span>
               {concept.coilImageUrl || concept.baseImageUrl ? 'Regenerate Images with AI' : 'Generate Images with AI'}
             </button>
+
+            {/* Persona Reviewers — read-only feedback, does not change the design */}
+            {(concept.coilImageUrl || concept.baseImageUrl) && (
+              <DesignReviewer
+                name={concept.name}
+                description={concept.description}
+                style={concept.specs.designStyleName}
+                theme={concept.specs.designTheme}
+                tags={concept.tags}
+                coilImageUrl={concept.coilImageUrl}
+                baseImageUrl={concept.baseImageUrl}
+              />
+            )}
 
             {/* Description */}
             {editing ? (

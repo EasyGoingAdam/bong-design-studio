@@ -7,6 +7,7 @@ import { Input, TextArea, Select, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt, SAMPLE_PROMPTS } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
+import { DesignReviewer } from './design-reviewer';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production Ready' },
@@ -553,6 +554,18 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               </div>
             )}
           </div>
+
+          {/* Persona reviewer panel — purely feedback, does not affect designs */}
+          {(generatedCoilUrl || generatedBaseUrl) && (
+            <DesignReviewer
+              name={title}
+              description={themePrompt || stylePrompt}
+              style={stylePrompt}
+              theme={themePrompt}
+              coilImageUrl={generatedCoilUrl}
+              baseImageUrl={generatedBaseUrl}
+            />
+          )}
 
           {/* Actions when images are generated */}
           {(generatedCoilUrl || generatedBaseUrl) && (
