@@ -28,6 +28,7 @@ export function dbConceptToFrontend(
     intendedAudience: concept.intended_audience ?? '',
     manufacturingNotes: concept.manufacturing_notes ?? '',
     marketingStory: concept.marketing_story ?? '',
+    personaReviews: concept.persona_reviews ?? undefined,
     coilImageUrl: concept.coil_image_url ?? '',
     baseImageUrl: concept.base_image_url ?? '',
     combinedImageUrl: concept.combined_image_url ?? '',

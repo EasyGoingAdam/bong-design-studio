@@ -104,6 +104,21 @@ export interface ConceptVersion {
   createdAt: string;
 }
 
+export interface PersonaReview {
+  score: number;
+  comment: string;
+  similarTo?: string;
+  error?: string;
+}
+
+export interface PersonaReviewsCache {
+  fan: PersonaReview;
+  skeptic: PersonaReview;
+  fingerprint: string;
+  reviewedAt: string;
+  manufacturedCount?: number;
+}
+
 export interface Concept {
   id: string;
   name: string;
@@ -117,6 +132,7 @@ export interface Concept {
   intendedAudience: string;
   manufacturingNotes: string;
   marketingStory: string;
+  personaReviews?: PersonaReviewsCache;
   coilImageUrl: string;
   baseImageUrl: string;
   combinedImageUrl: string;

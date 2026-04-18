@@ -1,18 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
-import { useToast } from './toast';
-
-interface ReviewResult {
-  score: number;
-  comment: string;
-  error?: string;
-}
+import { PersonaReview, PersonaReviewsCache } from '@/lib/types';
+import { formatDateTime } from '@/lib/utils';
 
 interface Reviews {
-  fan?: ReviewResult;
-  skeptic?: ReviewResult;
+  fan: PersonaReview;
+  skeptic: PersonaReview;
+  reviewedAt?: string;
+  manufacturedCount?: number;
   personas?: {
     fan: { name: string; label: string; description: string };
     skeptic: { name: string; label: string; description: string };
@@ -20,6 +17,7 @@ interface Reviews {
 }
 
 interface DesignReviewerProps {
+  conceptId?: string;
   name?: string;
   description?: string;
   style?: string;
@@ -27,52 +25,171 @@ interface DesignReviewerProps {
   tags?: string[];
   coilImageUrl?: string;
   baseImageUrl?: string;
-  // Compact mode for use inside modals
-  compact?: boolean;
+  /**
+   * If provided and its fingerprint matches the current images, skip the API call
+   * and display these cached reviews. Used to avoid re-reviewing unchanged designs.
+   */
+  cachedReviews?: PersonaReviewsCache;
 }
 
-function scoreColor(score: number): string {
-  if (score >= 8) return 'text-green-700 bg-green-50 border-green-200';
-  if (score >= 6) return 'text-blue-700 bg-blue-50 border-blue-200';
-  if (score >= 4) return 'text-amber-700 bg-amber-50 border-amber-200';
-  return 'text-red-700 bg-red-50 border-red-200';
+function fingerprint(coil?: string, base?: string): string {
+  return [coil || '', base || ''].join('|');
 }
 
-function scoreBadgeColor(score: number): string {
-  if (score >= 8) return 'bg-green-600 text-white';
-  if (score >= 6) return 'bg-blue-600 text-white';
-  if (score >= 4) return 'bg-amber-500 text-white';
-  return 'bg-red-600 text-white';
+function scoreBg(score: number): string {
+  if (score >= 8) return 'bg-green-600';
+  if (score >= 6) return 'bg-blue-600';
+  if (score >= 4) return 'bg-amber-500';
+  return 'bg-red-600';
+}
+
+function scoreBorder(score: number): string {
+  if (score >= 8) return 'border-green-200 bg-green-50';
+  if (score >= 6) return 'border-blue-200 bg-blue-50';
+  if (score >= 4) return 'border-amber-200 bg-amber-50';
+  return 'border-red-200 bg-red-50';
+}
+
+function PersonaRow({
+  review,
+  label,
+  personaName,
+  similarTo,
+}: {
+  review: PersonaReview;
+  label: string;
+  personaName: string;
+  similarTo?: string;
+}) {
+  if (review.error) {
+    return (
+      <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+        <div className="font-semibold">{label}</div>
+        <div className="italic opacity-80 mt-0.5">{review.error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`border rounded-lg p-2 ${scoreBorder(review.score)}`}>
+      <div className="flex items-start gap-2">
+        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white ${scoreBg(review.score)}`}>
+          {review.score}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+              {label}
+            </span>
+            <span className="text-[9px] opacity-50 truncate">{personaName}</span>
+          </div>
+          <p className="text-[11px] leading-snug mt-0.5 text-foreground/90">&quot;{review.comment}&quot;</p>
+          {similarTo && (
+            <div className="mt-1.5 text-[10px] text-amber-700 bg-amber-100/60 border border-amber-200 rounded px-1.5 py-0.5 inline-block">
+              Similar to: <span className="font-semibold">{similarTo}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DesignReviewer(props: DesignReviewerProps) {
   const { openAIKey } = useAppStore();
-  const { toast } = useToast();
   const [reviews, setReviews] = useState<Reviews | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const hasContent = !!(
-    props.coilImageUrl || props.baseImageUrl || props.description || props.name
-  );
+  // Track the fingerprint we've already reviewed to avoid duplicates
+  const reviewedFingerprintRef = useRef<string>('');
 
-  const run = async () => {
-    if (!openAIKey) {
-      setError('Set your OpenAI API key in Settings first.');
+  const currentFingerprint = fingerprint(props.coilImageUrl, props.baseImageUrl);
+  const hasContent = !!(props.coilImageUrl || props.baseImageUrl);
+
+  // Hydrate from cached reviews if their fingerprint matches current images
+  useEffect(() => {
+    if (
+      props.cachedReviews &&
+      props.cachedReviews.fingerprint === currentFingerprint &&
+      props.cachedReviews.fan &&
+      props.cachedReviews.skeptic
+    ) {
+      setReviews({
+        fan: props.cachedReviews.fan,
+        skeptic: props.cachedReviews.skeptic,
+        reviewedAt: props.cachedReviews.reviewedAt,
+        manufacturedCount: props.cachedReviews.manufacturedCount,
+      });
+      reviewedFingerprintRef.current = currentFingerprint;
+    }
+  }, [props.cachedReviews, currentFingerprint]);
+
+  // Auto-fetch reviews when images change (or on mount if no cache matches)
+  useEffect(() => {
+    if (!hasContent || !openAIKey) return;
+    if (reviewedFingerprintRef.current === currentFingerprint) return; // already reviewed this exact pair
+
+    // If cachedReviews matches the current fingerprint, skip
+    if (
+      props.cachedReviews &&
+      props.cachedReviews.fingerprint === currentFingerprint
+    ) {
+      reviewedFingerprintRef.current = currentFingerprint;
       return;
     }
-    if (!hasContent) {
-      setError('Nothing to review yet.');
-      return;
-    }
+
+    let cancelled = false;
+    const run = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/review-design', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: openAIKey,
+            conceptId: props.conceptId,
+            name: props.name,
+            description: props.description,
+            style: props.style,
+            theme: props.theme,
+            tags: props.tags,
+            coilImageUrl: props.coilImageUrl,
+            baseImageUrl: props.baseImageUrl,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(data.error || 'Review failed');
+          return;
+        }
+        setReviews(data);
+        reviewedFingerprintRef.current = currentFingerprint;
+      } catch {
+        if (!cancelled) setError('Network error');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFingerprint, openAIKey, hasContent]);
+
+  const rerun = async () => {
+    reviewedFingerprintRef.current = ''; // force a re-review
+    setReviews(null);
+    // Trigger useEffect by changing a dependency — just flip loading briefly
     setLoading(true);
-    setError('');
     try {
       const res = await fetch('/api/review-design', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: openAIKey,
+          conceptId: props.conceptId,
           name: props.name,
           description: props.description,
           style: props.style,
@@ -83,11 +200,9 @@ export function DesignReviewer(props: DesignReviewerProps) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Review failed');
-        return;
-      }
+      if (!res.ok) { setError(data.error || 'Review failed'); return; }
       setReviews(data);
+      reviewedFingerprintRef.current = currentFingerprint;
     } catch {
       setError('Network error');
     } finally {
@@ -95,110 +210,72 @@ export function DesignReviewer(props: DesignReviewerProps) {
     }
   };
 
-  const padding = props.compact ? 'p-3' : 'p-4';
+  if (!hasContent) return null;
 
   return (
-    <div className={`bg-surface border border-border rounded-xl ${padding} space-y-3`}>
+    <div className="bg-surface border border-border rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold flex items-center gap-1.5">
             <span>🗣️</span>
-            Persona Reviewers
+            Persona Feedback
           </h3>
-          <p className="text-xs text-muted mt-0.5">
-            Two personas score this design 1–10 based on their taste
-          </p>
-        </div>
-        <button
-          onClick={run}
-          disabled={loading || !hasContent}
-          className="text-xs px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5"
-        >
-          {loading ? (
-            <>
-              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Reviewing…
-            </>
-          ) : reviews ? (
-            '↻ Re-review'
-          ) : (
-            '✦ Get Feedback'
+          {reviews?.reviewedAt && (
+            <div className="text-[10px] text-muted mt-0.5">
+              {formatDateTime(reviews.reviewedAt)}
+              {reviews.manufacturedCount !== undefined && reviews.manufacturedCount > 0 && (
+                <span className="ml-1 opacity-70">· compared vs {reviews.manufacturedCount} manufactured</span>
+              )}
+            </div>
           )}
-        </button>
+        </div>
+        {reviews && !loading && (
+          <button
+            onClick={rerun}
+            className="text-[10px] text-muted hover:text-foreground px-1.5 py-0.5 rounded hover:bg-surface-hover transition-colors"
+            title="Re-run review"
+          >
+            ↻
+          </button>
+        )}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-700">{error}</div>
+      {loading && !reviews && (
+        <div className="flex items-center gap-2 py-2 text-[11px] text-muted">
+          <span className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          Getting persona feedback…
+        </div>
       )}
 
-      {!reviews && !loading && !error && (
-        <p className="text-xs text-muted italic">
-          Click &quot;Get Feedback&quot; to have The Fan and The Skeptic score this design.
-        </p>
+      {error && !loading && (
+        <div className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded p-1.5">
+          {error}
+        </div>
       )}
 
       {reviews && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* The Fan */}
-          <div className={`border rounded-lg p-3 ${reviews.fan?.error ? 'border-red-200 bg-red-50' : scoreColor(reviews.fan?.score || 0)}`}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                  The Fan
-                </div>
-                <div className="text-xs font-medium truncate">
-                  {reviews.personas?.fan.name || 'Jake Morales'}
-                </div>
-              </div>
-              {reviews.fan && !reviews.fan.error && (
-                <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${scoreBadgeColor(reviews.fan.score)}`}>
-                  {reviews.fan.score}
-                </div>
-              )}
-            </div>
-            <p className="text-xs leading-relaxed">
-              {reviews.fan?.error ? (
-                <span className="italic opacity-70">Couldn&apos;t get feedback: {reviews.fan.error}</span>
-              ) : (
-                `"${reviews.fan?.comment || ''}"`
-              )}
-            </p>
-          </div>
+        <div className="space-y-2">
+          <PersonaRow
+            review={reviews.fan}
+            label="The Fan"
+            personaName={reviews.personas?.fan.name || 'Jake Morales'}
+            similarTo={reviews.fan.similarTo}
+          />
+          <PersonaRow
+            review={reviews.skeptic}
+            label="The Skeptic"
+            personaName={reviews.personas?.skeptic.name || 'Sam Chen'}
+            similarTo={reviews.skeptic.similarTo}
+          />
 
-          {/* The Skeptic */}
-          <div className={`border rounded-lg p-3 ${reviews.skeptic?.error ? 'border-red-200 bg-red-50' : scoreColor(reviews.skeptic?.score || 0)}`}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                  The Skeptic
-                </div>
-                <div className="text-xs font-medium truncate">
-                  {reviews.personas?.skeptic.name || 'Sam Chen'}
-                </div>
-              </div>
-              {reviews.skeptic && !reviews.skeptic.error && (
-                <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${scoreBadgeColor(reviews.skeptic.score)}`}>
-                  {reviews.skeptic.score}
-                </div>
-              )}
+          {reviews.fan.score > 0 && reviews.skeptic.score > 0 && (
+            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-border/60">
+              <span className="text-muted">Combined</span>
+              <span className="font-semibold">
+                {((reviews.fan.score + reviews.skeptic.score) / 2).toFixed(1)} / 10
+              </span>
             </div>
-            <p className="text-xs leading-relaxed">
-              {reviews.skeptic?.error ? (
-                <span className="italic opacity-70">Couldn&apos;t get feedback: {reviews.skeptic.error}</span>
-              ) : (
-                `"${reviews.skeptic?.comment || ''}"`
-              )}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {reviews && reviews.fan?.score && reviews.skeptic?.score && (
-        <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-          <span className="text-muted">Combined score</span>
-          <span className="font-semibold">
-            {((reviews.fan.score + reviews.skeptic.score) / 2).toFixed(1)} / 10
-          </span>
+          )}
         </div>
       )}
     </div>

@@ -322,19 +322,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               {concept.coilImageUrl || concept.baseImageUrl ? 'Regenerate Images with AI' : 'Generate Images with AI'}
             </button>
 
-            {/* Persona Reviewers — read-only feedback, does not change the design */}
-            {(concept.coilImageUrl || concept.baseImageUrl) && (
-              <DesignReviewer
-                name={concept.name}
-                description={concept.description}
-                style={concept.specs.designStyleName}
-                theme={concept.specs.designTheme}
-                tags={concept.tags}
-                coilImageUrl={concept.coilImageUrl}
-                baseImageUrl={concept.baseImageUrl}
-              />
-            )}
-
             {/* Description */}
             {editing ? (
               <div className="space-y-3">
@@ -452,6 +439,21 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
 
           {/* Sidebar */}
           <div className="space-y-4">
+            {/* Persona Feedback — auto-loaded, learns from manufactured */}
+            {(concept.coilImageUrl || concept.baseImageUrl) && (
+              <DesignReviewer
+                conceptId={concept.id}
+                name={concept.name}
+                description={concept.description}
+                style={concept.specs.designStyleName}
+                theme={concept.specs.designTheme}
+                tags={concept.tags}
+                coilImageUrl={concept.coilImageUrl}
+                baseImageUrl={concept.baseImageUrl}
+                cachedReviews={concept.personaReviews}
+              />
+            )}
+
             <div className="bg-surface border border-border rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted">Designer</span><span>{concept.designer}</span></div>
               <div className="flex justify-between"><span className="text-muted">Created</span><span>{formatDate(concept.createdAt)}</span></div>
