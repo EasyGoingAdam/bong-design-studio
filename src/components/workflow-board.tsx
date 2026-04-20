@@ -17,7 +17,13 @@ const COLUMN_COLORS: Record<ConceptStatus, string> = {
   archived: 'border-t-gray-300',
 };
 
-export function WorkflowBoard({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
+export function WorkflowBoard({
+  onOpenConcept,
+  onOpenArchive,
+}: {
+  onOpenConcept: (id: string) => void;
+  onOpenArchive?: () => void;
+}) {
   const { concepts, moveConcept, deleteConcept, updateConcept } = useAppStore();
   const { toast } = useToast();
   const [mfgSearch, setMfgSearch] = useState('');
@@ -102,13 +108,29 @@ export function WorkflowBoard({ onOpenConcept }: { onOpenConcept: (id: string) =
 
   const hasSelection = selectedIds.size > 0;
 
+  const archivedCount = concepts.filter((c) => c.status === 'archived').length;
+
   return (
     <div className="p-6 h-full">
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex items-center justify-between mb-4 gap-4">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold">Workflow Board</h2>
           <p className="text-sm text-muted">Drag concepts between stages{hasSelection ? '' : ' — click checkboxes to multi-select'}</p>
         </div>
+        {onOpenArchive && archivedCount > 0 && (
+          <button
+            onClick={onOpenArchive}
+            className="shrink-0 flex items-center gap-2 px-3 py-2 bg-background border border-border rounded-lg hover:bg-surface-hover transition-colors text-sm"
+            title="Browse archived concepts"
+          >
+            <span>📦</span>
+            <span className="text-muted">Archive</span>
+            <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full font-medium">
+              {archivedCount}
+            </span>
+            <span className="text-muted text-xs">→</span>
+          </button>
+        )}
       </div>
 
       {/* Bulk Action Toolbar */}

@@ -215,7 +215,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
         {initialized && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
         {initialized && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'workflow' && <WorkflowBoard onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'workflow' && (
+          <WorkflowBoard
+            onOpenConcept={openConcept}
+            onOpenArchive={() => setActiveTab('archive')}
+          />
+        )}
         {initialized && activeTab === 'specs' && <SpecsDatabase />}
         {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
         {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
