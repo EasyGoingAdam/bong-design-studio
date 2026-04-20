@@ -197,4 +197,5 @@ export const KANBAN_COLUMNS: ConceptStatus[] = [
   'approved',
   'ready_for_manufacturing',
   'manufactured',
+  'archived',
 ];
