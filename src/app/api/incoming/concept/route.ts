@@ -10,56 +10,73 @@ import { supabaseAdmin, uploadImage } from '@/lib/supabase';
  *   Authorization: Bearer <INCOMING_API_KEY>
  *   Content-Type: application/json
  *
- * The external tool (e.g. your customer-facing design app) calls this to
- * push a completed design into the studio as a new concept ready for the
- * team to work on.
+ * MINIMAL call (the common case — a customer finishes a design in the
+ * external tool and pushes it in as a ready-to-manufacture listing):
  *
- * Body (all optional unless noted):
- *   name                   — string, required
- *   description            — string
- *   collection             — string
- *   tags                   — string[]
- *   intendedAudience       — string
- *   priority               — 'low'|'medium'|'high'|'urgent' (default medium)
- *   lifecycleType          — 'seasonal'|'evergreen'|'limited_edition'|'custom'
- *   coilOnly               — boolean (default false)
- *   coilImageUrl           — public http(s) URL
- *   coilImageBase64        — data URI (we'll upload to storage)
- *   baseImageUrl           — public http(s) URL (ignored when coilOnly)
- *   baseImageBase64        — data URI (ignored when coilOnly)
- *   source                 — string identifying your tool (required for
- *                             idempotency). E.g. 'custom-designer-v1'.
- *   externalId             — your tool's ID for this design. Required for
- *                             idempotency — resubmitting with the same
- *                             (source, externalId) pair UPDATES the
- *                             existing concept rather than creating a
- *                             duplicate.
- *   externalUrl            — deep link back to the design in your tool
- *   submitterEmail         — end-user who designed it
- *   submitterName          — end-user display name
- *   notes                  — free-text notes (stored in manufacturingNotes
- *                             by default — use the concept UI to relocate)
- *   dimensions             — { overallW, overallH, coilW, coilH, baseW,
- *                               baseH, unit } (optional)
+ *   {
+ *     "graphic": "data:image/png;base64,..." | "https://...",
+ *     "name":    "Customer Dragon Design",
+ *     "email":   "alex@example.com"
+ *   }
+ *
+ * That's it — the concept lands in the **Approved** column (ready for the
+ * team to move straight to manufacturing) as a coil-only design, with the
+ * supplied graphic as its primary image and the email saved as the
+ * submitter contact.
+ *
+ * FULL shape (when the external tool tracks more metadata):
+ *
+ *   graphic / graphicUrl / graphicBase64  — shorthand for the main image.
+ *       When supplied, the concept is coil-only by default and this image
+ *       becomes the coil image. Pass one of:
+ *         graphic          — auto-detected (URL if starts with 'http',
+ *                             otherwise treated as base64)
+ *         graphicUrl       — public http(s) URL
+ *         graphicBase64    — 'data:image/png;base64,...'
+ *   coilImageUrl / coilImageBase64  — explicit coil image when your tool
+ *       distinguishes coil vs base
+ *   baseImageUrl / baseImageBase64  — explicit base image (ignored when
+ *       coilOnly is true or only `graphic` is sent)
+ *   coilOnly          — boolean; auto-set to true when `graphic` is sent
+ *       without separate base images
+ *
+ *   name / designName        — required (use either field)
+ *   email / submitterEmail   — end customer's email
+ *   submitterName            — end customer's display name
+ *
+ *   description, collection, tags, intendedAudience, priority,
+ *   lifecycleType, externalId, externalUrl, source, notes, dimensions
+ *       — same semantics as before (see INCOMING_API.md)
+ *
+ *   status  — optional override. Defaults to 'approved'. Pass
+ *       'ideation' / 'in_review' / 'approved' / 'ready_for_manufacturing'
  *
  * Response:
- *   200 on update (idempotent replay) or create:
+ *   201 on create or 200 on update:
  *   {
  *     id: "concept-uuid",
- *     url: "https://<APP_URL>/concept/<id>",
- *     status: "ideation",
- *     created: true | false,    // true on first submission
+ *     url: "https://<APP_URL>/?conceptId=...",
+ *     status: "approved",
+ *     created: true | false,
  *     createdAt: "ISO",
  *     updatedAt: "ISO"
  *   }
  *
  * Auth:
- *   Requires INCOMING_API_KEY env var set server-side. The caller sends it
- *   as a Bearer token. If the env var isn't set, the endpoint refuses all
- *   requests (fail-closed).
+ *   Requires INCOMING_API_KEY env var. Bearer token. Fail-closed if unset.
  */
 
+type AllowedStatus = 'ideation' | 'in_review' | 'approved' | 'ready_for_manufacturing';
+
 interface Body {
+  // Simplified aliases — the preferred shape for most callers
+  graphic?: string;        // auto-detect URL vs base64
+  graphicUrl?: string;
+  graphicBase64?: string;
+  designName?: string;     // alias for name
+  email?: string;          // alias for submitterEmail
+
+  // Full shape (still supported)
   name?: string;
   description?: string;
   collection?: string;
@@ -78,6 +95,8 @@ interface Body {
   submitterEmail?: string;
   submitterName?: string;
   notes?: string;
+  /** Optional override — defaults to 'approved' for incoming submissions */
+  status?: AllowedStatus;
   dimensions?: {
     overallW?: number | string;
     overallH?: number | string;
@@ -115,32 +134,76 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  if (!body.name?.trim()) {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 });
+
+  // Name is required — accept `name` or the alias `designName`
+  const name = (body.name || body.designName || '').trim();
+  if (!name) {
+    return NextResponse.json(
+      { error: '`name` (or `designName`) is required' },
+      { status: 400 }
+    );
   }
+
+  // Resolve the main graphic. Simplified shape collapses three optional
+  // fields into one: `graphic` auto-detects url-vs-base64 from the prefix.
+  let graphicUrl = body.graphicUrl || '';
+  let graphicBase64 = body.graphicBase64 || '';
+  if (body.graphic && !graphicUrl && !graphicBase64) {
+    if (body.graphic.startsWith('http://') || body.graphic.startsWith('https://')) {
+      graphicUrl = body.graphic;
+    } else if (body.graphic.startsWith('data:')) {
+      graphicBase64 = body.graphic;
+    } else {
+      return NextResponse.json(
+        { error: '`graphic` must be an http(s) URL or a data: URI' },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Email alias
+  const submitterEmail = (body.submitterEmail || body.email || '').trim();
 
   const source = (body.source || '').trim();
   const externalId = (body.externalId || '').trim();
 
+  // Decide if this is a coil-only submission. Caller can override, but the
+  // natural default for the simplified shape (single `graphic` with no
+  // explicit base image) is coil-only.
+  const hasExplicitBase = !!(body.baseImageUrl || body.baseImageBase64);
+  const hasGraphic = !!graphicUrl || !!graphicBase64;
+  const coilOnly =
+    typeof body.coilOnly === 'boolean'
+      ? body.coilOnly
+      : hasGraphic && !hasExplicitBase;
+
+  // Default status is 'approved' — external submissions are finished
+  // designs going straight to the team's action queue. Caller can override.
+  const VALID_STATUSES: AllowedStatus[] = ['ideation', 'in_review', 'approved', 'ready_for_manufacturing'];
+  const status: AllowedStatus = VALID_STATUSES.includes(body.status as AllowedStatus)
+    ? (body.status as AllowedStatus)
+    : 'approved';
+
   try {
     // ---- Upload base64 images to storage if provided ----
-    // We accept both URL (we just store it) and base64 (we upload to our
-    // own storage so the image survives even if the source tool goes away).
     const folder = 'incoming';
-    const fnBase = (externalId || source || body.name).replace(/[^a-zA-Z0-9\-_]/g, '-').slice(0, 40);
+    const fnBase = (externalId || source || name).replace(/[^a-zA-Z0-9\-_]/g, '-').slice(0, 40);
 
-    let coilImageUrl = body.coilImageUrl || '';
-    if (!coilImageUrl && body.coilImageBase64) {
+    // Coil image — prefer explicit coilImageUrl/Base64, then fall back to
+    // the simplified `graphic*` fields.
+    let coilImageUrl = body.coilImageUrl || graphicUrl || '';
+    const coilBase64 = body.coilImageBase64 || graphicBase64 || '';
+    if (!coilImageUrl && coilBase64) {
       try {
-        coilImageUrl = await uploadImage(body.coilImageBase64, folder, `${fnBase}-coil`);
+        coilImageUrl = await uploadImage(coilBase64, folder, `${fnBase}-coil`);
       } catch (err) {
         console.error('Failed to upload incoming coil image:', err);
         return NextResponse.json({ error: 'Failed to upload coil image' }, { status: 500 });
       }
     }
 
-    let baseImageUrl = body.coilOnly ? '' : (body.baseImageUrl || '');
-    if (!body.coilOnly && !baseImageUrl && body.baseImageBase64) {
+    let baseImageUrl = coilOnly ? '' : (body.baseImageUrl || '');
+    if (!coilOnly && !baseImageUrl && body.baseImageBase64) {
       try {
         baseImageUrl = await uploadImage(body.baseImageBase64, folder, `${fnBase}-base`);
       } catch (err) {
@@ -165,10 +228,10 @@ export async function POST(request: NextRequest) {
 
     // ---- Build the concept record ----
     const conceptFields = {
-      name: body.name.trim(),
+      name,
       collection: body.collection?.trim() || '',
-      status: 'ideation',
-      designer: body.submitterName?.trim() || 'External Submission',
+      status,
+      designer: body.submitterName?.trim() || submitterEmail || 'External Submission',
       tags: body.tags ?? [],
       description: body.description?.trim() || '',
       intended_audience: body.intendedAudience?.trim() || '',
@@ -178,11 +241,11 @@ export async function POST(request: NextRequest) {
       combined_image_url: '',
       priority: body.priority || 'medium',
       lifecycle_type: body.lifecycleType || 'evergreen',
-      coil_only: !!body.coilOnly,
+      coil_only: coilOnly,
       source,
       external_id: externalId,
       external_url: body.externalUrl || '',
-      submitter_email: body.submitterEmail?.trim() || '',
+      submitter_email: submitterEmail,
       submitter_name: body.submitterName?.trim() || '',
       updated_at: nowIso,
     };
@@ -263,7 +326,8 @@ export async function POST(request: NextRequest) {
       {
         id: conceptId,
         url: conceptUrl,
-        status: 'ideation',
+        status,
+        coilOnly,
         created,
         createdAt,
         updatedAt: nowIso,
@@ -298,11 +362,20 @@ export async function GET(request: NextRequest) {
     ok: true,
     ready: true,
     endpoint: '/api/incoming/concept',
+    defaultStatus: 'approved',
+    minimalShape: {
+      graphic: '<url or data-URI>',
+      name: '<design name>',
+      email: '<submitter email>',
+    },
     acceptedFields: [
+      // Simplified
+      'graphic', 'graphicUrl', 'graphicBase64', 'designName', 'email',
+      // Full
       'name', 'description', 'collection', 'tags', 'intendedAudience', 'priority',
       'lifecycleType', 'coilOnly', 'coilImageUrl', 'coilImageBase64', 'baseImageUrl',
       'baseImageBase64', 'source', 'externalId', 'externalUrl', 'submitterEmail',
-      'submitterName', 'notes', 'dimensions',
+      'submitterName', 'notes', 'dimensions', 'status',
     ],
   });
 }

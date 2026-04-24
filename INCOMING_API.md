@@ -1,13 +1,39 @@
 # Incoming Submissions API
 
-Push a finished design from an external tool into Design Studio as a new
-concept for the team to work on.
+Push a finished design from an external tool into Design Studio as a
+ready-to-work-on concept. Submissions land directly in the **Approved**
+column so the team can take them straight to manufacturing.
 
 ## Endpoint
 
 ```
 POST https://<YOUR_APP_URL>/api/incoming/concept
 ```
+
+## Minimal call — the common case
+
+A customer finishes a design in your tool, you push it in:
+
+```bash
+curl -X POST "https://YOUR_APP/api/incoming/concept" \
+  -H "Authorization: Bearer YOUR_SHARED_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "graphic": "data:image/png;base64,iVBORw0KGgo...",
+    "name":    "Customer Dragon Design",
+    "email":   "alex@example.com"
+  }'
+```
+
+That's it. The concept:
+
+- Lands in the **Approved** column (ready for manufacturing prep)
+- Is marked **coil-only** (single graphic = coil design)
+- Uses the graphic as its coil image (uploaded to our Storage if base64)
+- Shows a purple `↓ <source>` badge on its workflow card
+- Displays an "External Submission" card in its sidebar with the email
+  and a clickable link back to your tool (if you pass `externalUrl`)
+- Can be edited by the team like any other concept
 
 ## Authentication
 
@@ -36,15 +62,28 @@ tool to verify connectivity before shipping real submissions.
 
 ## Request body
 
-All fields are optional except `name`. Minimal valid request:
+All fields optional except **name** (or its alias `designName`).
 
-```json
-{
-  "name": "Dragon — Mirror Symmetric"
-}
-```
+### Simplified shape (recommended)
 
-### Full schema
+| Field           | Type                 | Notes                                                                                           |
+|-----------------|----------------------|-------------------------------------------------------------------------------------------------|
+| `graphic`       | string               | The main design image. Either `https://...` or `data:image/png;base64,...` — we auto-detect.    |
+| `graphicUrl`    | string               | Explicit URL form                                                                               |
+| `graphicBase64` | string               | Explicit base64 data-URI form                                                                   |
+| `name`          | string **(required)**| Design name — shown on the concept card                                                         |
+| `designName`    | string               | Alias for `name`                                                                                |
+| `email`         | string               | Customer's email — shown as submitter contact                                                   |
+| `submitterName` | string               | Customer's display name (falls back to email, then "External Submission")                       |
+| `externalId`    | string               | Your tool's ID for this design — enables idempotent re-pushes                                   |
+| `externalUrl`   | string               | Deep link back to the design in your tool (clickable from the concept sidebar)                  |
+| `source`        | string               | Your tool's name (e.g. `custom-designer-v1`) — shown as the purple source badge                 |
+
+Single-graphic submissions are automatically marked **coil-only** (no
+separate base piece) unless the caller overrides with `coilOnly: false`
+AND provides a `baseImageUrl`/`baseImageBase64`.
+
+### Full schema (for callers that track more metadata)
 
 | Field              | Type                       | Notes                                                                                  |
 |--------------------|----------------------------|----------------------------------------------------------------------------------------|
@@ -67,6 +106,7 @@ All fields are optional except `name`. Minimal valid request:
 | `submitterName`    | string                     | End-user's display name (becomes the concept's `designer` field)                       |
 | `notes`            | string                     | Free text that lands in the concept's Manufacturing Notes field                        |
 | `dimensions`       | object                     | `{ overallW, overallH, coilW, coilH, baseW, baseH, unit }` — unit is `mm` or `in`      |
+| `status`           | string                     | **Defaults to `approved`.** Override with `ideation` / `in_review` / `approved` / `ready_for_manufacturing` |
 
 ### Image handling
 
@@ -94,7 +134,8 @@ Without `externalId`, every submission creates a new concept.
 {
   "id": "4e8c2a9f-...",
   "url": "https://<your-app>/?conceptId=4e8c2a9f-...",
-  "status": "ideation",
+  "status": "approved",
+  "coilOnly": true,
   "created": true,
   "createdAt": "2026-04-24T21:30:00.000Z",
   "updatedAt": "2026-04-24T21:30:00.000Z"
@@ -171,16 +212,20 @@ curl -X POST "https://YOUR_APP/api/incoming/concept" \
 
 ## What happens after submission
 
-1. The concept lands in the **Ideation** column of the workflow board
-2. A purple `↓ <source>` badge shows up on its card so the team knows
-   it's external
-3. The concept detail page shows a dedicated "External Submission" card
+1. The concept lands in the **Approved** column of the workflow board —
+   ready for the team to take to manufacturing. (Override with the
+   optional `status` field if you want it elsewhere.)
+2. Automatically marked **coil-only** when you pass a single `graphic`
+   — the base column is hidden in the UI and skipped in generation.
+3. A purple `↓ <source>` badge shows up on its workflow card so the
+   team instantly spots external submissions.
+4. The concept detail page shows a dedicated "External Submission" card
    in the sidebar with the submitter's name, email, external ID, and a
-   clickable link back to your tool
-4. The team runs the full pipeline (review, edit, mockup, marketing) as
-   they would for any concept
-5. The external submission metadata (source, externalId, submitter info)
-   persists forever so you can always trace it back
+   clickable **Open in source tool** link back to `externalUrl`.
+5. The team can edit everything — name, tags, description, priority,
+   specs, manufacturing notes — like any internally-created concept.
+6. The external submission metadata persists forever so you can always
+   trace a shipped product back to the original design.
 
 ## Outbound webhooks (future)
 
