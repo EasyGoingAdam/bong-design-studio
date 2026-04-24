@@ -46,6 +46,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>('circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
+  const [coilOnly, setCoilOnly] = useState(false);
   const [refineMode, setRefineMode] = useState(false);
 
   const [generating, setGenerating] = useState(false);
@@ -96,26 +97,31 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
       const baseSize = baseSizeMap[baseShape] || '1024x1024';
 
-      const [coilRes, baseRes] = await Promise.all([
-        fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel }),
-        }),
-        fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel }),
-        }),
-      ]);
+      const coilJob = fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel }),
+      });
+      const baseJob = coilOnly
+        ? Promise.resolve(null)
+        : fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel }),
+          });
+      const [coilRes, baseRes] = await Promise.all([coilJob, baseJob]);
 
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
 
-      const baseData = await baseRes.json();
-      if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
-      setGeneratedBaseUrl(baseData.imageUrl);
+      if (baseRes) {
+        const baseData = await baseRes.json();
+        if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
+        setGeneratedBaseUrl(baseData.imageUrl);
+      } else {
+        setGeneratedBaseUrl('');
+      }
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Generation failed');
@@ -256,6 +262,25 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                 <p className="text-xs text-amber-600 mt-1">Gemini key required — set it in Settings</p>
               )}
             </div>
+
+            <label
+              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                coilOnly ? 'bg-accent/5 border-accent' : 'bg-background border-border hover:border-accent/40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={coilOnly}
+                onChange={(e) => setCoilOnly(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <div className="text-sm font-medium">Coil only</div>
+                <div className="text-xs text-muted">
+                  Skip base generation. Use for products that only have a coil/sleeve design.
+                </div>
+              </div>
+            </label>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -491,7 +516,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           <div className="bg-surface border border-border rounded-xl p-4">
             <h3 className="text-sm font-semibold mb-3">Generated Output</h3>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid gap-4 ${coilOnly ? 'grid-cols-1 max-w-[50%] mx-auto' : 'grid-cols-2'}`}>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Coil Concept</span>
@@ -510,24 +535,26 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                   )}
                 </div>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted">Base Concept</span>
-                  {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${title || 'concept'}-base`} />}
+              {!coilOnly && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-muted">Base Concept</span>
+                    {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${title || 'concept'}-base`} />}
+                  </div>
+                  <div className="aspect-square rounded-lg bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
+                    {generatedBaseUrl ? (
+                      <img src={generatedBaseUrl} alt="Generated Base" className="w-full h-full object-contain" />
+                    ) : generating ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs text-muted">Generating...</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">Base preview</span>
+                    )}
+                  </div>
                 </div>
-                <div className="aspect-square rounded-lg bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
-                  {generatedBaseUrl ? (
-                    <img src={generatedBaseUrl} alt="Generated Base" className="w-full h-full object-contain" />
-                  ) : generating ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs text-muted">Generating...</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted">Base preview</span>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Combined Preview */}

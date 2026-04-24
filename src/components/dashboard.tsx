@@ -5,6 +5,7 @@ import { StatCard, StatusBadge, PriorityBadge } from './ui';
 import { ConceptStatus } from '@/lib/types';
 import { useMemo } from 'react';
 import { formatDate } from '@/lib/utils';
+import { computeReadiness } from '@/lib/readiness';
 
 export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts } = useAppStore();
@@ -45,6 +46,13 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
       ? Math.round(approvalTimes.reduce((a, b) => a + b, 0) / approvalTimes.length)
       : 0;
 
+    // Production-readiness across all non-archived concepts
+    const live = concepts.filter((c) => c.status !== 'archived');
+    const shipReady = live.filter((c) => computeReadiness(c).ready).length;
+    const avgReadiness = live.length > 0
+      ? Math.round(live.reduce((sum, c) => sum + computeReadiness(c).percent, 0) / live.length)
+      : 0;
+
     return {
       ideation: byStatus('ideation'),
       inReview: byStatus('in_review'),
@@ -58,6 +66,9 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
       avgVersions: concepts.length > 0
         ? (concepts.reduce((a, c) => a + c.versions.length, 0) / concepts.length).toFixed(1)
         : '0',
+      shipReady,
+      avgReadiness,
+      liveCount: live.length,
     };
   }, [concepts]);
 
@@ -120,10 +131,19 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
               </div>
             </div>
           </div>
-          <div className="text-right shrink-0">
-            <div className="text-xs text-blue-700/70">Manufactured this week</div>
-            <div className="text-2xl font-bold text-blue-900 tabular-nums">
-              {stats.manufacturedThisWeek}
+          <div className="flex items-center gap-6 shrink-0">
+            <div className="text-right">
+              <div className="text-xs text-blue-700/70">Ship-ready concepts</div>
+              <div className="text-2xl font-bold text-green-700 tabular-nums">
+                {stats.shipReady}<span className="text-xs text-blue-700/70">/{stats.liveCount}</span>
+              </div>
+              <div className="text-[10px] text-blue-700/70">avg {stats.avgReadiness}% complete</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-blue-700/70">Manufactured this week</div>
+              <div className="text-2xl font-bold text-blue-900 tabular-nums">
+                {stats.manufacturedThisWeek}
+              </div>
             </div>
           </div>
         </div>

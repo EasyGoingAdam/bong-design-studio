@@ -11,6 +11,7 @@ import { DesignReviewer } from './design-reviewer';
 import { EditImageModal } from './edit-image-modal';
 import { SavePresetModal } from './save-preset-modal';
 import { EtchingScoreBadge } from './etching-score-badge';
+import { ReadinessChecklist } from './readiness-checklist';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -522,6 +523,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           {/* Sidebar */}
           <div className="space-y-4">
             {/* Persona Feedback — auto-loaded, learns from manufactured */}
+            <ReadinessChecklist concept={concept} />
+
             {(concept.coilImageUrl || concept.baseImageUrl) && (
               <DesignReviewer
                 conceptId={concept.id}
