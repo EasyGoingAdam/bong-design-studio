@@ -89,6 +89,11 @@ export async function PATCH(
       productMockupUrl: 'product_mockup_url',
       productMockupAngles: 'product_mockup_angles',
       coilOnly: 'coil_only',
+      source: 'source',
+      externalId: 'external_id',
+      externalUrl: 'external_url',
+      submitterEmail: 'submitter_email',
+      submitterName: 'submitter_name',
       priority: 'priority',
       lifecycleType: 'lifecycle_type',
     };

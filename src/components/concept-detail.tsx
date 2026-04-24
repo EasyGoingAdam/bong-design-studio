@@ -523,6 +523,49 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           {/* Sidebar */}
           <div className="space-y-4">
             {/* Persona Feedback — auto-loaded, learns from manufactured */}
+            {concept.source && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-xs font-semibold text-purple-900">↓ External Submission</span>
+                  <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded-full">
+                    {concept.source}
+                  </span>
+                </div>
+                <div className="space-y-1 text-xs">
+                  {concept.submitterName && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-purple-700">Submitted by</span>
+                      <span className="text-purple-900 font-medium truncate">{concept.submitterName}</span>
+                    </div>
+                  )}
+                  {concept.submitterEmail && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-purple-700">Contact</span>
+                      <a href={`mailto:${concept.submitterEmail}`} className="text-purple-900 hover:underline truncate">
+                        {concept.submitterEmail}
+                      </a>
+                    </div>
+                  )}
+                  {concept.externalId && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-purple-700">External ID</span>
+                      <span className="text-purple-900 font-mono text-[10px] truncate">{concept.externalId}</span>
+                    </div>
+                  )}
+                  {concept.externalUrl && (
+                    <a
+                      href={concept.externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block mt-2 pt-2 border-t border-purple-200 text-purple-700 hover:text-purple-900 font-medium"
+                    >
+                      ↗ Open in source tool
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             <ReadinessChecklist concept={concept} />
 
             {(concept.coilImageUrl || concept.baseImageUrl) && (

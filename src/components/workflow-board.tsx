@@ -33,7 +33,10 @@ function matchesSearch(concept: Concept, q: string): boolean {
     concept.manufacturingNotes.toLowerCase().includes(lower) ||
     (concept.marketingStory || '').toLowerCase().includes(lower) ||
     concept.priority.toLowerCase().includes(lower) ||
-    concept.lifecycleType.toLowerCase().includes(lower)
+    concept.lifecycleType.toLowerCase().includes(lower) ||
+    (concept.source || '').toLowerCase().includes(lower) ||
+    (concept.submitterName || '').toLowerCase().includes(lower) ||
+    (concept.submitterEmail || '').toLowerCase().includes(lower)
   );
 }
 

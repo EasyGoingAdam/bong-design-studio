@@ -35,6 +35,14 @@ export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           <StatusBadge status={concept.status} />
           <PriorityBadge priority={concept.priority} />
+          {concept.source && (
+            <span
+              className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full font-medium"
+              title={`Submitted from ${concept.source}`}
+            >
+              ↓ {concept.source}
+            </span>
+          )}
         </div>
 
         {/* Tags */}
@@ -94,6 +102,14 @@ export function ConceptCardMini({ concept, onClick }: { concept: Concept; onClic
         <div className="flex-1 min-w-0 ml-1">
           <h4 className="text-sm font-medium truncate">{concept.name}</h4>
           <p className="text-xs text-muted truncate">{concept.designer}</p>
+          {concept.source && (
+            <span
+              className="inline-block mt-0.5 text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full font-medium truncate max-w-full"
+              title={`Submitted from ${concept.source}`}
+            >
+              ↓ {concept.source}
+            </span>
+          )}
         </div>
       </div>
 

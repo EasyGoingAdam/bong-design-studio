@@ -153,6 +153,17 @@ export interface Concept {
   /** True when this concept is a coil-only design (no base piece).
    *  Hides base UI throughout the app and skips base generation. */
   coilOnly: boolean;
+  /** Attribution for externally-submitted concepts (via /api/incoming/concept).
+   *  `source` identifies the originating tool (e.g. 'custom-designer-v1');
+   *  `externalId` is that tool's primary key for this design; `externalUrl`
+   *  is a deep-link back to the tool's view of the design. Submitter fields
+   *  capture the end-customer on the other side. Empty strings for
+   *  team-created concepts. */
+  source: string;
+  externalId: string;
+  externalUrl: string;
+  submitterEmail: string;
+  submitterName: string;
   specs: ConceptSpecs;
   coilSpecs: CoilSpecs;
   baseSpecs: BaseSpecs;
