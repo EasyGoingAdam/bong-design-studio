@@ -54,6 +54,11 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
   const [preview, setPreview] = useState('');
   const [lastPrompt, setLastPrompt] = useState('');
 
+  // AI-suggested, image-specific edit chips. Populated on demand via
+  // /api/suggest-edits which analyzes the actual image via GPT-4o-mini vision.
+  const [aiSuggestions, setAiSuggestions] = useState<{ label: string; prompt: string }[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+
   // Close on Escape — standard modal accessibility
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,12 +77,45 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
     });
   };
 
+  // Look up a chip prompt by label across BOTH AI suggestions and the static
+  // QUICK_CHIPS — the selected-chips set holds labels from either source.
+  const allChips = [...aiSuggestions, ...QUICK_CHIPS];
   const composedPrompt = [
-    ...Array.from(selectedChips).map((l) => QUICK_CHIPS.find((c) => c.label === l)?.prompt || ''),
+    ...Array.from(selectedChips).map((l) => allChips.find((c) => c.label === l)?.prompt || ''),
     freeText.trim(),
   ]
     .filter(Boolean)
     .join(' ');
+
+  const fetchSuggestions = async () => {
+    if (!openAIKey) {
+      setError('Set your OpenAI API key in Settings first.');
+      return;
+    }
+    if (imageUrl.startsWith('data:')) {
+      setError('AI suggestions need a saved image — please save the concept first.');
+      return;
+    }
+    setSuggesting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/suggest-edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl, apiKey: openAIKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not fetch suggestions');
+        return;
+      }
+      setAiSuggestions(data.suggestions || []);
+    } catch {
+      setError('Network error — could not fetch suggestions.');
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const canRun = !!composedPrompt && !editing;
 
@@ -185,6 +223,50 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
                 )}
               </div>
             </div>
+          </div>
+
+          {/* AI-suggested edits (vision-based, image-specific) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-xs font-medium flex items-center gap-1.5">
+                <span>✦ AI suggestions</span>
+                <span className="text-[10px] text-muted font-normal">
+                  (GPT-4o analyzes the image and recommends specific fixes)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchSuggestions}
+                disabled={suggesting}
+                className="text-[11px] px-2 py-0.5 border border-border rounded hover:bg-surface-hover text-muted hover:text-foreground disabled:opacity-50 transition-colors"
+              >
+                {suggesting ? 'Analyzing…' : aiSuggestions.length > 0 ? 'Refresh' : 'Get suggestions'}
+              </button>
+            </div>
+            {aiSuggestions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {aiSuggestions.map((c) => (
+                  <button
+                    key={c.label}
+                    type="button"
+                    onClick={() => toggleChip(c.label)}
+                    title={c.prompt}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      selectedChips.has(c.label)
+                        ? 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100'
+                    }`}
+                  >
+                    ✦ {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {aiSuggestions.length === 0 && !suggesting && (
+              <p className="text-[11px] text-muted italic">
+                Click &quot;Get suggestions&quot; to have AI analyze this image and recommend specific fixes.
+              </p>
+            )}
           </div>
 
           {/* Quick-edit chips */}

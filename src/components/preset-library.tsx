@@ -11,6 +11,7 @@ import {
 } from '@/lib/presets';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
+import { GeneratePresetModal } from './generate-preset-modal';
 
 interface Props {
   onOpenConcept: (id: string) => void;
@@ -33,6 +34,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<DesignPreset | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
+  const [showGenerator, setShowGenerator] = useState(false);
 
   const refreshUserPresets = () => setUserPresets(getUserPresets());
 
@@ -122,23 +124,32 @@ export function PresetLibrary({ onOpenConcept }: Props) {
             One-click starting points — click a preset to create a new concept with that style, theme, and instructions already filled in.
           </p>
         </div>
-        <div className="relative w-full max-w-sm">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search presets — style, theme, tag…"
-            className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-accent"
-          />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">⌕</span>
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-sm px-1"
-            >
-              ×
-            </button>
-          )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowGenerator(true)}
+            className="text-sm px-3 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors whitespace-nowrap"
+            title="Describe a style in plain English and AI will create a full preset"
+          >
+            ✦ Generate from description
+          </button>
+          <div className="relative w-full sm:w-80">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search presets — style, theme, tag…"
+              className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-accent"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">⌕</span>
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-sm px-1"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -261,6 +272,13 @@ export function PresetLibrary({ onOpenConcept }: Props) {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {showGenerator && (
+        <GeneratePresetModal
+          onClose={() => setShowGenerator(false)}
+          onGenerated={refreshUserPresets}
+        />
+      )}
     </div>
   );
 }

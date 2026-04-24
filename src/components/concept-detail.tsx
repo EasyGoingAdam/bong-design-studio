@@ -10,6 +10,7 @@ import { ImageDownloadButtons } from './image-download';
 import { DesignReviewer } from './design-reviewer';
 import { EditImageModal } from './edit-image-modal';
 import { SavePresetModal } from './save-preset-modal';
+import { EtchingScoreBadge } from './etching-score-badge';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -314,6 +315,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                     </button>
                   )}
                 </div>
+                {concept.coilImageUrl && (
+                  <div className="mt-1.5">
+                    <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
+                  </div>
+                )}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -361,6 +367,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                     </button>
                   )}
                 </div>
+                {concept.baseImageUrl && (
+                  <div className="mt-1.5">
+                    <EtchingScoreBadge imageUrl={concept.baseImageUrl} label="base" />
+                  </div>
+                )}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
