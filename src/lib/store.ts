@@ -210,6 +210,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       productPhotoUrl: partial.productPhotoUrl || '',
       marketingGraphicUrl: partial.marketingGraphicUrl || '',
       marketingTagline: partial.marketingTagline || '',
+      blankProductUrl: partial.blankProductUrl || '',
+      productMockupUrl: partial.productMockupUrl || '',
+      productMockupAngles: partial.productMockupAngles || [],
       specs: partial.specs || {
         designStyleName: '',
         designTheme: '',

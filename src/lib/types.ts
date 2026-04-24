@@ -144,6 +144,12 @@ export interface Concept {
   marketingGraphicUrl: string;
   /** Optional AI-suggested tagline to overlay on the marketing graphic */
   marketingTagline: string;
+  /** Photo of the blank (un-etched) product — used as the base for AI mockups */
+  blankProductUrl: string;
+  /** Primary AI-rendered mockup showing the design etched onto the product */
+  productMockupUrl: string;
+  /** Additional mockup angles as JSON array [{angle, url}] */
+  productMockupAngles: { angle: string; url: string }[];
   specs: ConceptSpecs;
   coilSpecs: CoilSpecs;
   baseSpecs: BaseSpecs;
