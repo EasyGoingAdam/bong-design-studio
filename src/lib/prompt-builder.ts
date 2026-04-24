@@ -16,8 +16,17 @@ interface PromptInputs {
   baseShape?: 'circle' | 'oval' | 'square' | 'rectangle';
 }
 
-// Core rules — shared, not duplicated
-const CORE = 'Black and white only. No text/words/numbers/labels/measurements in the image. No 3D mockups. Pure artwork filling the entire image edge to edge.';
+// Core engraving rules — reinforced for laser etch production output
+const CORE = [
+  'ENGRAVING MODE — output must be production-ready for laser etching on glass.',
+  'Pure white background. Subject rendered in solid pure black.',
+  'High contrast only. No gray wash, no soft gradients, no halftones, no photographic shading.',
+  'No color. No tints. No chromatic detail.',
+  'Clean line hierarchy. Avoid chaotic micro-details that will not resolve at print size.',
+  'No text, words, numbers, labels, measurements, watermarks, or rulers in the image.',
+  'No 3D product mockups. Render the design itself, not a rendering of it on a bong.',
+  'Artwork must fill the frame edge to edge — no borders, no white padding around the composition.',
+].join(' ');
 
 const PREMIUM_MOTIFS = [
   'Art Deco geometry with bold angular lines and sunburst motifs',
@@ -37,7 +46,7 @@ const PREMIUM_MOTIFS = [
 function getModeDesc(mode: GenerationMode): string {
   switch (mode) {
     case 'concept_art': return 'Detailed B&W concept illustration, creative freedom encouraged.';
-    case 'production_bw': return 'High-contrast B&W optimized for laser etching. Clean lines, production-ready.';
+    case 'production_bw': return 'Production-ready black-and-white design for laser etching on clear glass. White background only. Main subject rendered in solid black. Clean bold line hierarchy. Controlled line density that will read cleanly at actual print size. No muddy midtones. No chaotic fine texture.';
     case 'pattern_wrap': return 'Seamless repeating B&W pattern for cylindrical wrapping.';
     case 'premium_luxury': return `Ornate luxury B&W design: ${PREMIUM_MOTIFS[Math.floor(Math.random() * PREMIUM_MOTIFS.length)]}.`;
     case 'seasonal_drop': return 'Bold B&W seasonal/holiday themed design for laser etching.';

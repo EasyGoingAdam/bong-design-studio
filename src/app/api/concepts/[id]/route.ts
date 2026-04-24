@@ -78,6 +78,7 @@ export async function PATCH(
       manufacturingNotes: 'manufacturing_notes',
       marketingStory: 'marketing_story',
       personaReviews: 'persona_reviews',
+      archivedAt: 'archived_at',
       coilImageUrl: 'coil_image_url',
       baseImageUrl: 'base_image_url',
       combinedImageUrl: 'combined_image_url',

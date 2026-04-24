@@ -32,11 +32,23 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [inverting, setInverting] = useState<string | null>(null);
 
   const handleInvert = async (part: 'coil' | 'base') => {
-    if (!concept) return;
+    if (!concept) {
+      console.warn('[invert] no concept loaded');
+      return;
+    }
     const url = part === 'coil' ? concept.coilImageUrl : concept.baseImageUrl;
-    if (!url) return;
+    if (!url) {
+      toast(`No ${part} image to invert`, 'error');
+      return;
+    }
     setInverting(part);
+    console.log('[invert] starting', { part, url });
     try {
+      // Sanitize filename (avoid special chars that could break storage paths)
+      const safeFilename = (concept.name || 'concept')
+        .replace(/[^a-zA-Z0-9\-_]/g, '-')
+        .slice(0, 60);
+
       // Server-side pixel-perfect invert using sharp (lossless PNG, preserves dimensions)
       const res = await fetch('/api/invert-image', {
         method: 'POST',
@@ -44,20 +56,34 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         body: JSON.stringify({
           imageUrl: url,
           folder: 'inverted',
-          filename: `${concept.name}-${part}`,
+          filename: `${safeFilename}-${part}`,
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || 'Invert failed');
+
+      let data: { url?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Server returned invalid response (status ${res.status})`);
       }
+
+      if (!res.ok) {
+        throw new Error(data.error || `Invert endpoint returned ${res.status}`);
+      }
+      if (!data.url) {
+        throw new Error('Server succeeded but returned no image URL');
+      }
+
+      console.log('[invert] success', { newUrl: data.url });
       updateConcept(
         concept.id,
         part === 'coil' ? { coilImageUrl: data.url } : { baseImageUrl: data.url }
       );
       toast(`${part === 'coil' ? 'Coil' : 'Base'} colors inverted`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Failed to invert image', 'error');
+      const message = err instanceof Error ? err.message : 'Failed to invert image';
+      console.error('[invert] failed', err);
+      toast(`Invert failed: ${message}`, 'error');
     } finally {
       setInverting(null);
     }

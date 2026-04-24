@@ -251,9 +251,26 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   updateConcept: async (id, updates) => {
+    // Auto-stamp archivedAt whenever a concept transitions into 'archived'
+    // so we have a real archive date instead of relying on updatedAt.
+    const current = get().concepts.find((c) => c.id === id);
+    const transitioningToArchived =
+      updates.status === 'archived' && current?.status !== 'archived';
+    const transitioningOutOfArchived =
+      updates.status && updates.status !== 'archived' && current?.status === 'archived';
+
+    let finalUpdates = { ...updates };
+    if (transitioningToArchived && !finalUpdates.archivedAt) {
+      finalUpdates.archivedAt = new Date().toISOString();
+    }
+    if (transitioningOutOfArchived) {
+      // Clear the archive timestamp when restoring so the next archive stamps fresh
+      finalUpdates = { ...finalUpdates, archivedAt: undefined } as typeof finalUpdates;
+    }
+
     set((state) => ({
       concepts: state.concepts.map((c) =>
-        c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+        c.id === id ? { ...c, ...finalUpdates, updatedAt: new Date().toISOString() } : c
       ),
     }));
 
@@ -262,7 +279,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       await fetch(`/api/concepts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(finalUpdates),
       });
     } catch (err) {
       console.error('Failed to update concept:', err);

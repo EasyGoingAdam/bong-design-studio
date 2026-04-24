@@ -134,6 +134,7 @@ export interface Concept {
   manufacturingNotes: string;
   marketingStory: string;
   personaReviews?: PersonaReviewsCache;
+  archivedAt?: string;
   coilImageUrl: string;
   baseImageUrl: string;
   combinedImageUrl: string;

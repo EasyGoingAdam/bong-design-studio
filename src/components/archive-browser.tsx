@@ -75,10 +75,10 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
     const sorted = [...result];
     switch (sortBy) {
       case 'archived_desc':
-        sorted.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        sorted.sort((a, b) => new Date(b.archivedAt || b.updatedAt).getTime() - new Date(a.archivedAt || a.updatedAt).getTime());
         break;
       case 'archived_asc':
-        sorted.sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+        sorted.sort((a, b) => new Date(a.archivedAt || a.updatedAt).getTime() - new Date(b.archivedAt || b.updatedAt).getTime());
         break;
       case 'name_asc':
         sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -151,7 +151,7 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
   };
 
   const exportCSV = () => {
-    const headers = ['Name', 'Collection', 'Designer', 'Description', 'Tags', 'Priority', 'Lifecycle', 'Archived At'];
+    const headers = ['Name', 'Collection', 'Designer', 'Description', 'Tags', 'Priority', 'Lifecycle', 'Created', 'Archived At'];
     const rows = filtered.map((c) => [
       c.name,
       c.collection,
@@ -160,7 +160,8 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
       c.tags.join('; '),
       c.priority,
       c.lifecycleType,
-      formatDate(c.updatedAt),
+      formatDate(c.createdAt),
+      formatDate(c.archivedAt || c.updatedAt),
     ]);
     const csv = [headers, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
@@ -412,8 +413,13 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
                     {c.tags.slice(0, 4).map((t) => <Tag key={t} label={t} />)}
                     {c.tags.length > 4 && <span className="text-xs text-muted">+{c.tags.length - 4}</span>}
                   </div>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted">
-                    <span>Archived {formatDate(c.updatedAt)}</span>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted flex-wrap">
+                    <span title={new Date(c.archivedAt || c.updatedAt).toLocaleString()}>
+                      📦 Archived {formatDate(c.archivedAt || c.updatedAt)}
+                    </span>
+                    <span title={new Date(c.createdAt).toLocaleString()}>
+                      Created {formatDate(c.createdAt)}
+                    </span>
                     <span>{c.versions.length} version{c.versions.length !== 1 ? 's' : ''}</span>
                     <span>{c.comments.length} comment{c.comments.length !== 1 ? 's' : ''}</span>
                   </div>
@@ -487,7 +493,7 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
                   <h3 className="text-sm font-semibold truncate">{c.name}</h3>
                 </button>
                 <p className="text-[10px] text-muted truncate mt-0.5">{c.collection || 'No collection'}</p>
-                <p className="text-[10px] text-muted mt-0.5">Archived {formatDate(c.updatedAt)}</p>
+                <p className="text-[10px] text-muted mt-0.5">Archived {formatDate(c.archivedAt || c.updatedAt)}</p>
                 <div className="flex gap-1 mt-2">
                   <button
                     onClick={() => handleRestore(c.id)}

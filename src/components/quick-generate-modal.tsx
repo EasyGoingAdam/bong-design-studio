@@ -43,6 +43,15 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
 
+  // Dimensions — pre-fill from existing specs where possible, default to Freeze Pipe standards
+  const [dimUnit, setDimUnit] = useState<'mm' | 'in'>('mm');
+  const [overallWidth, setOverallWidth] = useState('');
+  const [overallHeight, setOverallHeight] = useState('');
+  const [coilWidth, setCoilWidth] = useState(concept.coilSpecs.dimensions?.split(/\s*x\s*/)?.[0]?.replace(/[^\d.]/g, '') || '120');
+  const [coilHeight, setCoilHeight] = useState(concept.coilSpecs.dimensions?.split(/\s*x\s*/)?.[1]?.replace(/[^\d.]/g, '') || '45');
+  const [baseWidth, setBaseWidth] = useState(concept.baseSpecs.dimensions?.split(/\s*x\s*/)?.[0]?.replace(/[^\d.]/g, '') || '65');
+  const [baseHeight, setBaseHeight] = useState(concept.baseSpecs.dimensions?.split(/\s*x\s*/)?.[1]?.replace(/[^\d.]/g, '') || '65');
+
   const [generating, setGenerating] = useState(false);
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
@@ -51,21 +60,36 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
   const hasExistingImages = !!(concept.coilImageUrl || concept.baseImageUrl);
 
+  // Append dimension context to the per-part instructions so the prompt is
+  // dimension-aware without needing a separate prompt builder field.
+  const coilDimNote =
+    coilWidth && coilHeight
+      ? `Target print area ${coilWidth}x${coilHeight}${dimUnit} — design must read cleanly at this size.`
+      : '';
+  const baseDimNote =
+    baseWidth && baseHeight
+      ? `Target print area ${baseWidth}x${baseHeight}${dimUnit} — design must read cleanly at this size.`
+      : '';
+  const overallDimNote =
+    overallWidth && overallHeight
+      ? `Overall product dimensions: ${overallWidth}x${overallHeight}${dimUnit}.`
+      : '';
+
   const inputs = useMemo(() => ({
     title: concept.name,
     stylePrompt: concept.specs.designStyleName || concept.tags.join(', '),
     themePrompt: concept.specs.designTheme || concept.description,
-    references: extraNotes,
+    references: [overallDimNote, extraNotes].filter(Boolean).join(' '),
     constraints: concept.specs.riskNotes || '',
     complexityLevel: complexity,
-    coilInstructions,
-    baseInstructions,
+    coilInstructions: [coilInstructions, coilDimNote].filter(Boolean).join(' '),
+    baseInstructions: [baseInstructions, baseDimNote].filter(Boolean).join(' '),
     relationship,
     mode,
     patternDensity: concept.specs.patternDensity || 'medium',
     contrast,
     baseShape,
-  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape]);
+  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilDimNote, baseDimNote, overallDimNote]);
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [inputs]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
@@ -282,6 +306,55 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 Wide
               </button>
             </div>
+          </div>
+
+          {/* Dimensions */}
+          <div className="bg-background/50 border border-border rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold">Design Dimensions</span>
+              <div className="flex items-center gap-1">
+                {(['mm', 'in'] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setDimUnit(u)}
+                    className={`text-[10px] px-2 py-0.5 rounded transition-colors ${dimUnit === u ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="text-[10px] text-muted mb-1">Overall</div>
+                <div className="flex gap-1">
+                  <input type="number" step="0.1" value={overallWidth} onChange={(e) => setOverallWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                  <span className="text-[10px] text-muted self-center">×</span>
+                  <input type="number" step="0.1" value={overallHeight} onChange={(e) => setOverallHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-muted mb-1">Coil</div>
+                <div className="flex gap-1">
+                  <input type="number" step="0.1" value={coilWidth} onChange={(e) => setCoilWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                  <span className="text-[10px] text-muted self-center">×</span>
+                  <input type="number" step="0.1" value={coilHeight} onChange={(e) => setCoilHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-muted mb-1">Base</div>
+                <div className="flex gap-1">
+                  <input type="number" step="0.1" value={baseWidth} onChange={(e) => setBaseWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                  <span className="text-[10px] text-muted self-center">×</span>
+                  <input type="number" step="0.1" value={baseHeight} onChange={(e) => setBaseHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted mt-2">
+              Dimensions are passed into the prompt so the AI composes for the actual print area.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
