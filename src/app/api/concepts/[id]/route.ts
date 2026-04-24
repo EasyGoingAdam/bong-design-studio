@@ -82,6 +82,9 @@ export async function PATCH(
       coilImageUrl: 'coil_image_url',
       baseImageUrl: 'base_image_url',
       combinedImageUrl: 'combined_image_url',
+      productPhotoUrl: 'product_photo_url',
+      marketingGraphicUrl: 'marketing_graphic_url',
+      marketingTagline: 'marketing_tagline',
       priority: 'priority',
       lifecycleType: 'lifecycle_type',
     };

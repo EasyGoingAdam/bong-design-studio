@@ -138,6 +138,12 @@ export interface Concept {
   coilImageUrl: string;
   baseImageUrl: string;
   combinedImageUrl: string;
+  /** Photo of the finished, laser-etched product (uploaded by the team) */
+  productPhotoUrl: string;
+  /** Composited marketing graphic: product photo + name + coil-design overlay */
+  marketingGraphicUrl: string;
+  /** Optional AI-suggested tagline to overlay on the marketing graphic */
+  marketingTagline: string;
   specs: ConceptSpecs;
   coilSpecs: CoilSpecs;
   baseSpecs: BaseSpecs;

@@ -207,6 +207,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       coilImageUrl: partial.coilImageUrl || '',
       baseImageUrl: partial.baseImageUrl || '',
       combinedImageUrl: partial.combinedImageUrl || '',
+      productPhotoUrl: partial.productPhotoUrl || '',
+      marketingGraphicUrl: partial.marketingGraphicUrl || '',
+      marketingTagline: partial.marketingTagline || '',
       specs: partial.specs || {
         designStyleName: '',
         designTheme: '',

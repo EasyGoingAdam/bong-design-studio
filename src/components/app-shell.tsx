@@ -15,15 +15,17 @@ import { LoginPage } from './login-page';
 import { ArchiveBrowser } from './archive-browser';
 import { PresetLibrary } from './preset-library';
 import { BenchmarkDashboard } from './benchmark-dashboard';
+import { MarketingStudio } from './marketing-studio';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'benchmark' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'benchmark' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
   { id: 'presets', label: 'Presets', icon: '★' },
+  { id: 'marketing', label: 'Marketing', icon: '◈' },
   { id: 'specs', label: 'Specs DB', icon: '⚙' },
   { id: 'archive', label: 'Archive', icon: '📦' },
 ];
@@ -235,6 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
         {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
         {initialized && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'marketing' && <MarketingStudio />}
         {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
         {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
