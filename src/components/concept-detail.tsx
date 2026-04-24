@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
@@ -15,7 +15,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
-  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, openAIKey } = useAppStore();
+  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, openAIKey } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing'>('overview');
   const [commentText, setCommentText] = useState('');
@@ -821,7 +821,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         <EditImageModal
           imageUrl={editingImage.url}
           label={editingImage.part}
+          conceptId={concept.id}
           onEdited={({ url }) => {
+            // Snapshot the pre-edit images as a new version so edit history
+            // is preserved — users should always be able to roll back.
+            addVersion(concept.id, {
+              coilImageUrl: concept.coilImageUrl,
+              baseImageUrl: concept.baseImageUrl,
+              combinedImageUrl: concept.combinedImageUrl,
+              notes: `Snapshot before editing ${editingImage.part}`,
+            });
             updateConcept(
               concept.id,
               editingImage.part === 'coil' ? { coilImageUrl: url } : { baseImageUrl: url }

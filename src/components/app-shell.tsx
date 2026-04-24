@@ -34,6 +34,9 @@ const SECONDARY_TABS: { id: Tab; label: string; icon: string }[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState<Tab>('workflow');
+  // Remember which tab the user came from so "back" returns them there
+  // instead of always snapping to Workflow.
+  const [previousTab, setPreviousTab] = useState<Tab>('workflow');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -73,13 +76,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const openConcept = (id: string) => {
+    // Snapshot where we were so goBack can return there
+    if (activeTab !== 'detail') setPreviousTab(activeTab);
     setSelectedConceptId(id);
     setActiveTab('detail');
   };
 
   const goBack = () => {
     setSelectedConceptId(null);
-    setActiveTab('workflow');
+    setActiveTab(previousTab);
   };
 
   // Show nothing while checking auth

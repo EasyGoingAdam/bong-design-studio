@@ -237,7 +237,7 @@ export function WorkflowBoard({
                       <h3 className="text-sm font-semibold truncate">{STATUS_LABELS[col]}</h3>
                     </div>
                     <span className="text-xs text-muted bg-border/50 px-1.5 py-0.5 rounded-full shrink-0">
-                      {isSearchable && hasActiveSearch ? `${colConcepts.length}/${total}` : colConcepts.length}
+                      {hasActiveSearch ? `${colConcepts.length}/${total}` : colConcepts.length}
                     </span>
                   </div>
 

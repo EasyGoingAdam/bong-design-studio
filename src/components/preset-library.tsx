@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import {
   DesignPreset,
@@ -25,15 +25,22 @@ export function PresetLibrary({ onOpenConcept }: Props) {
   const { addConcept } = useAppStore();
   const { toast } = useToast();
 
-  // Render key — bumped to force re-read of localStorage after saves/deletes
-  const [renderKey, setRenderKey] = useState(0);
+  // Read user presets in an effect to avoid SSR/CSR hydration mismatch —
+  // localStorage is client-only, so the first render must match the server's
+  // empty read, then we populate after mount.
+  const [userPresets, setUserPresets] = useState<DesignPreset[]>([]);
   const [category, setCategory] = useState<'all' | DesignPreset['category']>('all');
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<DesignPreset | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
 
+  const refreshUserPresets = () => setUserPresets(getUserPresets());
+
+  useEffect(() => {
+    refreshUserPresets();
+  }, []);
+
   const curated = useMemo(() => getCuratedPresets(), []);
-  const userPresets = useMemo(() => getUserPresets(), [renderKey]);
 
   const all = useMemo(() => [...curated, ...userPresets], [curated, userPresets]);
 
@@ -103,7 +110,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
     deleteUserPreset(deleteTarget.id);
     toast(`Deleted preset "${deleteTarget.name}"`, 'info');
     setDeleteTarget(null);
-    setRenderKey((k) => k + 1);
+    refreshUserPresets();
   };
 
   return (

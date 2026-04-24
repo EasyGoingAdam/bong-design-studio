@@ -43,7 +43,7 @@ export function tuneGeminiPrompt(basePrompt: string, complexityLevel: number = 3
   let complexityNote: string;
   if (complexityLevel <= 2) {
     complexityNote =
-      'Keep detail MINIMAL. Use bold bold strokes, wide negative space, and under 8 major visual elements total. Err on the side of too simple.';
+      'Keep detail MINIMAL. Use bold strokes, wide negative space, and under 8 major visual elements total. Err on the side of too simple.';
   } else if (complexityLevel >= 4) {
     complexityNote =
       'Rich detail is OK, but every line must be cleanly separable — no chaotic cross-hatch that blurs into gray. Thicken all primary strokes.';
@@ -83,9 +83,10 @@ const PROVIDER_CONFIG = {
   gemini: {
     model: 'gemini-2.5-flash-image',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',
-    validAspectRatios: ['1:1', '3:2', '4:3', '16:9'] as const,
+    // gemini-2.5-flash-image supports these aspect ratios in imageConfig
+    validAspectRatios: ['1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16'] as const,
     defaultAspectRatio: '1:1',
-    // Size-to-aspect-ratio mapping
+    // Size-to-aspect-ratio mapping — every value MUST be in validAspectRatios above
     sizeToAspectRatio: {
       '1024x1024': '1:1',
       '1536x1024': '3:2',
@@ -167,16 +168,26 @@ export function getOpenAIRequestBody(params: ImageGenParams): Record<string, unk
  * Get Gemini-specific request body
  */
 export function getGeminiRequestBody(params: ImageGenParams) {
-  const aspectRatio = PROVIDER_CONFIG.gemini.sizeToAspectRatio[params.size] || PROVIDER_CONFIG.gemini.defaultAspectRatio;
-  // Apply Gemini-specific tuning to counter soft-edge / gray-wash tendencies.
-  const tunedPrompt = tuneGeminiPrompt(params.prompt, params.complexityLevel);
+  const aspectRatio =
+    PROVIDER_CONFIG.gemini.sizeToAspectRatio[params.size] ||
+    PROVIDER_CONFIG.gemini.defaultAspectRatio;
+
+  // Apply Gemini-specific tuning to counter soft-edge / gray-wash tendencies,
+  // and encode aspect ratio directly in the prompt text as a belt-and-braces
+  // fallback in case `imageConfig` is rejected.
+  const tunedPrompt = [
+    tuneGeminiPrompt(params.prompt, params.complexityLevel),
+    `Output aspect ratio: ${aspectRatio}.`,
+  ].join(' ');
+
+  // IMPORTANT: For gemini-2.5-flash-image, `generationConfig` must ONLY contain
+  // `responseModalities` and `imageConfig`. Adding `temperature`, `topK`, or
+  // other text-only knobs causes a 400 "Unknown field" from the API.
   return {
     contents: [{ parts: [{ text: tunedPrompt }] }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
       imageConfig: { aspectRatio },
-      // Lower temperature → more deterministic, cleaner laser-ready output
-      temperature: 0.4,
     },
   };
 }

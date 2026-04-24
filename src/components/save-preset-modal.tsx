@@ -23,6 +23,9 @@ export function SavePresetModal({ concept, onClose }: Props) {
   const [saving, setSaving] = useState(false);
 
   const previewUrl = concept.combinedImageUrl || concept.coilImageUrl || concept.baseImageUrl || '';
+  // Only offer the thumbnail when the image is a real http(s) URL — data URIs
+  // are too large to live in localStorage and will be stripped by saveUserPreset anyway.
+  const canUsePreview = previewUrl && !previewUrl.startsWith('data:');
 
   const save = () => {
     if (!name.trim()) {
@@ -47,12 +50,14 @@ export function SavePresetModal({ concept, onClose }: Props) {
         intendedAudience: concept.intendedAudience || '',
         priority: concept.priority,
         lifecycleType: concept.lifecycleType,
-        previewImageUrl: includePreviewImage && previewUrl ? previewUrl : undefined,
+        previewImageUrl: includePreviewImage && canUsePreview ? previewUrl : undefined,
       });
       toast(`Saved "${name}" to your preset library`, 'success');
       onClose();
-    } catch {
-      toast('Failed to save preset', 'error');
+    } catch (err) {
+      // saveUserPreset throws human-readable messages for quota issues
+      const msg = err instanceof Error ? err.message : 'Failed to save preset';
+      toast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -118,7 +123,7 @@ export function SavePresetModal({ concept, onClose }: Props) {
             </div>
           </div>
 
-          {previewUrl && (
+          {canUsePreview && (
             <label className="flex items-center gap-2 text-xs">
               <input
                 type="checkbox"
@@ -128,6 +133,11 @@ export function SavePresetModal({ concept, onClose }: Props) {
               />
               Include concept image as thumbnail
             </label>
+          )}
+          {previewUrl && !canUsePreview && (
+            <p className="text-[11px] text-muted">
+              Thumbnail unavailable — the concept image hasn&apos;t been uploaded to cloud storage yet, so it&apos;s too large to save locally.
+            </p>
           )}
 
           <div className="pt-2 border-t border-border flex gap-2">

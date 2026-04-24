@@ -43,17 +43,48 @@ export async function POST(request: NextRequest) {
       ? quality
       : PROVIDER_CONFIG.openai.defaultQuality;
 
-    // Fetch the source image bytes
+    // Fetch the source image bytes AND detect its MIME type.
+    // gpt-image-1's /v1/images/edits validates the uploaded file against its
+    // declared MIME type, so sending PNG bytes labeled as PNG but actually
+    // JPEG will 400. Detect from the data-URI prefix or Content-Type header.
     let sourceBuffer: Buffer;
+    let sourceMime: string = 'image/png';
     if (imageUrl.startsWith('data:')) {
-      const base64 = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+      const mimeMatch = imageUrl.match(/^data:([^;]+);base64,/);
+      if (mimeMatch) sourceMime = mimeMatch[1];
+      const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
       sourceBuffer = Buffer.from(base64, 'base64');
     } else {
       const res = await fetch(imageUrl);
       if (!res.ok) {
         return NextResponse.json({ error: `Could not fetch source image: ${res.status}` }, { status: 500 });
       }
+      const ct = res.headers.get('content-type');
+      if (ct && ct.startsWith('image/')) sourceMime = ct.split(';')[0].trim();
       sourceBuffer = Buffer.from(await res.arrayBuffer());
+    }
+
+    // gpt-image-1 only accepts png/webp/jpeg source images — normalize anything
+    // else to PNG via sharp rather than risk a 400 from the API.
+    if (!['image/png', 'image/webp', 'image/jpeg'].includes(sourceMime)) {
+      try {
+        const sharp = (await import('sharp')).default;
+        sourceBuffer = await sharp(sourceBuffer).png().toBuffer();
+        sourceMime = 'image/png';
+      } catch (err) {
+        console.error('Source image conversion failed:', err);
+      }
+    }
+
+    // Size guard: OpenAI rejects >20MB. Downscale aggressively if we're close.
+    if (sourceBuffer.length > 15 * 1024 * 1024) {
+      try {
+        const sharp = (await import('sharp')).default;
+        sourceBuffer = await sharp(sourceBuffer).resize(2048, 2048, { fit: 'inside' }).png().toBuffer();
+        sourceMime = 'image/png';
+      } catch (err) {
+        console.error('Source image downscale failed:', err);
+      }
     }
 
     // Build the edit prompt with engraving constraints + preservation language
@@ -85,9 +116,11 @@ export async function POST(request: NextRequest) {
     formData.append('size', validSize);
     formData.append('quality', validQuality);
 
-    // Wrap the source buffer as a File so the multipart boundary is set correctly
-    const blob = new Blob([new Uint8Array(sourceBuffer)], { type: 'image/png' });
-    formData.append('image', blob, 'source.png');
+    // Wrap the source buffer as a File with the detected MIME type so gpt-image-1
+    // doesn't reject it for a type mismatch.
+    const ext = sourceMime === 'image/jpeg' ? 'jpg' : sourceMime === 'image/webp' ? 'webp' : 'png';
+    const blob = new Blob([new Uint8Array(sourceBuffer)], { type: sourceMime });
+    formData.append('image', blob, `source.${ext}`);
 
     const response = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST',

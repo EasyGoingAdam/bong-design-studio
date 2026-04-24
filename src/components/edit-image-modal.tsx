@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 
@@ -13,6 +13,9 @@ interface Props {
   imageUrl: string;
   /** What this image represents — "coil" or "base" — used for toast copy only */
   label: string;
+  /** Concept id — used to build a unique storage filename so edits across
+   *  different concepts don't collide at the same storage path. */
+  conceptId: string;
   /** Callback fired when an edit produces a new image URL. Parent decides what to do with it. */
   onEdited: (result: EditImageResult) => void;
   /** Close the modal */
@@ -36,7 +39,7 @@ const QUICK_CHIPS: { label: string; prompt: string }[] = [
 
 type Strength = 'subtle' | 'medium' | 'major';
 
-export function EditImageModal({ imageUrl, label, onEdited, onClose }: Props) {
+export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }: Props) {
   const { openAIKey } = useAppStore();
   const { toast } = useToast();
 
@@ -50,6 +53,15 @@ export function EditImageModal({ imageUrl, label, onEdited, onClose }: Props) {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState('');
   const [lastPrompt, setLastPrompt] = useState('');
+
+  // Close on Escape — standard modal accessibility
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const toggleChip = (chipLabel: string) => {
     setSelectedChips((prev) => {
@@ -94,7 +106,8 @@ export function EditImageModal({ imageUrl, label, onEdited, onClose }: Props) {
           preserveComposition,
           preserveSubject,
           folder: 'edited',
-          filename: label,
+          // Unique filename per concept + part + edit → no storage collisions
+          filename: `${conceptId}-${label}-${Date.now()}`,
         }),
       });
       const data = await res.json();
@@ -122,6 +135,9 @@ export function EditImageModal({ imageUrl, label, onEdited, onClose }: Props) {
     <div
       className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-image-title"
     >
       <div
         className="bg-surface border border-border rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
@@ -129,7 +145,7 @@ export function EditImageModal({ imageUrl, label, onEdited, onClose }: Props) {
       >
         <div className="sticky top-0 bg-surface border-b border-border px-5 py-3 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-base font-semibold">Edit {label.charAt(0).toUpperCase() + label.slice(1)} Image</h2>
+            <h2 id="edit-image-title" className="text-base font-semibold">Edit {label.charAt(0).toUpperCase() + label.slice(1)} Image</h2>
             <p className="text-xs text-muted mt-0.5">
               Make small targeted changes without regenerating from scratch.
             </p>

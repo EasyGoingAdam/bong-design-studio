@@ -31,31 +31,54 @@ async function generateWithOpenAI(params: ReturnType<typeof validateParams>): Pr
 }
 
 async function generateWithGemini(params: ReturnType<typeof validateParams>): Promise<string> {
+  const body = getGeminiRequestBody(params);
   const response = await fetch(getEndpoint('gemini'), {
     method: 'POST',
     headers: getAuthHeaders(params),
-    body: JSON.stringify(getGeminiRequestBody(params)),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `Gemini API error: ${response.status}`);
+    // Try to surface the full Google error — their messages are specific
+    // (e.g. "Unknown field: generationConfig.temperature") and we need them
+    // visible to debug future schema changes.
+    const raw = await response.text().catch(() => '');
+    let message = `Gemini API error: ${response.status}`;
+    try {
+      const parsed = JSON.parse(raw);
+      message = parsed?.error?.message || message;
+    } catch {
+      if (raw) message = `${message} — ${raw.slice(0, 500)}`;
+    }
+    console.error('[Gemini] request failed', { status: response.status, body, raw: raw.slice(0, 1000) });
+    throw new Error(message);
   }
 
   const data = await response.json();
+
+  // Gemini can return a candidate with finishReason=SAFETY and no parts at all
   const candidate = data.candidates?.[0];
-  if (!candidate?.content?.parts) {
+  if (!candidate) {
+    throw new Error('Gemini returned no candidates — likely blocked by safety filter.');
+  }
+  if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(
+      `Gemini refused to generate (${candidate.finishReason}). Try softer wording or a different prompt.`
+    );
+  }
+  const parts = candidate.content?.parts;
+  if (!parts || parts.length === 0) {
     throw new Error('No content in Gemini response');
   }
 
-  for (const part of candidate.content.parts) {
+  for (const part of parts) {
     if (part.inlineData?.data) {
       const mimeType = part.inlineData.mimeType || 'image/png';
       return `data:${mimeType};base64,${part.inlineData.data}`;
     }
   }
 
-  throw new Error('No image data in Gemini response');
+  throw new Error('No image data in Gemini response (only text was returned).');
 }
 
 export async function POST(request: NextRequest) {

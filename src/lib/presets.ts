@@ -234,7 +234,12 @@ function writeUserPresets(presets: DesignPreset[]) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(presets));
   } catch (err) {
+    // Propagate quota-exceeded errors so UI can show a real message rather
+    // than silently dropping the save.
     console.error('Failed to save user presets:', err);
+    throw new Error(
+      'Could not save preset — browser storage is full. Try deleting old presets or remove the preview image.'
+    );
   }
 }
 
@@ -251,14 +256,32 @@ export function getUserPresets(): DesignPreset[] {
 }
 
 export function saveUserPreset(preset: Omit<DesignPreset, 'id' | 'curated' | 'createdAt'>): DesignPreset {
+  // Reject data-URI preview images — they blow localStorage's ~5 MB quota
+  // after only a handful of presets. Only accept http(s) thumbnails (i.e.
+  // images already uploaded to Supabase Storage).
+  let previewImageUrl = preset.previewImageUrl;
+  if (previewImageUrl && previewImageUrl.startsWith('data:')) {
+    console.warn('Stripped data-URI preview image from preset — too large for localStorage.');
+    previewImageUrl = undefined;
+  }
+
   const full: DesignPreset = {
     ...preset,
+    previewImageUrl,
     id: `preset-user-${Date.now()}`,
     curated: false,
     createdAt: new Date().toISOString(),
   };
+
   const existing = readUserPresets();
-  writeUserPresets([full, ...existing]);
+
+  // Dedupe by name (case-insensitive) — replace existing user preset with the
+  // same name rather than pile up duplicates.
+  const withoutDuplicate = existing.filter(
+    (p) => p.name.trim().toLowerCase() !== full.name.trim().toLowerCase()
+  );
+
+  writeUserPresets([full, ...withoutDuplicate]);
   return full;
 }
 
