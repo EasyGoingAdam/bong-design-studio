@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callOpenAIChat, parseJsonResponse, openAIErrorResponse } from '@/lib/openai';
 
 /**
  * Specialized vision review for AI-rendered PRODUCT MOCKUPS.
@@ -44,56 +45,28 @@ Keep autoFixInstruction under 30 words. Imperative voice.`;
 export async function POST(req: NextRequest) {
   try {
     const { mockupUrl, apiKey } = await req.json();
-    if (!mockupUrl) {
-      return NextResponse.json({ error: 'mockupUrl required' }, { status: 400 });
-    }
-    if (!apiKey) {
-      return NextResponse.json({ error: 'OpenAI API key required' }, { status: 400 });
-    }
+    if (!mockupUrl) return NextResponse.json({ error: 'mockupUrl required' }, { status: 400 });
     if (mockupUrl.startsWith('data:')) {
-      return NextResponse.json(
-        { error: 'Mockup must be a public URL (save it first).' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Mockup must be a public URL (save it first).' }, { status: 400 });
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Review this product mockup. Be strict.' },
-              { type: 'image_url', image_url: { url: mockupUrl } },
-            ],
-          },
-        ],
-        max_tokens: 500,
-      }),
+    const raw = await callOpenAIChat({
+      apiKey,
+      jsonMode: true,
+      maxTokens: 500,
+      messages: [
+        { role: 'system', content: SYSTEM },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Review this product mockup. Be strict.' },
+            { type: 'image_url', image_url: { url: mockupUrl } },
+          ],
+        },
+      ],
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err?.error?.message || `OpenAI error ${res.status}` },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content || '{}';
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: 'Model returned invalid JSON' }, { status: 500 });
-    }
-
+    const parsed = parseJsonResponse<Record<string, unknown>>(raw);
     const photorealismScore = Math.max(1, Math.min(10, Math.round(Number(parsed.photorealismScore) || 5)));
     const applicationScore = Math.max(1, Math.min(10, Math.round(Number(parsed.applicationScore) || 5)));
     const issues = Array.isArray(parsed.issues)
@@ -104,18 +77,10 @@ export async function POST(req: NextRequest) {
       : [];
     const autoFixInstruction = typeof parsed.autoFixInstruction === 'string' ? parsed.autoFixInstruction : '';
 
-    return NextResponse.json({
-      photorealismScore,
-      applicationScore,
-      issues,
-      strengths,
-      autoFixInstruction,
-    });
+    return NextResponse.json({ photorealismScore, applicationScore, issues, strengths, autoFixInstruction });
   } catch (err) {
+    const { body, status } = openAIErrorResponse(err);
     console.error('Review mockup error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Review failed' },
-      { status: 500 }
-    );
+    return NextResponse.json(body, { status });
   }
 }

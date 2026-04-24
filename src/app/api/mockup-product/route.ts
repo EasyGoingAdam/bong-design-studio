@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
+import { callOpenAIImageEdit, openAIErrorResponse } from '@/lib/openai';
+import { PROVIDER_CONFIG } from '@/lib/ai-providers';
 
 /**
  * Render a photorealistic mockup of a blank product with the etched design
@@ -169,7 +171,7 @@ export async function POST(request: NextRequest) {
     // Build multipart form-data. gpt-image-1's edit endpoint supports an
     // image[] array so multiple sources are composed by the model.
     const formData = new FormData();
-    formData.append('model', 'gpt-image-1');
+    formData.append('model', PROVIDER_CONFIG.openai.model);
     formData.append('prompt', promptParts);
     formData.append('n', '1');
     formData.append('size', safeSize);
@@ -182,38 +184,18 @@ export async function POST(request: NextRequest) {
       formData.append('image[]', new Blob([new Uint8Array(baseBuf)], { type: 'image/png' }), 'base.png');
     }
 
-    const response = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const err = await response.text().catch(() => '');
-      let message = `OpenAI mockup edit error: ${response.status}`;
-      try {
-        const parsed = JSON.parse(err);
-        message = parsed?.error?.message || message;
-      } catch {
-        if (err) message = `${message} — ${err.slice(0, 400)}`;
-      }
-      console.error('[mockup] OpenAI rejected', { status: response.status, err: err.slice(0, 500) });
-      return NextResponse.json({ error: message }, { status: response.status });
-    }
-
-    const data = await response.json();
-    const imageData = data.data?.[0];
-    if (!imageData?.b64_json && !imageData?.url) {
-      return NextResponse.json({ error: 'No image data in OpenAI response' }, { status: 500 });
-    }
+    // Longer timeout — mockups run at quality=high and take 30–120s
+    const imageData = await callOpenAIImageEdit(formData, apiKey, 180_000);
 
     let base64: string;
     if (imageData.b64_json) {
       base64 = `data:image/png;base64,${imageData.b64_json}`;
-    } else {
+    } else if (imageData.url) {
       const imgRes = await fetch(imageData.url);
       const imgBuffer = await imgRes.arrayBuffer();
       base64 = `data:image/png;base64,${Buffer.from(imgBuffer).toString('base64')}`;
+    } else {
+      return NextResponse.json({ error: 'OpenAI returned no image payload' }, { status: 500 });
     }
 
     // Upload to Supabase
@@ -228,10 +210,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url, prompt: promptParts, angle, etchStyle });
   } catch (err) {
+    const { body, status } = openAIErrorResponse(err);
     console.error('Mockup render error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Mockup render failed' },
-      { status: 500 }
-    );
+    return NextResponse.json(body, { status });
   }
 }

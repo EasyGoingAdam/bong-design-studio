@@ -47,7 +47,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       return;
     }
     setInverting(part);
-    console.log('[invert] starting', { part, url: url.slice(0, 80) });
     try {
       // Sanitize filename (avoid special chars that could break storage paths)
       const safeName = (concept.name || 'concept')
@@ -84,8 +83,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       if (!data.url) {
         throw new Error('Server succeeded but returned no image URL');
       }
-
-      console.log('[invert] success', { newUrl: data.url });
 
       // Snapshot the pre-invert image as a concept version so users can undo.
       addVersion(concept.id, {
@@ -316,9 +313,27 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   )}
                 </div>
                 {concept.coilImageUrl && (
-                  <div className="mt-1.5">
-                    <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
-                  </div>
+                  <>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => setEditingImage({ part: 'coil', url: concept.coilImageUrl })}
+                        className="text-xs px-2 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors"
+                        title="Edit this image while preserving the previous version in the Versions tab"
+                      >
+                        ✎ Edit image
+                      </button>
+                      <button
+                        onClick={() => setShowGenerate(true)}
+                        className="text-xs px-2 py-1.5 bg-background border border-border hover:bg-surface-hover rounded-lg font-medium transition-colors"
+                        title="Regenerate from scratch with new AI prompt"
+                      >
+                        ✦ Regenerate
+                      </button>
+                    </div>
+                    <div className="mt-1.5">
+                      <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
+                    </div>
+                  </>
                 )}
               </div>
               <div>
@@ -368,9 +383,27 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   )}
                 </div>
                 {concept.baseImageUrl && (
-                  <div className="mt-1.5">
-                    <EtchingScoreBadge imageUrl={concept.baseImageUrl} label="base" />
-                  </div>
+                  <>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => setEditingImage({ part: 'base', url: concept.baseImageUrl })}
+                        className="text-xs px-2 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors"
+                        title="Edit this image while preserving the previous version in the Versions tab"
+                      >
+                        ✎ Edit image
+                      </button>
+                      <button
+                        onClick={() => setShowGenerate(true)}
+                        className="text-xs px-2 py-1.5 bg-background border border-border hover:bg-surface-hover rounded-lg font-medium transition-colors"
+                        title="Regenerate from scratch with new AI prompt"
+                      >
+                        ✦ Regenerate
+                      </button>
+                    </div>
+                    <div className="mt-1.5">
+                      <EtchingScoreBadge imageUrl={concept.baseImageUrl} label="base" />
+                    </div>
+                  </>
                 )}
               </div>
               <div>
@@ -687,6 +720,12 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Versions */}
       {activeSection === 'versions' && (
         <div className="space-y-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+            <div className="font-medium mb-0.5">About versions</div>
+            <p className="leading-snug">
+              Every time you run <b>✎ Edit image</b>, <b>◐ Invert colors</b>, or accept an AI edit, the previous images are automatically snapshotted as a new version here. You can browse and restore older versions at any time — no work is ever lost.
+            </p>
+          </div>
           {concept.versions.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">No versions yet. Generate AI concepts or upload images to create versions.</p>
           ) : (
@@ -723,6 +762,29 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                     <pre className="text-xs text-muted bg-background rounded p-2 mt-1 whitespace-pre-wrap">{v.prompt}</pre>
                   </details>
                 )}
+                <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (!confirm(`Restore Version ${v.versionNumber}? The current images will be snapshotted first so nothing is lost.`)) return;
+                      // Snapshot current before restoring
+                      addVersion(concept.id, {
+                        coilImageUrl: concept.coilImageUrl,
+                        baseImageUrl: concept.baseImageUrl,
+                        combinedImageUrl: concept.combinedImageUrl,
+                        notes: `Snapshot before restoring version ${v.versionNumber}`,
+                      });
+                      updateConcept(concept.id, {
+                        coilImageUrl: v.coilImageUrl,
+                        baseImageUrl: v.baseImageUrl,
+                        combinedImageUrl: v.combinedImageUrl,
+                      });
+                      toast(`Restored version ${v.versionNumber}`, 'success');
+                    }}
+                    className="text-xs px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded transition-colors"
+                  >
+                    ↶ Restore this version
+                  </button>
+                </div>
               </div>
             ))
           )}

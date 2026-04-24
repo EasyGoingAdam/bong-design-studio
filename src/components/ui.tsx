@@ -1,6 +1,91 @@
 'use client';
 
+import { useEffect, type ReactNode } from 'react';
 import { ConceptStatus, PriorityLevel, STATUS_COLORS, STATUS_LABELS, PRIORITY_COLORS, LifecycleType } from '@/lib/types';
+
+/**
+ * Close-on-Escape. Attaches a single keydown listener to window for as long
+ * as `active` stays true. Extracted from 7 different modals that all
+ * duplicated this effect.
+ */
+export function useEscapeKey(onEscape: () => void, active: boolean = true) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onEscape();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onEscape, active]);
+}
+
+/**
+ * Shared modal shell. Handles backdrop, Escape key, role/aria wiring,
+ * body click-through prevention, and sticky header. Individual modals
+ * just supply their content.
+ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  maxWidth = 'max-w-2xl',
+  children,
+  header,
+  padding = 'p-5',
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  subtitle?: string;
+  maxWidth?: string;
+  children: ReactNode;
+  /** Optional override for the header row — use instead of title/subtitle */
+  header?: ReactNode;
+  /** Tailwind padding class for the body. Default p-5. */
+  padding?: string;
+}) {
+  useEscapeKey(onClose, open);
+  if (!open) return null;
+
+  const labelId = title ? 'modal-title' : undefined;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={labelId}
+    >
+      <div
+        className={`bg-surface border border-border rounded-xl w-full ${maxWidth} max-h-[92vh] overflow-y-auto`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {(header || title) && (
+          <div className="sticky top-0 bg-surface border-b border-border px-5 py-3 flex items-center justify-between z-10">
+            {header ?? (
+              <>
+                <div>
+                  {title && <h2 id={labelId} className="text-base font-semibold">{title}</h2>}
+                  {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
+                </div>
+                <button
+                  onClick={onClose}
+                  className="text-muted hover:text-foreground text-lg leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <div className={padding}>{children}</div>
+      </div>
+    </div>
+  );
+}
 
 export function StatusBadge({ status }: { status: ConceptStatus }) {
   return (

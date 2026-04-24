@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
 import { PROVIDER_CONFIG } from '@/lib/ai-providers';
+import { callOpenAIImageEdit, openAIErrorResponse } from '@/lib/openai';
+import { ENGRAVING_RULES } from '@/lib/prompt-builder';
 
 /**
  * Edit an existing generated image with small targeted changes,
@@ -99,10 +101,8 @@ export async function POST(request: NextRequest) {
     if (preserveComposition) preserveBits.push('Keep the overall composition, layout, and framing exactly the same.');
     if (preserveSubject) preserveBits.push('Keep the main subject the same — do not replace it with a different thing.');
 
-    const engraving = 'ENGRAVING MODE: Pure white background. Solid black subject. No color, no gradients, no gray wash, no photographic shading. High contrast, clean line hierarchy.';
-
     const fullPrompt = [
-      engraving,
+      ENGRAVING_RULES.forEdit,
       `EDIT: ${editPrompt}`,
       strengthPhrase,
       ...preserveBits,
@@ -122,33 +122,17 @@ export async function POST(request: NextRequest) {
     const blob = new Blob([new Uint8Array(sourceBuffer)], { type: sourceMime });
     formData.append('image', blob, `source.${ext}`);
 
-    const response = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err?.error?.message || `OpenAI edit error: ${response.status}` },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const imageData = data.data?.[0];
-    if (!imageData?.b64_json && !imageData?.url) {
-      return NextResponse.json({ error: 'No image data in OpenAI response' }, { status: 500 });
-    }
+    const imageData = await callOpenAIImageEdit(formData, apiKey);
 
     let base64Data: string;
     if (imageData.b64_json) {
       base64Data = `data:image/png;base64,${imageData.b64_json}`;
-    } else {
+    } else if (imageData.url) {
       const imgRes = await fetch(imageData.url);
       const imgBuffer = await imgRes.arrayBuffer();
       base64Data = `data:image/png;base64,${Buffer.from(imgBuffer).toString('base64')}`;
+    } else {
+      return NextResponse.json({ error: 'OpenAI returned no image payload' }, { status: 500 });
     }
 
     // Upload the edited result to Supabase Storage
@@ -162,10 +146,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url, prompt: fullPrompt });
   } catch (err) {
+    const { body, status } = openAIErrorResponse(err);
     console.error('Edit image error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to edit image' },
-      { status: 500 }
-    );
+    return NextResponse.json(body, { status });
   }
 }

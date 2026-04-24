@@ -16,17 +16,46 @@ interface PromptInputs {
   baseShape?: 'circle' | 'oval' | 'square' | 'rectangle';
 }
 
-// Core engraving rules — reinforced for laser etch production output
-const CORE = [
-  'ENGRAVING MODE — output must be production-ready for laser etching on glass.',
-  'Pure white background. Subject rendered in solid pure black.',
-  'High contrast only. No gray wash, no soft gradients, no halftones, no photographic shading.',
-  'No color. No tints. No chromatic detail.',
-  'Clean line hierarchy. Avoid chaotic micro-details that will not resolve at print size.',
-  'No text, words, numbers, labels, measurements, watermarks, or rulers in the image.',
-  'No 3D product mockups. Render the design itself, not a rendering of it on a bong.',
-  'Artwork must fill the frame edge to edge — no borders, no white padding around the composition.',
-].join(' ');
+/**
+ * Single source of truth for the engraving constraints. Everything that
+ * asks an AI to PRODUCE a new design (generate, regenerate, preset gen)
+ * uses `forGeneration`. Everything that asks an AI to EDIT an existing
+ * design uses `forEdit` (shorter — assumes context already established).
+ * Anything that asks an AI to REVIEW an image uses `forReview` (framed
+ * as criteria, not instructions).
+ *
+ * Previously these rules were repeated in 5 different files with subtle
+ * drift. Now if the rules change, they change in one place.
+ */
+export const ENGRAVING_RULES = {
+  forGeneration: [
+    'ENGRAVING MODE — output must be production-ready for laser etching on glass.',
+    'Pure white background. Subject rendered in solid pure black.',
+    'High contrast only. No gray wash, no soft gradients, no halftones, no photographic shading.',
+    'No color. No tints. No chromatic detail.',
+    'Clean line hierarchy. Avoid chaotic micro-details that will not resolve at print size.',
+    'No text, words, numbers, labels, measurements, watermarks, or rulers in the image.',
+    'No 3D product mockups. Render the design itself, not a rendering of it on a bong.',
+    'Artwork must fill the frame edge to edge — no borders, no white padding around the composition.',
+  ].join(' '),
+
+  forEdit:
+    'ENGRAVING MODE: Pure white background. Solid black subject. No color, no gradients, no gray wash, no photographic shading. High contrast, clean line hierarchy.',
+
+  forReview: [
+    'Pure black on pure white only — NO gray wash, NO shading, NO color',
+    'Solid continuous lines, no broken or dotted edges',
+    'Line weights ≥ 0.3mm at actual print size',
+    'Negative space between elements ≥ 0.4mm',
+    'No micro-details that won\'t resolve at etch size',
+    'Strong silhouette and clear focal hierarchy',
+    'No gradients, halftones, or photographic shading',
+    'Artwork fills frame edge-to-edge (no borders, no padding)',
+  ],
+} as const;
+
+// Alias kept for clarity in existing callers
+const CORE = ENGRAVING_RULES.forGeneration;
 
 const PREMIUM_MOTIFS = [
   'Art Deco geometry with bold angular lines and sunburst motifs',

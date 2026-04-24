@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callOpenAIChat, parseJsonResponse, openAIErrorResponse } from '@/lib/openai';
 
 /**
  * Suggest 4 contextual, image-specific edits for a laser-etch design.
@@ -29,70 +30,41 @@ Example prompt: "Remove the speckled noise texture in the top-right corner and r
 export async function POST(req: NextRequest) {
   try {
     const { imageUrl, apiKey } = await req.json();
-    if (!imageUrl) {
-      return NextResponse.json({ error: 'imageUrl required' }, { status: 400 });
-    }
-    if (!apiKey) {
-      return NextResponse.json({ error: 'OpenAI API key required' }, { status: 400 });
-    }
+    if (!imageUrl) return NextResponse.json({ error: 'imageUrl required' }, { status: 400 });
     if (imageUrl.startsWith('data:')) {
-      return NextResponse.json(
-        { error: 'Image must be a public URL. Save the concept first.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Image must be a public URL. Save the concept first.' }, { status: 400 });
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Suggest 4 specific edits that would make this design more production-ready for laser etching.' },
-              { type: 'image_url', image_url: { url: imageUrl } },
-            ],
-          },
-        ],
-        max_tokens: 600,
-      }),
+    const raw = await callOpenAIChat({
+      apiKey,
+      jsonMode: true,
+      maxTokens: 600,
+      messages: [
+        { role: 'system', content: SYSTEM },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Suggest 4 specific edits that would make this design more production-ready for laser etching.' },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        },
+      ],
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err?.error?.message || `OpenAI error ${res.status}` },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content || '{}';
-    let parsed: { suggestions?: unknown };
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: 'Model returned invalid JSON' }, { status: 500 });
-    }
-
+    const parsed = parseJsonResponse<{ suggestions?: unknown }>(raw);
     const suggestions = Array.isArray(parsed.suggestions)
       ? parsed.suggestions
           .filter((s): s is { label: string; prompt: string } => {
-            return !!s && typeof (s as { label?: unknown }).label === 'string' && typeof (s as { prompt?: unknown }).prompt === 'string';
+            const mm = s as { label?: unknown; prompt?: unknown };
+            return typeof mm.label === 'string' && typeof mm.prompt === 'string';
           })
           .slice(0, 4)
       : [];
 
     return NextResponse.json({ suggestions });
   } catch (err) {
+    const { body, status } = openAIErrorResponse(err);
     console.error('Suggest edits error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Suggestion failed' },
-      { status: 500 }
-    );
+    return NextResponse.json(body, { status });
   }
 }

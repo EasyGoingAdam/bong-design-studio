@@ -65,18 +65,6 @@ interface AppState {
   refreshConcepts: () => Promise<void>;
 }
 
-// Helper to sync a concept update to the API (fire-and-forget for speed)
-async function syncConceptToAPI(concept: Concept) {
-  try {
-    await fetch(`/api/concepts/${concept.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(concept),
-    });
-  } catch (err) {
-    console.error('Failed to sync concept:', err);
-  }
-}
 
 // Helper to save a setting to the server
 async function saveSetting(key: string, value: string) {

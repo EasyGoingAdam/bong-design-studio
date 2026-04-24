@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callOpenAIChat, parseJsonResponse, openAIErrorResponse } from '@/lib/openai';
 
 /**
  * Natural-language semantic search over the concept library.
@@ -42,63 +43,33 @@ interface TrimmedConcept {
 export async function POST(req: NextRequest) {
   try {
     const { query, concepts, apiKey } = await req.json();
-    if (!query?.trim()) {
-      return NextResponse.json({ error: 'query required' }, { status: 400 });
-    }
-    if (!Array.isArray(concepts) || concepts.length === 0) {
-      return NextResponse.json({ matches: [] });
-    }
-    if (!apiKey) {
-      return NextResponse.json({ error: 'OpenAI API key required' }, { status: 400 });
-    }
+    if (!query?.trim()) return NextResponse.json({ error: 'query required' }, { status: 400 });
+    if (!Array.isArray(concepts) || concepts.length === 0) return NextResponse.json({ matches: [] });
 
-    // Cap at 200 to stay within context and keep latency reasonable. If the
-    // library gets bigger, we'd want embeddings instead — this is linear.
     const trimmed: TrimmedConcept[] = concepts.slice(0, 200).map((c: Record<string, unknown>) => ({
       id: String(c.id || ''),
       name: String(c.name || ''),
       desc: String(c.description || '').slice(0, 150),
-      tags: Array.isArray(c.tags) ? (c.tags as unknown[]).filter((t): t is string => typeof t === 'string').slice(0, 10) : [],
+      tags: Array.isArray(c.tags)
+        ? (c.tags as unknown[]).filter((t): t is string => typeof t === 'string').slice(0, 10)
+        : [],
       style: String(c.style || ''),
       theme: String(c.theme || ''),
       audience: String(c.audience || '').slice(0, 100),
       status: String(c.status || ''),
     }));
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM },
-          {
-            role: 'user',
-            content: `Query: "${query.trim()}"\n\nConcepts:\n${JSON.stringify(trimmed)}`,
-          },
-        ],
-        max_tokens: 1500,
-      }),
+    const raw = await callOpenAIChat({
+      apiKey,
+      jsonMode: true,
+      maxTokens: 1500,
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: `Query: "${query.trim()}"\n\nConcepts:\n${JSON.stringify(trimmed)}` },
+      ],
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err?.error?.message || `OpenAI error ${res.status}` },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content || '{}';
-    let parsed: { matches?: unknown };
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: 'Model returned invalid JSON' }, { status: 500 });
-    }
-
+    const parsed = parseJsonResponse<{ matches?: unknown }>(raw);
     const validIds = new Set(trimmed.map((c) => c.id));
     const matches = Array.isArray(parsed.matches)
       ? parsed.matches
@@ -117,10 +88,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ matches });
   } catch (err) {
+    const { body, status } = openAIErrorResponse(err);
     console.error('Semantic search error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Search failed' },
-      { status: 500 }
-    );
+    return NextResponse.json(body, { status });
   }
 }
