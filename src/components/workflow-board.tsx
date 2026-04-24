@@ -47,6 +47,8 @@ export function WorkflowBoard({
   const { concepts, moveConcept, deleteConcept, updateConcept } = useAppStore();
   const { toast } = useToast();
 
+  // Global search across every column
+  const [globalSearch, setGlobalSearch] = useState('');
   // Per-column search (only for Manufactured and Archived since those grow unbounded)
   const [mfgSearch, setMfgSearch] = useState('');
   const [archiveSearch, setArchiveSearch] = useState('');
@@ -57,8 +59,12 @@ export function WorkflowBoard({
 
   const columns = useMemo(() => {
     const map: Record<string, Concept[]> = {};
+    const g = globalSearch.trim();
     for (const col of KANBAN_COLUMNS) {
       let items = concepts.filter((c) => c.status === col);
+      if (g) {
+        items = items.filter((c) => matchesSearch(c, g));
+      }
       if (col === 'manufactured' && mfgSearch.trim()) {
         items = items.filter((c) => matchesSearch(c, mfgSearch.trim()));
       }
@@ -68,7 +74,7 @@ export function WorkflowBoard({
       map[col] = items;
     }
     return map;
-  }, [concepts, mfgSearch, archiveSearch]);
+  }, [concepts, globalSearch, mfgSearch, archiveSearch]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -142,6 +148,26 @@ export function WorkflowBoard({
             Drag concepts between stages{hasSelection ? '' : ' — click checkboxes to multi-select'}
           </p>
         </div>
+        <div className="relative w-full max-w-sm">
+          <input
+            type="text"
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            placeholder="Search all columns — name, tag, designer, theme…"
+            className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-accent"
+            aria-label="Global search across workflow board"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">⌕</span>
+          {globalSearch && (
+            <button
+              onClick={() => setGlobalSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-sm leading-none px-1"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Bulk Action Toolbar */}
@@ -189,7 +215,7 @@ export function WorkflowBoard({
             const isSearchable = col === 'manufactured' || col === 'archived';
             const searchValue = col === 'manufactured' ? mfgSearch : col === 'archived' ? archiveSearch : '';
             const setSearchValue = col === 'manufactured' ? setMfgSearch : col === 'archived' ? setArchiveSearch : undefined;
-            const hasActiveSearch = !!searchValue;
+            const hasActiveSearch = !!searchValue || !!globalSearch.trim();
             const total = totalByStatus[col] || 0;
 
             return (
@@ -278,7 +304,7 @@ export function WorkflowBoard({
                       {provided.placeholder}
                       {colConcepts.length === 0 && !snapshot.isDraggingOver && (
                         <div className="text-center text-xs text-muted py-8 opacity-50">
-                          {isSearchable && hasActiveSearch
+                          {hasActiveSearch
                             ? 'No matches found'
                             : col === 'archived'
                               ? 'Nothing archived'

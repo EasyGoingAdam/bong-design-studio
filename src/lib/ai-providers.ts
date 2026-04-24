@@ -17,6 +17,42 @@ export interface ImageGenParams {
   quality: string;
   folder: string;
   filename: string;
+  /** 1–5 complexity, fed through Gemini prompt tuning */
+  complexityLevel?: number;
+}
+
+/**
+ * Gemini-specific prompt tuning.
+ *
+ * gemini-2.5-flash-image is faster and cheaper than gpt-image-1, but in our
+ * testing it consistently:
+ *   - Under-contrasts compared to OpenAI (leaves gray washes)
+ *   - Adds extraneous micro-detail on high-complexity requests
+ *   - Softens edges that need to be sharp for laser etching
+ *
+ * This function appends targeted counter-pressure to the prompt based on the
+ * concept's complexity level so the output stays engraving-production-ready.
+ * We do NOT modify the OpenAI prompt — only Gemini gets this treatment.
+ */
+export function tuneGeminiPrompt(basePrompt: string, complexityLevel: number = 3): string {
+  // Counter Gemini's tendency to leave grays
+  const sharpness =
+    'CRITICAL FOR GEMINI: The output must be PURE BLACK on PURE WHITE — zero gray, zero soft edges, zero anti-aliased blur. Edges must be crisp and binary.';
+
+  // Complexity-specific guidance
+  let complexityNote: string;
+  if (complexityLevel <= 2) {
+    complexityNote =
+      'Keep detail MINIMAL. Use bold bold strokes, wide negative space, and under 8 major visual elements total. Err on the side of too simple.';
+  } else if (complexityLevel >= 4) {
+    complexityNote =
+      'Rich detail is OK, but every line must be cleanly separable — no chaotic cross-hatch that blurs into gray. Thicken all primary strokes.';
+  } else {
+    complexityNote =
+      'Balanced detail — strong silhouette with controlled supporting pattern. No feathered edges or textural noise.';
+  }
+
+  return [basePrompt, sharpness, complexityNote].join(' ');
 }
 
 /**
@@ -95,6 +131,7 @@ export function validateParams(raw: Partial<ImageGenParams> & { prompt: string }
     quality,
     folder: raw.folder || 'generated',
     filename: raw.filename || 'image',
+    complexityLevel: typeof raw.complexityLevel === 'number' ? raw.complexityLevel : undefined,
   };
 }
 
@@ -131,11 +168,15 @@ export function getOpenAIRequestBody(params: ImageGenParams): Record<string, unk
  */
 export function getGeminiRequestBody(params: ImageGenParams) {
   const aspectRatio = PROVIDER_CONFIG.gemini.sizeToAspectRatio[params.size] || PROVIDER_CONFIG.gemini.defaultAspectRatio;
+  // Apply Gemini-specific tuning to counter soft-edge / gray-wash tendencies.
+  const tunedPrompt = tuneGeminiPrompt(params.prompt, params.complexityLevel);
   return {
-    contents: [{ parts: [{ text: params.prompt }] }],
+    contents: [{ parts: [{ text: tunedPrompt }] }],
     generationConfig: {
       responseModalities: ['TEXT', 'IMAGE'],
       imageConfig: { aspectRatio },
+      // Lower temperature → more deterministic, cleaner laser-ready output
+      temperature: 0.4,
     },
   };
 }

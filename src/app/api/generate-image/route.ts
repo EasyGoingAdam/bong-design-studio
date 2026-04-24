@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       quality: raw.quality,
       folder: raw.folder,
       filename: raw.filename,
+      complexityLevel: raw.complexityLevel,
     });
 
     const base64Data = params.provider === 'gemini'

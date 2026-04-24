@@ -8,6 +8,8 @@ import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
 import { ImageDownloadButtons } from './image-download';
 import { DesignReviewer } from './design-reviewer';
+import { EditImageModal } from './edit-image-modal';
+import { SavePresetModal } from './save-preset-modal';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -30,6 +32,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const [inverting, setInverting] = useState<string | null>(null);
+  const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
+  const [showSavePreset, setShowSavePreset] = useState(false);
 
   const handleInvert = async (part: 'coil' | 'base') => {
     if (!concept) {
@@ -203,6 +207,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           <button onClick={() => { duplicateConcept(concept.id); toast('Concept duplicated', 'success'); }} className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover">
             Duplicate
           </button>
+          <button
+            onClick={() => setShowSavePreset(true)}
+            className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover"
+            title="Save this concept as a reusable preset"
+          >
+            ★ Save as Preset
+          </button>
           {concept.status !== 'approved' && (
             <button onClick={handleApprove} className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg">
               Approve
@@ -263,12 +274,18 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   {concept.coilImageUrl ? (
                     <>
                       <img src={concept.coilImageUrl} alt="Coil" className="w-full h-full object-contain" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button
                           onClick={() => setShowGenerate(true)}
                           className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
                         >
                           ✦ Regenerate
+                        </button>
+                        <button
+                          onClick={() => setEditingImage({ part: 'coil', url: concept.coilImageUrl })}
+                          className="text-xs text-white bg-background/80 hover:bg-background border border-white/40 px-3 py-1.5 rounded-lg text-foreground"
+                        >
+                          ✎ Edit
                         </button>
                       </div>
                     </>
@@ -304,12 +321,18 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   {concept.baseImageUrl ? (
                     <>
                       <img src={concept.baseImageUrl} alt="Base" className="w-full h-full object-contain" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button
                           onClick={() => setShowGenerate(true)}
                           className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
                         >
                           ✦ Regenerate
+                        </button>
+                        <button
+                          onClick={() => setEditingImage({ part: 'base', url: concept.baseImageUrl })}
+                          className="text-xs text-white bg-background/80 hover:bg-background border border-white/40 px-3 py-1.5 rounded-lg text-foreground"
+                        >
+                          ✎ Edit
                         </button>
                       </div>
                     </>
@@ -786,6 +809,26 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Quick Generate Modal */}
       {showGenerate && concept && (
         <QuickGenerateModal concept={concept} onClose={() => setShowGenerate(false)} />
+      )}
+
+      {/* Save as Preset Modal */}
+      {showSavePreset && concept && (
+        <SavePresetModal concept={concept} onClose={() => setShowSavePreset(false)} />
+      )}
+
+      {/* Edit Image Modal */}
+      {editingImage && concept && (
+        <EditImageModal
+          imageUrl={editingImage.url}
+          label={editingImage.part}
+          onEdited={({ url }) => {
+            updateConcept(
+              concept.id,
+              editingImage.part === 'coil' ? { coilImageUrl: url } : { baseImageUrl: url }
+            );
+          }}
+          onClose={() => setEditingImage(null)}
+        />
       )}
     </div>
   );
