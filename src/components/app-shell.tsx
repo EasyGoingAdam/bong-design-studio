@@ -14,9 +14,10 @@ import { SettingsModal } from './settings-modal';
 import { LoginPage } from './login-page';
 import { ArchiveBrowser } from './archive-browser';
 import { PresetLibrary } from './preset-library';
+import { BenchmarkDashboard } from './benchmark-dashboard';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'benchmark' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
@@ -30,6 +31,7 @@ const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
 const SECONDARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '◫' },
   { id: 'concepts', label: 'Concepts', icon: '▦' },
+  { id: 'benchmark', label: 'Benchmark', icon: '⚖' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -233,6 +235,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
         {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
         {initialized && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
         {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
         )}

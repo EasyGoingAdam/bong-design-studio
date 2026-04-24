@@ -44,11 +44,15 @@ export function WorkflowBoard({
   onOpenConcept: (id: string) => void;
   onOpenArchive?: () => void;
 }) {
-  const { concepts, moveConcept, deleteConcept, updateConcept } = useAppStore();
+  const { concepts, moveConcept, deleteConcept, updateConcept, openAIKey } = useAppStore();
   const { toast } = useToast();
 
   // Global search across every column
   const [globalSearch, setGlobalSearch] = useState('');
+  // AI-ranked semantic search results. When populated, overrides the keyword
+  // filter — we show only matched concepts, ordered by AI relevance score.
+  const [aiMatches, setAiMatches] = useState<{ id: string; score: number; reason: string }[] | null>(null);
+  const [aiSearching, setAiSearching] = useState(false);
   // Per-column search (only for Manufactured and Archived since those grow unbounded)
   const [mfgSearch, setMfgSearch] = useState('');
   const [archiveSearch, setArchiveSearch] = useState('');
@@ -60,11 +64,24 @@ export function WorkflowBoard({
   const columns = useMemo(() => {
     const map: Record<string, Concept[]> = {};
     const g = globalSearch.trim();
+
+    // If AI matches are active, build a lookup of allowed ids + their order/score.
+    const aiMatchMap = aiMatches
+      ? new Map(aiMatches.map((m, idx) => [m.id, { score: m.score, order: idx }]))
+      : null;
+
     for (const col of KANBAN_COLUMNS) {
       let items = concepts.filter((c) => c.status === col);
-      if (g) {
+
+      if (aiMatchMap) {
+        // AI mode: keep only matched concepts, sorted by AI relevance
+        items = items
+          .filter((c) => aiMatchMap.has(c.id))
+          .sort((a, b) => (aiMatchMap.get(a.id)!.order - aiMatchMap.get(b.id)!.order));
+      } else if (g) {
         items = items.filter((c) => matchesSearch(c, g));
       }
+
       if (col === 'manufactured' && mfgSearch.trim()) {
         items = items.filter((c) => matchesSearch(c, mfgSearch.trim()));
       }
@@ -74,7 +91,56 @@ export function WorkflowBoard({
       map[col] = items;
     }
     return map;
-  }, [concepts, globalSearch, mfgSearch, archiveSearch]);
+  }, [concepts, globalSearch, mfgSearch, archiveSearch, aiMatches]);
+
+  const runAISearch = async () => {
+    const q = globalSearch.trim();
+    if (!q) {
+      toast('Type a search query first', 'info');
+      return;
+    }
+    if (!openAIKey) {
+      toast('Set your OpenAI API key in Settings first', 'error');
+      return;
+    }
+    setAiSearching(true);
+    try {
+      const payload = concepts.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        tags: c.tags,
+        style: c.specs.designStyleName,
+        theme: c.specs.designTheme,
+        audience: c.intendedAudience,
+        status: c.status,
+      }));
+      const res = await fetch('/api/semantic-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, concepts: payload, apiKey: openAIKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'AI search failed', 'error');
+        return;
+      }
+      setAiMatches(data.matches || []);
+      if ((data.matches || []).length === 0) {
+        toast('No AI matches found — try different wording', 'info');
+      } else {
+        toast(`Found ${data.matches.length} AI-ranked match${data.matches.length > 1 ? 'es' : ''}`, 'success');
+      }
+    } catch {
+      toast('Network error — AI search failed', 'error');
+    } finally {
+      setAiSearching(false);
+    }
+  };
+
+  const clearAISearch = () => {
+    setAiMatches(null);
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -148,27 +214,58 @@ export function WorkflowBoard({
             Drag concepts between stages{hasSelection ? '' : ' — click checkboxes to multi-select'}
           </p>
         </div>
-        <div className="relative w-full max-w-sm">
-          <input
-            type="text"
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Search all columns — name, tag, designer, theme…"
-            className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-accent"
-            aria-label="Global search across workflow board"
-          />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">⌕</span>
-          {globalSearch && (
-            <button
-              onClick={() => setGlobalSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-sm leading-none px-1"
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          )}
+        <div className="flex items-center gap-2 w-full max-w-xl">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={globalSearch}
+              onChange={(e) => {
+                setGlobalSearch(e.target.value);
+                if (aiMatches) setAiMatches(null); // typing exits AI mode
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.metaKey) runAISearch();
+              }}
+              placeholder={aiMatches ? 'AI-ranked results — clear to return' : 'Search all columns — name, tag, designer, theme…'}
+              className="w-full bg-surface border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:border-accent"
+              aria-label="Global search across workflow board"
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">⌕</span>
+            {(globalSearch || aiMatches) && (
+              <button
+                onClick={() => { setGlobalSearch(''); clearAISearch(); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground text-sm leading-none px-1"
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <button
+            onClick={runAISearch}
+            disabled={aiSearching || !globalSearch.trim()}
+            className="text-sm px-3 py-2 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50 whitespace-nowrap font-medium"
+            title="Ask AI to semantically rank concepts by your query (⌘+Enter)"
+          >
+            {aiSearching ? '✦ Thinking…' : '✦ Ask AI'}
+          </button>
         </div>
       </div>
+
+      {aiMatches && aiMatches.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4 text-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-purple-900">✦ AI-ranked results</span>
+            <span className="text-purple-700">for &ldquo;{globalSearch}&rdquo;</span>
+            <button onClick={clearAISearch} className="ml-auto text-purple-700 hover:text-purple-900 underline">
+              Clear AI ranking
+            </button>
+          </div>
+          <p className="text-purple-800">
+            Showing {aiMatches.length} concept{aiMatches.length > 1 ? 's' : ''} semantically matched to your query. Cards are grouped by their current workflow stage and ordered by relevance.
+          </p>
+        </div>
+      )}
 
       {/* Bulk Action Toolbar */}
       {hasSelection && (
@@ -296,6 +393,18 @@ export function WorkflowBoard({
                                   concept={concept}
                                   onClick={() => onOpenConcept(concept.id)}
                                 />
+                                {aiMatches && (() => {
+                                  const match = aiMatches.find((m) => m.id === concept.id);
+                                  if (!match) return null;
+                                  return (
+                                    <div className="mt-1 px-1.5 py-1 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-800 leading-snug">
+                                      <div className="flex items-center gap-1 mb-0.5">
+                                        <span className="font-bold">✦ {match.score}/10</span>
+                                      </div>
+                                      <div className="italic">{match.reason}</div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                           )}
