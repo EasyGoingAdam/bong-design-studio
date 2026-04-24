@@ -15,10 +15,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'imageUrl required' }, { status: 400 });
     }
 
-    // Fetch the source image (handles both data URIs and http URLs)
+    // Fetch the source image (handles data URIs and http URLs, any MIME type).
+    // The previous regex `^data:image\/\w+;base64,` failed for `image/svg+xml`
+    // and similar compound types. Use a permissive `[^;]+` match instead.
     let sourceBuffer: Buffer;
     if (imageUrl.startsWith('data:')) {
-      const base64 = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+      const base64 = imageUrl.replace(/^data:[^;]+;base64,/, '');
       sourceBuffer = Buffer.from(base64, 'base64');
     } else {
       const res = await fetch(imageUrl);
@@ -29,6 +31,10 @@ export async function POST(request: NextRequest) {
         );
       }
       sourceBuffer = Buffer.from(await res.arrayBuffer());
+    }
+
+    if (sourceBuffer.length === 0) {
+      return NextResponse.json({ error: 'Source image has zero bytes' }, { status: 400 });
     }
 
     // Pixel-perfect invert using sharp.

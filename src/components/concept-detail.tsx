@@ -46,12 +46,18 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       return;
     }
     setInverting(part);
-    console.log('[invert] starting', { part, url });
+    console.log('[invert] starting', { part, url: url.slice(0, 80) });
     try {
       // Sanitize filename (avoid special chars that could break storage paths)
-      const safeFilename = (concept.name || 'concept')
+      const safeName = (concept.name || 'concept')
         .replace(/[^a-zA-Z0-9\-_]/g, '-')
-        .slice(0, 60);
+        .slice(0, 40);
+
+      // CRITICAL: include concept.id + part + timestamp so the upload writes to
+      // a FRESH storage path every time. Without the timestamp, repeated inverts
+      // overwrite the same object and the browser keeps serving the stale
+      // cached copy — this is the "invert doesn't work" symptom users hit.
+      const uniqueFilename = `${safeName}-${concept.id.slice(0, 8)}-${part}-${Date.now()}`;
 
       // Server-side pixel-perfect invert using sharp (lossless PNG, preserves dimensions)
       const res = await fetch('/api/invert-image', {
@@ -60,7 +66,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         body: JSON.stringify({
           imageUrl: url,
           folder: 'inverted',
-          filename: `${safeFilename}-${part}`,
+          filename: uniqueFilename,
         }),
       });
 
@@ -79,6 +85,15 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       }
 
       console.log('[invert] success', { newUrl: data.url });
+
+      // Snapshot the pre-invert image as a concept version so users can undo.
+      addVersion(concept.id, {
+        coilImageUrl: concept.coilImageUrl,
+        baseImageUrl: concept.baseImageUrl,
+        combinedImageUrl: concept.combinedImageUrl,
+        notes: `Snapshot before inverting ${part} colors`,
+      });
+
       updateConcept(
         concept.id,
         part === 'coil' ? { coilImageUrl: data.url } : { baseImageUrl: data.url }
