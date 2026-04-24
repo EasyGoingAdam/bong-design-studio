@@ -17,6 +17,7 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
   const [lifecycle, setLifecycle] = useState('evergreen');
   const [templateId, setTemplateId] = useState('');
   const [audience, setAudience] = useState('');
+  const [coilOnly, setCoilOnly] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) { setNameError('Concept name is required'); return; }
@@ -30,6 +31,7 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
       priority: priority as 'low' | 'medium' | 'high' | 'urgent',
       lifecycleType: lifecycle as 'seasonal' | 'evergreen' | 'limited_edition' | 'custom',
       intendedAudience: audience.trim(),
+      coilOnly,
       specs: template?.specs ? {
         designStyleName: template.specs.designStyleName || '',
         designTheme: template.specs.designTheme || '',
@@ -103,6 +105,21 @@ export function NewConceptModal({ onClose, onCreated }: { onClose: () => void; o
             <label className="block text-sm text-muted mb-1">Tags (comma-separated)</label>
             <Input value={tags} onChange={setTags} placeholder="geometric, premium, bold" />
           </div>
+
+          <label className="flex items-start gap-2 p-2.5 border border-border rounded-lg cursor-pointer hover:border-accent/40 transition-colors">
+            <input
+              type="checkbox"
+              checked={coilOnly}
+              onChange={(e) => setCoilOnly(e.target.checked)}
+              className="mt-0.5 accent-accent"
+            />
+            <div>
+              <div className="text-sm font-medium">Coil-only design</div>
+              <div className="text-xs text-muted">
+                Skip the base piece. Use this for products that only have a coil/sleeve design. You can toggle this later from the Generate dialog.
+              </div>
+            </div>
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm text-muted mb-1">Priority</label>

@@ -18,6 +18,13 @@ export interface DesignPreset {
   name: string;
   /** Short one-line description */
   description: string;
+  /** 'active' (default) or 'archived' — archived presets are hidden from the
+   *  main grid but still retrievable via the Archived filter. User-saved
+   *  presets can be archived; curated presets are always 'active'. */
+  status?: 'active' | 'archived';
+  /** ISO timestamp of the most recent "Use Preset" click. Undefined until
+   *  a concept has been generated from this preset. */
+  lastUsedAt?: string;
   /** Category for grouping in the UI */
   category: 'geometric' | 'floral' | 'celestial' | 'minimalist' | 'cultural' | 'nature' | 'abstract' | 'seasonal' | 'custom';
   /** Tags to pre-fill on the new concept */
@@ -243,16 +250,19 @@ function writeUserPresets(presets: DesignPreset[]) {
   }
 }
 
-export function getAllPresets(): DesignPreset[] {
-  return [...CURATED, ...readUserPresets()];
+export function getAllPresets(opts: { includeArchived?: boolean } = {}): DesignPreset[] {
+  const user = readUserPresets();
+  const filtered = opts.includeArchived ? user : user.filter((p) => p.status !== 'archived');
+  return [...CURATED, ...filtered];
 }
 
 export function getCuratedPresets(): DesignPreset[] {
   return CURATED;
 }
 
-export function getUserPresets(): DesignPreset[] {
-  return readUserPresets();
+export function getUserPresets(opts: { includeArchived?: boolean } = {}): DesignPreset[] {
+  const all = readUserPresets();
+  return opts.includeArchived ? all : all.filter((p) => p.status !== 'archived');
 }
 
 export function saveUserPreset(preset: Omit<DesignPreset, 'id' | 'curated' | 'createdAt'>): DesignPreset {
@@ -288,6 +298,83 @@ export function saveUserPreset(preset: Omit<DesignPreset, 'id' | 'curated' | 'cr
 export function deleteUserPreset(id: string) {
   const existing = readUserPresets();
   writeUserPresets(existing.filter((p) => p.id !== id));
+}
+
+/**
+ * Edit an existing user preset in place. Returns the updated preset.
+ * Curated presets are read-only — attempts to edit return undefined.
+ */
+export function updateUserPreset(id: string, updates: Partial<DesignPreset>): DesignPreset | undefined {
+  const existing = readUserPresets();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx === -1) return undefined;
+  const merged: DesignPreset = { ...existing[idx], ...updates, id: existing[idx].id, curated: false };
+  // Strip data-URI preview images same as saveUserPreset
+  if (merged.previewImageUrl?.startsWith('data:')) merged.previewImageUrl = undefined;
+  const next = [...existing];
+  next[idx] = merged;
+  writeUserPresets(next);
+  return merged;
+}
+
+/**
+ * Duplicate any preset (curated or user-saved) into a new user preset
+ * with "(copy)" appended. The new preset is un-archived regardless of
+ * source status.
+ */
+export function duplicateUserPreset(source: DesignPreset): DesignPreset {
+  return saveUserPreset({
+    ...source,
+    name: `${source.name} (copy)`,
+    status: 'active',
+  });
+}
+
+/**
+ * Mark a user preset archived or active. Curated presets can't be archived.
+ */
+export function setUserPresetStatus(id: string, status: 'active' | 'archived') {
+  updateUserPreset(id, { status });
+}
+
+/**
+ * Stamp the lastUsedAt timestamp on a user preset. Curated presets get
+ * tracked in a separate localStorage slot so we can show "last used" on
+ * them without mutating the CURATED array.
+ */
+const LS_KEY_LAST_USED = 'design-studio:preset-last-used:v1';
+
+export function stampLastUsed(presetId: string) {
+  const now = new Date().toISOString();
+  // User presets — mutate in the main store
+  const userPresets = readUserPresets();
+  const idx = userPresets.findIndex((p) => p.id === presetId);
+  if (idx !== -1) {
+    const next = [...userPresets];
+    next[idx] = { ...next[idx], lastUsedAt: now };
+    writeUserPresets(next);
+    return;
+  }
+  // Curated preset — track in a separate map
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(LS_KEY_LAST_USED);
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+    map[presetId] = now;
+    localStorage.setItem(LS_KEY_LAST_USED, JSON.stringify(map));
+  } catch (err) {
+    console.warn('Could not stamp lastUsedAt', err);
+  }
+}
+
+export function getCuratedLastUsedMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(LS_KEY_LAST_USED);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
 }
 
 export const PRESET_CATEGORIES: { id: DesignPreset['category']; label: string; emoji: string }[] = [

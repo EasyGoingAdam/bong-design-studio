@@ -8,10 +8,15 @@ import {
   getCuratedPresets,
   getUserPresets,
   deleteUserPreset,
+  duplicateUserPreset,
+  setUserPresetStatus,
+  stampLastUsed,
+  getCuratedLastUsedMap,
 } from '@/lib/presets';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { GeneratePresetModal } from './generate-preset-modal';
+import { EditPresetModal } from './edit-preset-modal';
 
 interface Props {
   onOpenConcept: (id: string) => void;
@@ -35,12 +40,18 @@ export function PresetLibrary({ onOpenConcept }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<DesignPreset | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [editing, setEditing] = useState<DesignPreset | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [curatedLastUsed, setCuratedLastUsed] = useState<Record<string, string>>({});
 
-  const refreshUserPresets = () => setUserPresets(getUserPresets());
+  useEffect(() => { setCuratedLastUsed(getCuratedLastUsedMap()); }, []);
+
+  const refreshUserPresets = () => setUserPresets(getUserPresets({ includeArchived: showArchived }));
 
   useEffect(() => {
     refreshUserPresets();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
 
   const curated = useMemo(() => getCuratedPresets(), []);
 
@@ -97,6 +108,10 @@ export function PresetLibrary({ onOpenConcept }: Props) {
         coilSpecs: { dimensions: '', printableArea: '', notes: preset.coilInstructions },
         baseSpecs: { dimensions: '', printableArea: '', notes: preset.baseInstructions },
       });
+      // Track usage so the card can show "last used"
+      stampLastUsed(preset.id);
+      refreshUserPresets();
+      setCuratedLastUsed(getCuratedLastUsedMap());
       toast(`Created concept from "${preset.name}"`, 'success');
       onOpenConcept(concept.id);
     } catch (err) {
@@ -151,6 +166,19 @@ export function PresetLibrary({ onOpenConcept }: Props) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Show archived toggle */}
+      <div className="mb-3">
+        <label className="inline-flex items-center gap-1.5 text-xs text-muted cursor-pointer hover:text-foreground">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+            className="accent-accent"
+          />
+          Include archived presets
+        </label>
       </div>
 
       {/* Category pills */}
@@ -217,6 +245,11 @@ export function PresetLibrary({ onOpenConcept }: Props) {
                       Your preset
                     </span>
                   )}
+                  {preset.status === 'archived' && (
+                    <span className="absolute top-2 left-2 text-[10px] bg-gray-700 text-white px-2 py-0.5 rounded-full">
+                      Archived
+                    </span>
+                  )}
                 </div>
                 <div className="p-3 flex-1 flex flex-col">
                   <div className="flex items-start justify-between gap-2">
@@ -238,22 +271,61 @@ export function PresetLibrary({ onOpenConcept }: Props) {
                       ))}
                     </div>
                   )}
-                  <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                  {(() => {
+                    const lastUsed = preset.curated ? curatedLastUsed[preset.id] : preset.lastUsedAt;
+                    return lastUsed ? (
+                      <p className="text-[10px] text-muted mt-1.5 italic">
+                        Last used {new Date(lastUsed).toLocaleDateString()}
+                      </p>
+                    ) : null;
+                  })()}
+                  <div className="mt-3 pt-3 border-t border-border flex gap-1.5 flex-wrap">
                     <button
                       onClick={() => applyPreset(preset)}
-                      disabled={applying === preset.id}
-                      className="flex-1 py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+                      disabled={applying === preset.id || preset.status === 'archived'}
+                      className="flex-1 min-w-[100px] py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
                     >
                       {applying === preset.id ? 'Creating…' : '+ Use Preset'}
                     </button>
+                    <button
+                      onClick={() => {
+                        const dup = duplicateUserPreset(preset);
+                        refreshUserPresets();
+                        toast(`Duplicated as "${dup.name}"`, 'success');
+                      }}
+                      className="px-2 py-1.5 text-xs text-muted hover:text-foreground border border-border hover:border-border-light rounded transition-colors"
+                      title="Duplicate preset"
+                    >
+                      ⧉
+                    </button>
                     {!preset.curated && (
-                      <button
-                        onClick={() => setDeleteTarget(preset)}
-                        className="px-2 py-1.5 text-xs text-muted hover:text-red-600 border border-border hover:border-red-300 rounded transition-colors"
-                        title="Delete preset"
-                      >
-                        ×
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setEditing(preset)}
+                          className="px-2 py-1.5 text-xs text-muted hover:text-foreground border border-border hover:border-border-light rounded transition-colors"
+                          title="Edit preset"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => {
+                            setUserPresetStatus(preset.id, preset.status === 'archived' ? 'active' : 'archived');
+                            refreshUserPresets();
+                            toast(preset.status === 'archived' ? `Restored "${preset.name}"` : `Archived "${preset.name}"`, 'info');
+                          }}
+                          className="px-2 py-1.5 text-xs text-muted hover:text-foreground border border-border hover:border-border-light rounded transition-colors"
+                          title={preset.status === 'archived' ? 'Restore preset' : 'Archive preset'}
+                        >
+                          {preset.status === 'archived' ? '↶' : '📦'}
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(preset)}
+                          className="px-2 py-1.5 text-xs text-muted hover:text-red-600 border border-border hover:border-red-300 rounded transition-colors"
+                          title="Permanently delete preset"
+                        >
+                          ×
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -277,6 +349,17 @@ export function PresetLibrary({ onOpenConcept }: Props) {
         <GeneratePresetModal
           onClose={() => setShowGenerator(false)}
           onGenerated={refreshUserPresets}
+        />
+      )}
+
+      {editing && (
+        <EditPresetModal
+          preset={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            refreshUserPresets();
+            setEditing(null);
+          }}
         />
       )}
     </div>

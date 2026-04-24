@@ -150,6 +150,9 @@ export interface Concept {
   productMockupUrl: string;
   /** Additional mockup angles as JSON array [{angle, url}] */
   productMockupAngles: { angle: string; url: string }[];
+  /** True when this concept is a coil-only design (no base piece).
+   *  Hides base UI throughout the app and skips base generation. */
+  coilOnly: boolean;
   specs: ConceptSpecs;
   coilSpecs: CoilSpecs;
   baseSpecs: BaseSpecs;

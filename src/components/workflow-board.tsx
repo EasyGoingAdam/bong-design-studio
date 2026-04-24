@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useAppStore } from '@/lib/store';
-import { KANBAN_COLUMNS, STATUS_LABELS, ConceptStatus, Concept } from '@/lib/types';
+import { KANBAN_COLUMNS, STATUS_LABELS, ConceptStatus, Concept, PriorityLevel } from '@/lib/types';
 import { ConceptCardMini } from './concept-card';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
@@ -44,7 +44,7 @@ export function WorkflowBoard({
   onOpenConcept: (id: string) => void;
   onOpenArchive?: () => void;
 }) {
-  const { concepts, moveConcept, deleteConcept, updateConcept, openAIKey } = useAppStore();
+  const { concepts, moveConcept, deleteConcept, updateConcept, duplicateConcept, openAIKey } = useAppStore();
   const { toast } = useToast();
 
   // Global search across every column
@@ -179,6 +179,60 @@ export function WorkflowBoard({
     clearSelection();
   };
 
+  const bulkDuplicate = async () => {
+    const count = selectedIds.size;
+    for (const id of selectedIds) {
+      await duplicateConcept(id);
+    }
+    toast(`Duplicated ${count} concept${count > 1 ? 's' : ''}`, 'success');
+    clearSelection();
+  };
+
+  const bulkSetPriority = (priority: PriorityLevel) => {
+    selectedIds.forEach((id) => updateConcept(id, { priority }));
+    toast(`Set ${selectedIds.size} to ${priority} priority`, 'success');
+    clearSelection();
+  };
+
+  const bulkAddTag = () => {
+    const tag = window.prompt('Tag to add to all selected concepts:');
+    if (!tag?.trim()) return;
+    const clean = tag.trim();
+    selectedIds.forEach((id) => {
+      const c = concepts.find((cc) => cc.id === id);
+      if (!c) return;
+      if (!c.tags.includes(clean)) updateConcept(id, { tags: [...c.tags, clean] });
+    });
+    toast(`Added tag "${clean}" to ${selectedIds.size} concept${selectedIds.size > 1 ? 's' : ''}`, 'success');
+    clearSelection();
+  };
+
+  const bulkExport = () => {
+    const picked = concepts.filter((c) => selectedIds.has(c.id));
+    const rows = [
+      ['Name', 'Collection', 'Status', 'Priority', 'Tags', 'Designer', 'Created', 'Updated'],
+      ...picked.map((c) => [
+        c.name,
+        c.collection,
+        c.status,
+        c.priority,
+        c.tags.join('; '),
+        c.designer,
+        c.createdAt,
+        c.updatedAt,
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `concepts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${picked.length} concepts to CSV`, 'success');
+  };
+
   const bulkDelete = () => {
     selectedIds.forEach((id) => deleteConcept(id));
     toast(`Deleted ${selectedIds.size} concept${selectedIds.size > 1 ? 's' : ''}`, 'success');
@@ -283,10 +337,41 @@ export function WorkflowBoard({
               </button>
             ))}
             <button
+              onClick={bulkDuplicate}
+              className="text-xs px-2.5 py-1.5 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              ⧉ Duplicate All
+            </button>
+            <div className="inline-flex items-stretch rounded-lg border border-border overflow-hidden">
+              <span className="text-[10px] text-muted px-2 self-center bg-surface">Priority:</span>
+              {(['low', 'medium', 'high', 'urgent'] as PriorityLevel[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => bulkSetPriority(p)}
+                  className="text-xs px-2 py-1.5 bg-surface border-l border-border hover:bg-surface-hover capitalize"
+                  title={`Set all selected to ${p} priority`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={bulkAddTag}
+              className="text-xs px-2.5 py-1.5 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              + Add tag
+            </button>
+            <button
+              onClick={bulkExport}
+              className="text-xs px-2.5 py-1.5 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              ↓ Export CSV
+            </button>
+            <button
               onClick={bulkArchive}
               className="text-xs px-2.5 py-1.5 bg-surface border border-border rounded-lg hover:bg-surface-hover text-muted transition-colors"
             >
-              Archive All
+              📦 Archive All
             </button>
             <button
               onClick={() => setShowBulkDeleteConfirm(true)}

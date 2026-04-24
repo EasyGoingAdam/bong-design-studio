@@ -265,10 +265,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Images */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className={`grid gap-4 ${concept.coilOnly ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-muted">Coil</span>
+                  <span className="text-xs text-muted">Coil{concept.coilOnly && <span className="ml-1 text-[10px] text-accent">(coil-only design)</span>}</span>
                   <div className="flex items-center gap-1">
                     {concept.coilImageUrl && (
                       <button
@@ -287,20 +287,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   {concept.coilImageUrl ? (
                     <>
                       <img src={concept.coilImageUrl} alt="Coil" className="w-full h-full object-contain" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setShowGenerate(true)}
-                          className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
-                        >
-                          ✦ Regenerate
-                        </button>
-                        <button
-                          onClick={() => setEditingImage({ part: 'coil', url: concept.coilImageUrl })}
-                          className="text-xs text-white bg-background/80 hover:bg-background border border-white/40 px-3 py-1.5 rounded-lg text-foreground"
-                        >
-                          ✎ Edit
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <button
@@ -336,6 +322,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   </>
                 )}
               </div>
+              {!concept.coilOnly && (
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Base</span>
@@ -357,20 +344,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   {concept.baseImageUrl ? (
                     <>
                       <img src={concept.baseImageUrl} alt="Base" className="w-full h-full object-contain" />
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setShowGenerate(true)}
-                          className="text-xs text-white bg-accent/80 hover:bg-accent px-3 py-1.5 rounded-lg"
-                        >
-                          ✦ Regenerate
-                        </button>
-                        <button
-                          onClick={() => setEditingImage({ part: 'base', url: concept.baseImageUrl })}
-                          className="text-xs text-white bg-background/80 hover:bg-background border border-white/40 px-3 py-1.5 rounded-lg text-foreground"
-                        >
-                          ✎ Edit
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <button
@@ -406,6 +379,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   </>
                 )}
               </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Combined</span>

@@ -42,6 +42,13 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
+  // Per-run coil-only override — defaults to concept's coilOnly flag but
+  // the user can flip it inside this modal for a one-off decision.
+  const [coilOnly, setCoilOnly] = useState<boolean>(!!concept.coilOnly);
+  // Engraving Mode is ON by default — hardcodes the production rules into
+  // the prompt. Turning it OFF lets you generate freer concept art (e.g.
+  // for brainstorming) that won't be etch-ready. Visible toggle per audit.
+  const [engravingMode, setEngravingMode] = useState<boolean>(mode === 'production_bw');
 
   // Dimensions — pre-fill from existing specs where possible, default to Freeze Pipe standards
   const [dimUnit, setDimUnit] = useState<'mm' | 'in'>('mm');
@@ -79,7 +86,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     title: concept.name,
     stylePrompt: concept.specs.designStyleName || concept.tags.join(', '),
     themePrompt: concept.specs.designTheme || concept.description,
-    references: [overallDimNote, extraNotes].filter(Boolean).join(' '),
+    references: [overallDimNote, extraNotes, engravingMode ? '' : 'Engraving mode disabled — freeform concept art OK.'].filter(Boolean).join(' '),
     constraints: concept.specs.riskNotes || '',
     complexityLevel: complexity,
     coilInstructions: [coilInstructions, coilDimNote].filter(Boolean).join(' '),
@@ -89,7 +96,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     patternDensity: concept.specs.patternDensity || 'medium',
     contrast,
     baseShape,
-  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilDimNote, baseDimNote, overallDimNote]);
+  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilDimNote, baseDimNote, overallDimNote, engravingMode]);
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [inputs]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
@@ -111,31 +118,37 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     setSaved(false);
 
     try {
-      // Generate both images — coil uses selected shape, base uses baseShape
+      // Generate coil — and base too unless the user flipped on coil-only.
       const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
       const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
       const baseSize = baseSizeMap[baseShape] || '1024x1024';
-      const [coilRes, baseRes] = await Promise.all([
-        fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
-        }),
-        fetch('/api/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
-        }),
-      ]);
+
+      const coilJob = fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
+      });
+      const baseJob = coilOnly
+        ? Promise.resolve(null)
+        : fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
+          });
+
+      const [coilRes, baseRes] = await Promise.all([coilJob, baseJob]);
 
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
-
-      const baseData = await baseRes.json();
-      if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
-
       setGeneratedCoilUrl(coilData.imageUrl);
-      setGeneratedBaseUrl(baseData.imageUrl);
+
+      if (baseRes) {
+        const baseData = await baseRes.json();
+        if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
+        setGeneratedBaseUrl(baseData.imageUrl);
+      } else {
+        setGeneratedBaseUrl('');
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
@@ -144,10 +157,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   };
 
   const handleSave = () => {
-    // Update concept images
+    // Update concept images — persist the coil-only flag too so the rest
+    // of the app (concept-detail, mockup-studio, etc.) hides the base UI.
     updateConcept(concept.id, {
       coilImageUrl: generatedCoilUrl,
-      baseImageUrl: generatedBaseUrl,
+      baseImageUrl: coilOnly ? '' : generatedBaseUrl,
+      coilOnly,
     });
 
     // Save AI generation record
@@ -245,6 +260,46 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           </div>
 
+          {/* Mode flags — coil-only + engraving mode */}
+          <div className="grid grid-cols-2 gap-3">
+            <label
+              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                coilOnly ? 'bg-accent/5 border-accent' : 'bg-background border-border hover:border-accent/40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={coilOnly}
+                onChange={(e) => setCoilOnly(e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div className="min-w-0">
+                <div className="text-xs font-medium">Coil only</div>
+                <div className="text-[10px] text-muted leading-snug">
+                  Skip base generation. Use for designs without a base piece.
+                </div>
+              </div>
+            </label>
+            <label
+              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                engravingMode ? 'bg-emerald-50 border-emerald-400' : 'bg-background border-border hover:border-accent/40'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={engravingMode}
+                onChange={(e) => setEngravingMode(e.target.checked)}
+                className="mt-0.5 accent-emerald-600"
+              />
+              <div className="min-w-0">
+                <div className="text-xs font-medium">Engraving Mode</div>
+                <div className="text-[10px] text-muted leading-snug">
+                  Force pure B&amp;W, no gradients, production-ready output. Turn off for freeform concept art.
+                </div>
+              </div>
+            </label>
+          </div>
+
           {/* Quick Settings */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -286,27 +341,29 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-muted mb-1">Base Image Shape</label>
-            <div className="flex gap-1">
-              <button type="button" onClick={() => setBaseShape('circle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'circle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
-                <span className="w-4 h-4 border border-current rounded-full" />
-                Circle
-              </button>
-              <button type="button" onClick={() => setBaseShape('oval')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'oval' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
-                <span className="w-6 h-4 border border-current rounded-full" />
-                Oval
-              </button>
-              <button type="button" onClick={() => setBaseShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
-                <span className="w-4 h-4 border border-current rounded-sm" />
-                Square
-              </button>
-              <button type="button" onClick={() => setBaseShape('rectangle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'rectangle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
-                <span className="w-7 h-4 border border-current rounded-sm" />
-                Wide
-              </button>
+          {!coilOnly && (
+            <div>
+              <label className="block text-xs text-muted mb-1">Base Image Shape</label>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setBaseShape('circle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'circle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-4 h-4 border border-current rounded-full" />
+                  Circle
+                </button>
+                <button type="button" onClick={() => setBaseShape('oval')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'oval' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-6 h-4 border border-current rounded-full" />
+                  Oval
+                </button>
+                <button type="button" onClick={() => setBaseShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-4 h-4 border border-current rounded-sm" />
+                  Square
+                </button>
+                <button type="button" onClick={() => setBaseShape('rectangle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${baseShape === 'rectangle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                  <span className="w-7 h-4 border border-current rounded-sm" />
+                  Wide
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Dimensions */}
           <div className="bg-background/50 border border-border rounded-lg p-3">
@@ -326,7 +383,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${coilOnly ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <div>
                 <div className="text-[10px] text-muted mb-1">Overall</div>
                 <div className="flex gap-1">
@@ -343,29 +400,33 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                   <input type="number" step="0.1" value={coilHeight} onChange={(e) => setCoilHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] text-muted mb-1">Base</div>
-                <div className="flex gap-1">
-                  <input type="number" step="0.1" value={baseWidth} onChange={(e) => setBaseWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
-                  <span className="text-[10px] text-muted self-center">×</span>
-                  <input type="number" step="0.1" value={baseHeight} onChange={(e) => setBaseHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+              {!coilOnly && (
+                <div>
+                  <div className="text-[10px] text-muted mb-1">Base</div>
+                  <div className="flex gap-1">
+                    <input type="number" step="0.1" value={baseWidth} onChange={(e) => setBaseWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                    <span className="text-[10px] text-muted self-center">×</span>
+                    <input type="number" step="0.1" value={baseHeight} onChange={(e) => setBaseHeight(e.target.value)} placeholder="H" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <p className="text-[10px] text-muted mt-2">
               Dimensions are passed into the prompt so the AI composes for the actual print area.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${coilOnly ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="block text-xs text-muted mb-1">Coil Instructions</label>
               <TextArea value={coilInstructions} onChange={setCoilInstructions} placeholder="Specific coil details..." rows={2} />
             </div>
-            <div>
-              <label className="block text-xs text-muted mb-1">Base Instructions</label>
-              <TextArea value={baseInstructions} onChange={setBaseInstructions} placeholder="Specific base details..." rows={2} />
-            </div>
+            {!coilOnly && (
+              <div>
+                <label className="block text-xs text-muted mb-1">Base Instructions</label>
+                <TextArea value={baseInstructions} onChange={setBaseInstructions} placeholder="Specific base details..." rows={2} />
+              </div>
+            )}
           </div>
 
           <div>
@@ -408,8 +469,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           {(generatedCoilUrl || generatedBaseUrl) && (
             <div className="space-y-3">
               <div className="bg-background border border-border rounded-lg p-4">
-                <span className="text-xs text-muted block mb-2">Generated Images</span>
-                <div className="grid grid-cols-2 gap-4">
+                <span className="text-xs text-muted block mb-2">
+                  Generated Images
+                  {coilOnly && <span className="ml-2 text-[10px] text-accent">(coil only — base skipped)</span>}
+                </span>
+                <div className={`grid gap-4 ${coilOnly ? 'grid-cols-1 max-w-[50%] mx-auto' : 'grid-cols-2'}`}>
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] text-muted">Coil</span>
@@ -423,19 +487,21 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                       )}
                     </div>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] text-muted">Base</span>
-                      {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${concept.name}-base`} />}
+                  {!coilOnly && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-muted">Base</span>
+                        {generatedBaseUrl && <ImageDownloadButtons imageUrl={generatedBaseUrl} filename={`${concept.name}-base`} />}
+                      </div>
+                      <div className="aspect-square rounded-lg border border-border overflow-hidden bg-surface">
+                        {generatedBaseUrl ? (
+                          <img src={generatedBaseUrl} alt="Generated Base" className="w-full h-full object-contain" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-muted">Failed</div>
+                        )}
+                      </div>
                     </div>
-                    <div className="aspect-square rounded-lg border border-border overflow-hidden bg-surface">
-                      {generatedBaseUrl ? (
-                        <img src={generatedBaseUrl} alt="Generated Base" className="w-full h-full object-contain" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-muted">Failed</div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

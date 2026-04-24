@@ -39,6 +39,7 @@ export function dbConceptToFrontend(
     blankProductUrl: concept.blank_product_url ?? '',
     productMockupUrl: concept.product_mockup_url ?? '',
     productMockupAngles: Array.isArray(concept.product_mockup_angles) ? concept.product_mockup_angles : [],
+    coilOnly: concept.coil_only ?? false,
     priority: concept.priority ?? 'medium',
     lifecycleType: concept.lifecycle_type ?? 'evergreen',
     specs: specs
@@ -251,6 +252,7 @@ export async function POST(request: NextRequest) {
         blank_product_url: body.blankProductUrl ?? '',
         product_mockup_url: body.productMockupUrl ?? '',
         product_mockup_angles: body.productMockupAngles ?? [],
+        coil_only: body.coilOnly ?? false,
         priority: body.priority ?? 'medium',
         lifecycle_type: body.lifecycleType ?? 'evergreen',
         created_at: now,
