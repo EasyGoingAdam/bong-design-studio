@@ -91,6 +91,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
   // For inline editing of a generated image before saving
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
+
+  // Captures the ACTUAL model/provider the server reported using on the
+  // last generation. Differs from `aiModel` when v2 fell back to v1.
+  const [lastModelUsed, setLastModelUsed] = useState<string | undefined>(undefined);
+  const [lastProviderUsed, setLastProviderUsed] = useState<string | undefined>(undefined);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
@@ -185,11 +190,34 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       setGeneratedCoilUrl(coilData.imageUrl);
       addCoilToHistory(coilData.imageUrl, 'generated');
 
+      // Track the ACTUAL model/provider for whichever generation just ran
+      // so we save accurate metadata even if the server fell back.
+      let lastUsedModel: string | undefined = coilData.model;
+      let lastUsedProvider: string | undefined = coilData.provider;
+      let anyFellBack = !!coilData.fellBack;
+
       if (baseRes) {
         const baseData = await baseRes.json();
         if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
         setGeneratedBaseUrl(baseData.imageUrl);
         addBaseToHistory(baseData.imageUrl, 'generated');
+        lastUsedModel = baseData.model || lastUsedModel;
+        lastUsedProvider = baseData.provider || lastUsedProvider;
+        anyFellBack = anyFellBack || !!baseData.fellBack;
+      }
+
+      // Stash for the save handler so the persisted AIGenerationRecord
+      // reflects the actual model that produced the images.
+      setLastModelUsed(lastUsedModel);
+      setLastProviderUsed(lastUsedProvider);
+
+      // User-facing fallback notice: v2 was requested but server fell
+      // back to v1. Toast (info level) so it's visible but dismissible.
+      if (anyFellBack && aiModel === 'openai_v2') {
+        toast(
+          'ChatGPT Image 2.0 didn’t process — generated with ChatGPT Image (1.0) instead.',
+          'info',
+        );
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Generation failed');
@@ -207,13 +235,15 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       coilOnly,
     });
 
-    // Save AI generation record — include the model used so archived
-    // concepts can show which engine produced the output (Gemini /
-    // ChatGPT Image / ChatGPT Image 2.0).
+    // Save AI generation record — prefer the model/provider the server
+    // ACTUALLY used (post-fallback); fall back to the user's selection
+    // only if the server didn't report (e.g. older deploys).
     const modelLabel =
-      aiModel === 'gemini' ? 'gemini-2.5-flash-image'
-      : aiModel === 'openai_v2' ? 'gpt-image-2'
-      : 'gpt-image-1';
+      lastModelUsed
+      ?? (aiModel === 'gemini' ? 'gemini-2.5-flash-image'
+        : aiModel === 'openai_v2' ? 'gpt-image-2'
+        : 'gpt-image-1');
+    const providerLabel = lastProviderUsed ?? aiModel;
     addAIGeneration(concept.id, {
       prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
       coilPrompt,
@@ -222,7 +252,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
       model: modelLabel,
-      provider: aiModel,
+      provider: providerLabel,
     });
 
     // Save as new version

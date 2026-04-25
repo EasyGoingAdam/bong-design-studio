@@ -50,6 +50,10 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [coilOnly, setCoilOnly] = useState(false);
   // For inline editing of the generated images BEFORE saving as a concept
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
+  // Captures the ACTUAL model/provider the server reported using on the
+  // last generation. Differs from `aiModel` when v2 fell back to v1.
+  const [lastModelUsed, setLastModelUsed] = useState<string | undefined>(undefined);
+  const [lastProviderUsed, setLastProviderUsed] = useState<string | undefined>(undefined);
   const [refineMode, setRefineMode] = useState(false);
 
   const [generating, setGenerating] = useState(false);
@@ -143,11 +147,28 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       setGeneratedCoilUrl(coilData.imageUrl);
       addCoilToHistory(coilData.imageUrl, 'generated');
 
+      let lastModel: string | undefined = coilData.model;
+      let lastProvider: string | undefined = coilData.provider;
+      let anyFellBack = !!coilData.fellBack;
+
       if (baseRes) {
         const baseData = await baseRes.json();
         if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
         setGeneratedBaseUrl(baseData.imageUrl);
         addBaseToHistory(baseData.imageUrl, 'generated');
+        lastModel = baseData.model || lastModel;
+        lastProvider = baseData.provider || lastProvider;
+        anyFellBack = anyFellBack || !!baseData.fellBack;
+      }
+
+      setLastModelUsed(lastModel);
+      setLastProviderUsed(lastProvider);
+
+      if (anyFellBack && aiModel === 'openai_v2') {
+        toast(
+          'ChatGPT Image 2.0 didn’t process — generated with ChatGPT Image (1.0) instead.',
+          'info',
+        );
       }
 
     } catch (err: unknown) {
@@ -157,12 +178,14 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     }
   };
 
-  // Resolve the model identifier from the active provider toggle so it
-  // can be persisted on the AI generation record.
+  // Resolve the model identifier — prefer the ACTUAL model the server
+  // reported using (post-fallback) over the user's selection.
   const modelLabel =
-    aiModel === 'gemini' ? 'gemini-2.5-flash-image'
-    : aiModel === 'openai_v2' ? 'gpt-image-2'
-    : 'gpt-image-1';
+    lastModelUsed
+    ?? (aiModel === 'gemini' ? 'gemini-2.5-flash-image'
+      : aiModel === 'openai_v2' ? 'gpt-image-2'
+      : 'gpt-image-1');
+  const providerLabel = lastProviderUsed ?? aiModel;
 
   const handleSaveAsNewConcept = async () => {
     const concept = await addConcept({
@@ -180,7 +203,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
       model: modelLabel,
-      provider: aiModel,
+      provider: providerLabel,
     });
     addVersion(concept.id, {
       coilImageUrl: generatedCoilUrl,
@@ -202,7 +225,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
       model: modelLabel,
-      provider: aiModel,
+      provider: providerLabel,
     });
     addVersion(targetConceptId, {
       coilImageUrl: generatedCoilUrl,

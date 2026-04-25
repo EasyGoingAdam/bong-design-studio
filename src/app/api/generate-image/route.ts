@@ -117,10 +117,30 @@ export async function POST(request: NextRequest) {
     });
 
     let base64Data: string;
+    // Track which provider/model actually produced the image. When the v2
+    // path falls back to v1 we report the ACTUAL provider so the saved
+    // generation record reflects reality, not the user's request.
+    let actualProvider = params.provider;
+    let fellBack = false;
+    let fallbackReason: string | undefined;
+
     if (params.provider === 'gemini') {
       base64Data = await generateWithGemini(params);
     } else if (params.provider === 'openai_v2') {
-      base64Data = await generateWithOpenAI(params, 'v2');
+      // Try v2 first; on ANY failure, gracefully fall back to v1 so the
+      // user always gets an image. The client surfaces a toast explaining
+      // the fallback so they know which model actually produced the
+      // result.
+      try {
+        base64Data = await generateWithOpenAI(params, 'v2');
+      } catch (v2err) {
+        const errMsg = v2err instanceof Error ? v2err.message : String(v2err);
+        console.warn('[generate-image] gpt-image-2 failed, falling back to gpt-image-1:', errMsg);
+        fellBack = true;
+        fallbackReason = errMsg;
+        actualProvider = 'openai';
+        base64Data = await generateWithOpenAI(params, 'v1');
+      }
     } else {
       base64Data = await generateWithOpenAI(params, 'v1');
     }
@@ -134,14 +154,22 @@ export async function POST(request: NextRequest) {
       imageUrl = base64Data;
     }
 
-    // Echo back which model produced the image so the client can persist
-    // it in the AI generation record / version metadata.
+    // Echo back which model ACTUALLY produced the image (post-fallback)
+    // so the client can persist accurate provenance and decide whether to
+    // surface a toast to the user.
     const modelUsed =
-      params.provider === 'gemini' ? PROVIDER_CONFIG.gemini.model
-      : params.provider === 'openai_v2' ? PROVIDER_CONFIG.openai_v2.model
+      actualProvider === 'gemini' ? PROVIDER_CONFIG.gemini.model
+      : actualProvider === 'openai_v2' ? PROVIDER_CONFIG.openai_v2.model
       : PROVIDER_CONFIG.openai.model;
 
-    return NextResponse.json({ imageUrl, model: modelUsed, provider: params.provider });
+    return NextResponse.json({
+      imageUrl,
+      model: modelUsed,
+      provider: actualProvider,
+      requestedProvider: params.provider,
+      fellBack,
+      fallbackReason,
+    });
   } catch (error) {
     console.error('Image generation error:', error);
     const msg = error instanceof Error ? error.message : 'Failed to generate image';
