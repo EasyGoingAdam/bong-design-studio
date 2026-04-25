@@ -68,9 +68,15 @@ export function tuneGeminiPrompt(basePrompt: string, complexityLevel: number = 3
  * Gemini generateContent accepts:
  *   contents, generationConfig (with responseModalities, imageConfig.aspectRatio)
  */
+// Model identifier resolution. Defaults to gpt-image-1, but can be
+// overridden at runtime via OPENAI_IMAGE_MODEL env var so you can swap to
+// a newer model (e.g. when OpenAI releases a successor) without code
+// changes. Set on the server only — never expose to the browser.
+const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+
 const PROVIDER_CONFIG = {
   openai: {
-    model: 'gpt-image-1',
+    model: OPENAI_IMAGE_MODEL,
     endpoint: 'https://api.openai.com/v1/images/generations',
     // EXHAUSTIVE list of valid values — anything else will cause API errors
     validQualities: ['low', 'medium', 'high', 'auto'] as const,
