@@ -266,21 +266,11 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               <Input value={title} onChange={setTitle} placeholder="e.g., Sacred Geometry Mandala" />
             </div>
 
-            {/* AI Model Selector — three options for A/B comparison */}
+            {/* AI Model Selector — three options for A/B comparison.
+                Order per user: ChatGPT Image → ChatGPT Image 2.0 → Gemini. */}
             <div>
               <label className="block text-xs text-muted mb-1.5">AI Model</label>
               <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAiModel('gemini')}
-                  className={`py-2.5 px-2 text-sm rounded-lg border-2 transition-colors font-medium ${
-                    aiModel === 'gemini'
-                      ? 'bg-blue-500/10 border-blue-400 text-blue-600'
-                      : 'bg-background border-border text-muted hover:text-foreground'
-                  }`}
-                >
-                  Gemini
-                </button>
                 <button
                   type="button"
                   onClick={() => setAiModel('openai')}
@@ -303,6 +293,17 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                   title="Newest OpenAI image model with engraving-tuned prompt"
                 >
                   ChatGPT Image 2.0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiModel('gemini')}
+                  className={`py-2.5 px-2 text-sm rounded-lg border-2 transition-colors font-medium ${
+                    aiModel === 'gemini'
+                      ? 'bg-blue-500/10 border-blue-400 text-blue-600'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  Gemini
                 </button>
               </div>
               {(aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey && (
