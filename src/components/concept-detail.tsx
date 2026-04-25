@@ -846,8 +846,24 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           ) : (
             concept.aiGenerations.map((gen) => (
               <div key={gen.id} className="bg-surface border border-border rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted bg-accent/20 text-accent px-2 py-0.5 rounded">{gen.mode}</span>
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded">{gen.mode}</span>
+                    {gen.model && (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                          gen.provider === 'openai_v2'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                            : gen.provider === 'gemini'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}
+                        title={`Model: ${gen.model}`}
+                      >
+                        {gen.provider === 'openai_v2' ? '✦ ChatGPT 2.0' : gen.provider === 'gemini' ? 'Gemini' : 'ChatGPT'}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-muted">{formatDateTime(gen.createdAt)}</span>
                 </div>
                 <div className="flex gap-3 mb-3">

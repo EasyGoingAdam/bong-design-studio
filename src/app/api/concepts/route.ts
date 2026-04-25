@@ -132,6 +132,8 @@ export function dbConceptToFrontend(
       combinedImageUrl: g.combined_image_url ?? '',
       createdAt: g.created_at,
       variationOf: g.variation_of ?? undefined,
+      model: g.model ?? undefined,
+      provider: g.provider ?? undefined,
     })),
     manufacturingRecord: mfgRecord
       ? {

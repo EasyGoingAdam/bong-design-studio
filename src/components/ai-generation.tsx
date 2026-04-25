@@ -46,7 +46,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [density, setDensity] = useState('medium');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>('circle');
-  const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
+  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai');
   const [coilOnly, setCoilOnly] = useState(false);
   // For inline editing of the generated images BEFORE saving as a concept
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
@@ -100,7 +100,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape]);
 
   const handleGenerate = async () => {
-    if (aiModel === 'openai' && !openAIKey) {
+    if ((aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey) {
       setError('Please set your OpenAI API key in Settings first.');
       return;
     }
@@ -157,6 +157,13 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     }
   };
 
+  // Resolve the model identifier from the active provider toggle so it
+  // can be persisted on the AI generation record.
+  const modelLabel =
+    aiModel === 'gemini' ? 'gemini-2.5-flash-image'
+    : aiModel === 'openai_v2' ? 'gpt-image-2'
+    : 'gpt-image-1';
+
   const handleSaveAsNewConcept = async () => {
     const concept = await addConcept({
       name: title,
@@ -172,12 +179,14 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       mode,
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
+      model: modelLabel,
+      provider: aiModel,
     });
     addVersion(concept.id, {
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
       prompt: coilPrompt,
-      notes: 'AI generated initial concept',
+      notes: `AI generated initial concept (${modelLabel})`,
     });
     toast('Concept created from generation', 'success');
     onOpenConcept(concept.id);
@@ -192,6 +201,8 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       mode,
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
+      model: modelLabel,
+      provider: aiModel,
     });
     addVersion(targetConceptId, {
       coilImageUrl: generatedCoilUrl,
@@ -255,38 +266,55 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               <Input value={title} onChange={setTitle} placeholder="e.g., Sacred Geometry Mandala" />
             </div>
 
-            {/* AI Model Selector */}
+            {/* AI Model Selector — three options for A/B comparison */}
             <div>
               <label className="block text-xs text-muted mb-1.5">AI Model</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAiModel('openai')}
-                  className={`flex-1 py-2.5 text-sm rounded-lg border transition-colors font-medium ${
-                    aiModel === 'openai'
-                      ? 'bg-accent/10 border-accent text-accent'
-                      : 'bg-background border-border text-muted hover:text-foreground'
-                  }`}
-                >
-                  OpenAI GPT Image
-                </button>
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setAiModel('gemini')}
-                  className={`flex-1 py-2.5 text-sm rounded-lg border transition-colors font-medium ${
+                  className={`py-2.5 px-2 text-sm rounded-lg border-2 transition-colors font-medium ${
                     aiModel === 'gemini'
                       ? 'bg-blue-500/10 border-blue-400 text-blue-600'
                       : 'bg-background border-border text-muted hover:text-foreground'
                   }`}
                 >
-                  Gemini Nano Banana
+                  Gemini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiModel('openai')}
+                  className={`py-2.5 px-2 text-sm rounded-lg border-2 transition-colors font-medium ${
+                    aiModel === 'openai'
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  ChatGPT Image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiModel('openai_v2')}
+                  className={`py-2.5 px-2 text-sm rounded-lg border-2 transition-colors font-medium ${
+                    aiModel === 'openai_v2'
+                      ? 'bg-purple-500/10 border-purple-500 text-purple-700'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                  title="Newest OpenAI image model with engraving-tuned prompt"
+                >
+                  ChatGPT Image 2.0
                 </button>
               </div>
-              {aiModel === 'openai' && !openAIKey && (
+              {(aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey && (
                 <p className="text-xs text-amber-600 mt-1">OpenAI key required — set it in Settings</p>
               )}
               {aiModel === 'gemini' && !geminiKey && (
                 <p className="text-xs text-amber-600 mt-1">Gemini key required — set it in Settings</p>
+              )}
+              {aiModel === 'openai_v2' && (
+                <p className="text-[11px] text-purple-700 mt-1">
+                  ✦ Routes to <code>gpt-image-2</code> with extra-strict engraving prompt augmentation.
+                </p>
               )}
             </div>
 

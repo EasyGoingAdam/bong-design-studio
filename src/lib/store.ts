@@ -417,6 +417,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       combinedImageUrl: record.combinedImageUrl || '',
       createdAt: new Date().toISOString(),
       variationOf: record.variationOf,
+      model: record.model,
+      provider: record.provider,
     };
     set((state) => ({
       concepts: state.concepts.map((c) =>

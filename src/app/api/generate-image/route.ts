@@ -1,17 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadImage } from '@/lib/supabase';
-import { validateParams, getOpenAIRequestBody, getGeminiRequestBody, getEndpoint, getAuthHeaders } from '@/lib/ai-providers';
+import {
+  validateParams,
+  getOpenAIRequestBody,
+  getOpenAIv2RequestBody,
+  getGeminiRequestBody,
+  getEndpoint,
+  getAuthHeaders,
+  PROVIDER_CONFIG,
+} from '@/lib/ai-providers';
 
-async function generateWithOpenAI(params: ReturnType<typeof validateParams>): Promise<string> {
-  const response = await fetch(getEndpoint('openai'), {
+async function generateWithOpenAI(
+  params: ReturnType<typeof validateParams>,
+  variant: 'v1' | 'v2' = 'v1'
+): Promise<string> {
+  // Both variants hit /v1/images/generations — the only differences are
+  // the model identifier and the prompt augmentation, both encoded in the
+  // request-body builder.
+  const body = variant === 'v2' ? getOpenAIv2RequestBody(params) : getOpenAIRequestBody(params);
+  const endpoint = variant === 'v2' ? PROVIDER_CONFIG.openai_v2.endpoint : getEndpoint('openai');
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: getAuthHeaders(params),
-    body: JSON.stringify(getOpenAIRequestBody(params)),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || `OpenAI API error: ${response.status}`);
+    const modelLabel = variant === 'v2' ? 'gpt-image-2' : 'gpt-image-1';
+    throw new Error(errorData?.error?.message || `OpenAI ${modelLabel} API error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -98,9 +116,14 @@ export async function POST(request: NextRequest) {
       complexityLevel: raw.complexityLevel,
     });
 
-    const base64Data = params.provider === 'gemini'
-      ? await generateWithGemini(params)
-      : await generateWithOpenAI(params);
+    let base64Data: string;
+    if (params.provider === 'gemini') {
+      base64Data = await generateWithGemini(params);
+    } else if (params.provider === 'openai_v2') {
+      base64Data = await generateWithOpenAI(params, 'v2');
+    } else {
+      base64Data = await generateWithOpenAI(params, 'v1');
+    }
 
     // Upload to Supabase Storage
     let imageUrl: string;
@@ -111,7 +134,14 @@ export async function POST(request: NextRequest) {
       imageUrl = base64Data;
     }
 
-    return NextResponse.json({ imageUrl });
+    // Echo back which model produced the image so the client can persist
+    // it in the AI generation record / version metadata.
+    const modelUsed =
+      params.provider === 'gemini' ? PROVIDER_CONFIG.gemini.model
+      : params.provider === 'openai_v2' ? PROVIDER_CONFIG.openai_v2.model
+      : PROVIDER_CONFIG.openai.model;
+
+    return NextResponse.json({ imageUrl, model: modelUsed, provider: params.provider });
   } catch (error) {
     console.error('Image generation error:', error);
     const msg = error instanceof Error ? error.message : 'Failed to generate image';

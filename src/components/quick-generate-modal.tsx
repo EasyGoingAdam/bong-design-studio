@@ -39,7 +39,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [contrast, setContrast] = useState('high');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
-  const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
+  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
@@ -131,7 +131,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
 
   const handleGenerate = async () => {
-    if (aiModel === 'openai' && !openAIKey) {
+    if ((aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey) {
       setError('Please set your OpenAI API key in Settings first.');
       return;
     }
@@ -194,7 +194,13 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       coilOnly,
     });
 
-    // Save AI generation record
+    // Save AI generation record — include the model used so archived
+    // concepts can show which engine produced the output (Gemini /
+    // ChatGPT Image / ChatGPT Image 2.0).
+    const modelLabel =
+      aiModel === 'gemini' ? 'gemini-2.5-flash-image'
+      : aiModel === 'openai_v2' ? 'gpt-image-2'
+      : 'gpt-image-1';
     addAIGeneration(concept.id, {
       prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
       coilPrompt,
@@ -202,6 +208,8 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       mode,
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
+      model: modelLabel,
+      provider: aiModel,
     });
 
     // Save as new version
@@ -276,15 +284,43 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           )}
 
-          {/* AI Model */}
+          {/* AI Model — three options for A/B comparison */}
           <div>
             <label className="block text-xs text-muted mb-1">AI Model</label>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setAiModel('openai')} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors font-medium ${aiModel === 'openai' ? 'bg-accent/10 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
-                OpenAI GPT Image
-              </button>
-              <button type="button" onClick={() => setAiModel('gemini')} className={`flex-1 py-1.5 text-xs rounded-lg border transition-colors font-medium ${aiModel === 'gemini' ? 'bg-blue-500/10 border-blue-400 text-blue-600' : 'bg-background border-border text-muted'}`}>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setAiModel('gemini')}
+                className={`py-1.5 px-2 text-xs rounded-lg border-2 transition-colors font-medium ${
+                  aiModel === 'gemini'
+                    ? 'bg-blue-500/10 border-blue-400 text-blue-600'
+                    : 'bg-background border-border text-muted hover:text-foreground'
+                }`}
+              >
                 Gemini
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiModel('openai')}
+                className={`py-1.5 px-2 text-xs rounded-lg border-2 transition-colors font-medium ${
+                  aiModel === 'openai'
+                    ? 'bg-accent/10 border-accent text-accent'
+                    : 'bg-background border-border text-muted hover:text-foreground'
+                }`}
+              >
+                ChatGPT Image
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiModel('openai_v2')}
+                className={`py-1.5 px-2 text-xs rounded-lg border-2 transition-colors font-medium ${
+                  aiModel === 'openai_v2'
+                    ? 'bg-purple-500/10 border-purple-500 text-purple-700'
+                    : 'bg-background border-border text-muted hover:text-foreground'
+                }`}
+                title="Newest OpenAI image model with engraving-tuned prompt"
+              >
+                ChatGPT Image 2.0
               </button>
             </div>
           </div>

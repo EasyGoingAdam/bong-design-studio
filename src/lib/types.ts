@@ -90,6 +90,13 @@ export interface AIGenerationRecord {
   combinedImageUrl: string;
   createdAt: string;
   variationOf?: string;
+  /** Identifier for the model that produced this generation, for
+   *  A/B comparison and archive metadata. e.g. 'gpt-image-1',
+   *  'gpt-image-2', 'gemini-2.5-flash-image'. Optional because older
+   *  records predate the field. */
+  model?: string;
+  /** High-level provider label — 'openai' | 'openai_v2' | 'gemini' */
+  provider?: string;
 }
 
 export interface ConceptVersion {
