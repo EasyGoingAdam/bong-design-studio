@@ -782,7 +782,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                     <pre className="text-xs text-muted bg-background rounded p-2 mt-1 whitespace-pre-wrap">{v.prompt}</pre>
                   </details>
                 )}
-                <div className="mt-3 pt-3 border-t border-border flex gap-2">
+                <div className="mt-3 pt-3 border-t border-border flex gap-2 flex-wrap">
                   <button
                     onClick={() => {
                       if (!confirm(`Restore Version ${v.versionNumber}? The current images will be snapshotted first so nothing is lost.`)) return;
@@ -804,6 +804,24 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                   >
                     ↶ Restore this version
                   </button>
+                  {v.coilImageUrl && (
+                    <button
+                      onClick={() => setEditingImage({ part: 'coil', url: v.coilImageUrl })}
+                      className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                      title="Open the edit modal seeded with this version's coil — branch a new edit from here without overwriting current"
+                    >
+                      ⎇ Edit coil from v{v.versionNumber}
+                    </button>
+                  )}
+                  {v.baseImageUrl && !concept.coilOnly && (
+                    <button
+                      onClick={() => setEditingImage({ part: 'base', url: v.baseImageUrl })}
+                      className="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                      title="Open the edit modal seeded with this version's base"
+                    >
+                      ⎇ Edit base from v{v.versionNumber}
+                    </button>
+                  )}
                 </div>
               </div>
             ))
