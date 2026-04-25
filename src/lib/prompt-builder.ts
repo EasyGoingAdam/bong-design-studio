@@ -14,6 +14,10 @@ interface PromptInputs {
   patternDensity: string;
   contrast: string;
   baseShape?: 'circle' | 'oval' | 'square' | 'rectangle';
+  /** Coil canvas orientation. 'rectangle' = wide horizontal landscape;
+   *  'square' = 1:1 aspect. Drives the hardest constraint we put on the
+   *  model — orientation drift is the #1 failure mode otherwise. */
+  coilShape?: 'square' | 'rectangle';
 }
 
 /**
@@ -102,7 +106,25 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
     parts.push(`MUST FOLLOW: ${dirs}`);
   }
 
-  parts.push('Flat rectangular artwork for a coil sleeve.');
+  // Orientation is the strongest constraint we can give the model — image
+  // models routinely default to a portrait-leaning composition unless
+  // told otherwise, and that breaks coil wraps. Repeat the constraint
+  // multiple times in different language so it overpowers any contrary
+  // signal coming from the user's free-text instructions or dimensions.
+  if (inputs.coilShape === 'rectangle') {
+    parts.push(
+      'CRITICAL CANVAS ORIENTATION: WIDE HORIZONTAL LANDSCAPE composition. ' +
+      'The artwork must be SIGNIFICANTLY WIDER than tall (roughly 3:2 or wider). ' +
+      'Compose the design as a flat rectangular STRIP that unrolls a cylindrical coil sleeve — ' +
+      'long horizontal axis, short vertical axis. ' +
+      'The design must FILL the wide landscape canvas edge-to-edge horizontally. ' +
+      'Do NOT center a portrait composition inside the wide canvas. ' +
+      'Do NOT add vertical bars or padding on the left and right.'
+    );
+  } else {
+    parts.push('Flat SQUARE artwork (1:1 aspect ratio) for a coil sleeve. Compose to fill the square canvas evenly.');
+  }
+
   if (inputs.title) parts.push(`Concept: "${inputs.title}".`);
   if (inputs.stylePrompt) parts.push(`Style: ${inputs.stylePrompt}.`);
   if (inputs.themePrompt) parts.push(`Theme: ${inputs.themePrompt}.`);
@@ -111,6 +133,12 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
   if (inputs.complexityLevel <= 2) parts.push('Simple, clean, minimal detail.');
   else if (inputs.complexityLevel >= 4) parts.push('Highly detailed and intricate.');
   if (inputs.contrast === 'high') parts.push('Maximum contrast.');
+
+  // Reinforce orientation at the END too — last instruction tends to
+  // weight heaviest in image-gen models.
+  if (inputs.coilShape === 'rectangle') {
+    parts.push('Final reminder: WIDE HORIZONTAL LANDSCAPE — wider than tall, never portrait.');
+  }
 
   return parts.join(' ');
 }

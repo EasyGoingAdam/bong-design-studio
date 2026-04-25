@@ -93,11 +93,11 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const inputs = {
     title, stylePrompt, themePrompt, references, constraints: effectiveConstraints,
     complexityLevel, coilInstructions, baseInstructions,
-    relationship, mode, patternDensity: density, contrast, baseShape,
+    relationship, mode, patternDensity: density, contrast, baseShape, coilShape,
   };
 
-  const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape]);
-  const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape]);
+  const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape, coilShape]);
+  const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape, coilShape]);
 
   const handleGenerate = async () => {
     if ((aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey) {

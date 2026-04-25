@@ -98,10 +98,22 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
   // Append dimension context to the per-part instructions so the prompt is
   // dimension-aware without needing a separate prompt builder field.
-  const coilDimNote =
-    coilWidth && coilHeight
-      ? `Target print area ${coilWidth}x${coilHeight}${dimUnit} — design must read cleanly at this size.`
-      : '';
+  //
+  // ORIENTATION CORRECTION: when "Wide" coil shape is selected, surface
+  // the dimensions in landscape order (larger value as width). The user
+  // entered W=45 H=120 which read as portrait — that conflicted with the
+  // wide canvas request and caused the AI to compose portrait designs
+  // inside a landscape canvas. We respect the LARGER dimension as the
+  // long axis of the wide coil and present it as such to the model.
+  const coilDimNote = (() => {
+    if (!coilWidth || !coilHeight) return '';
+    const w = Number(coilWidth);
+    const h = Number(coilHeight);
+    if (coilShape === 'rectangle' && w < h) {
+      return `Target print area: ${h}${dimUnit} wide x ${w}${dimUnit} tall (HORIZONTAL coil strip — width is the long axis). Design must read cleanly at this size.`;
+    }
+    return `Target print area ${coilWidth}x${coilHeight}${dimUnit} — design must read cleanly at this size.`;
+  })();
   const baseDimNote =
     baseWidth && baseHeight
       ? `Target print area ${baseWidth}x${baseHeight}${dimUnit} — design must read cleanly at this size.`
@@ -125,7 +137,8 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     patternDensity: concept.specs.patternDensity || 'medium',
     contrast,
     baseShape,
-  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilDimNote, baseDimNote, overallDimNote, engravingMode]);
+    coilShape,
+  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilShape, coilDimNote, baseDimNote, overallDimNote, engravingMode]);
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [inputs]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
@@ -406,6 +419,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                   Square
                 </button>
               </div>
+              {coilShape === 'rectangle' && coilWidth && coilHeight && Number(coilWidth) < Number(coilHeight) && (
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1 leading-snug">
+                  ⚠ Your coil dimensions read as portrait ({coilWidth}×{coilHeight}). For a Wide coil the AI will treat the LARGER value as the width axis. Swap them in the Dimensions section if you want the literal numbers respected.
+                </p>
+              )}
             </div>
           </div>
 
