@@ -13,9 +13,11 @@ interface Props {
   imageUrl: string;
   /** What this image represents — "coil" or "base" — used for toast copy only */
   label: string;
-  /** Concept id — used to build a unique storage filename so edits across
-   *  different concepts don't collide at the same storage path. */
-  conceptId: string;
+  /** Optional concept id — used to build a unique storage filename so edits
+   *  across different concepts don't collide at the same storage path. When
+   *  omitted (e.g. editing a yet-to-be-saved generation on the AI Generate
+   *  tab), we fall back to a `standalone-<timestamp>` filename. */
+  conceptId?: string;
   /** Callback fired when an edit produces a new image URL. Parent decides what to do with it. */
   onEdited: (result: EditImageResult) => void;
   /** Close the modal */
@@ -145,7 +147,7 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
           preserveSubject,
           folder: 'edited',
           // Unique filename per concept + part + edit → no storage collisions
-          filename: `${conceptId}-${label}-${Date.now()}`,
+          filename: `${conceptId || 'standalone'}-${label}-${Date.now()}`,
         }),
       });
       const data = await res.json();

@@ -8,6 +8,7 @@ import { buildCoilPrompt, buildBasePrompt, SAMPLE_PROMPTS } from '@/lib/prompt-b
 import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
 import { DesignReviewer } from './design-reviewer';
+import { EditImageModal } from './edit-image-modal';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production Ready' },
@@ -47,6 +48,8 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>('circle');
   const [aiModel, setAiModel] = useState<'openai' | 'gemini'>('openai');
   const [coilOnly, setCoilOnly] = useState(false);
+  // For inline editing of the generated images BEFORE saving as a concept
+  const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
   const [refineMode, setRefineMode] = useState(false);
 
   const [generating, setGenerating] = useState(false);
@@ -550,6 +553,15 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                     <span className="text-xs text-muted">Coil preview</span>
                   )}
                 </div>
+                {generatedCoilUrl && (
+                  <button
+                    onClick={() => setEditingImage({ part: 'coil', url: generatedCoilUrl })}
+                    className="mt-2 w-full py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-medium rounded-lg transition-colors"
+                    title="Make small changes — describe what to tweak (e.g. 'thicker lines', 'remove the border')"
+                  >
+                    ✎ Edit this image
+                  </button>
+                )}
               </div>
               {!coilOnly && (
                 <div>
@@ -569,6 +581,15 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                       <span className="text-xs text-muted">Base preview</span>
                     )}
                   </div>
+                  {generatedBaseUrl && (
+                    <button
+                      onClick={() => setEditingImage({ part: 'base', url: generatedBaseUrl })}
+                      className="mt-2 w-full py-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-medium rounded-lg transition-colors"
+                      title="Make small changes — describe what to tweak"
+                    >
+                      ✎ Edit this image
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -668,6 +689,21 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           )}
         </div>
       </div>
+
+      {/* Edit Image Modal — opens for either generated image. The new URL
+          replaces the previewed image so the team can iterate before
+          saving the result as a concept. */}
+      {editingImage && (
+        <EditImageModal
+          imageUrl={editingImage.url}
+          label={editingImage.part}
+          onEdited={({ url }) => {
+            if (editingImage.part === 'coil') setGeneratedCoilUrl(url);
+            else setGeneratedBaseUrl(url);
+          }}
+          onClose={() => setEditingImage(null)}
+        />
+      )}
     </div>
   );
 }
