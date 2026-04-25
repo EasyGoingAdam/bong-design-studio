@@ -261,10 +261,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           </div>
 
           {/* Mode flags — coil-only + engraving mode */}
-          <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium mb-1.5">Generation options</label>
+            <div className="grid grid-cols-2 gap-3">
             <label
-              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
-                coilOnly ? 'bg-accent/5 border-accent' : 'bg-background border-border hover:border-accent/40'
+              className={`flex items-start gap-2 p-2.5 border-2 rounded-lg cursor-pointer transition-colors ${
+                coilOnly ? 'bg-accent/10 border-accent' : 'bg-background border-border hover:border-accent/40'
               }`}
             >
               <input
@@ -274,14 +276,14 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 className="mt-0.5 accent-accent"
               />
               <div className="min-w-0">
-                <div className="text-xs font-medium">Coil only</div>
+                <div className="text-sm font-semibold">Coil only</div>
                 <div className="text-[10px] text-muted leading-snug">
                   Skip base generation. Use for designs without a base piece.
                 </div>
               </div>
             </label>
             <label
-              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+              className={`flex items-start gap-2 p-2.5 border-2 rounded-lg cursor-pointer transition-colors ${
                 engravingMode ? 'bg-emerald-50 border-emerald-400' : 'bg-background border-border hover:border-accent/40'
               }`}
             >
@@ -292,12 +294,13 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 className="mt-0.5 accent-emerald-600"
               />
               <div className="min-w-0">
-                <div className="text-xs font-medium">Engraving Mode</div>
+                <div className="text-sm font-semibold">Engraving Mode</div>
                 <div className="text-[10px] text-muted leading-snug">
                   Force pure B&amp;W, no gradients, production-ready output. Turn off for freeform concept art.
                 </div>
               </div>
             </label>
+            </div>
           </div>
 
           {/* Quick Settings */}

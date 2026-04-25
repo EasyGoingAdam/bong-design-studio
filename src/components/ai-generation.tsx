@@ -263,24 +263,40 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               )}
             </div>
 
-            <label
-              className={`flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors ${
-                coilOnly ? 'bg-accent/5 border-accent' : 'bg-background border-border hover:border-accent/40'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={coilOnly}
-                onChange={(e) => setCoilOnly(e.target.checked)}
-                className="mt-0.5 accent-accent"
-              />
-              <div>
-                <div className="text-sm font-medium">Coil only</div>
-                <div className="text-xs text-muted">
-                  Skip base generation. Use for products that only have a coil/sleeve design.
-                </div>
+            {/* COIL-ONLY TOGGLE — large, hard-to-miss segmented control */}
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Design scope</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCoilOnly(false)}
+                  className={`text-left px-3 py-2.5 rounded-lg border-2 transition-colors ${
+                    !coilOnly
+                      ? 'bg-accent/10 border-accent'
+                      : 'bg-background border-border hover:border-accent/40'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Coil + Base</div>
+                  <div className="text-[11px] text-muted leading-tight">
+                    Generate both the cylindrical wrap and the base piece
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCoilOnly(true)}
+                  className={`text-left px-3 py-2.5 rounded-lg border-2 transition-colors ${
+                    coilOnly
+                      ? 'bg-accent/10 border-accent'
+                      : 'bg-background border-border hover:border-accent/40'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Coil only</div>
+                  <div className="text-[11px] text-muted leading-tight">
+                    Skip the base — just generate the coil image
+                  </div>
+                </button>
               </div>
-            </label>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
