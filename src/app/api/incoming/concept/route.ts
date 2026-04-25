@@ -112,7 +112,32 @@ function unauthorized(message = 'Unauthorized') {
   return NextResponse.json({ error: message }, { status: 401 });
 }
 
+/**
+ * SHELVED. The incoming-submissions feature is intentionally disabled and
+ * gated behind the INCOMING_API_ENABLED env var. To turn it back on:
+ *   1. Set INCOMING_API_ENABLED=true in Railway → Variables
+ *   2. Set INCOMING_API_KEY to a strong shared secret
+ *   3. Redeploy
+ * The route returns 410 Gone when shelved so callers see a clear,
+ * non-retryable signal instead of a vague 401/503.
+ */
+function shelvedResponse() {
+  return NextResponse.json(
+    {
+      error: 'Incoming submissions are currently disabled.',
+      hint: 'Set INCOMING_API_ENABLED=true on the server to re-enable.',
+    },
+    { status: 410 }
+  );
+}
+
+function isEnabled(): boolean {
+  return process.env.INCOMING_API_ENABLED === 'true';
+}
+
 export async function POST(request: NextRequest) {
+  if (!isEnabled()) return shelvedResponse();
+
   // ---- Auth ----
   const expected = process.env.INCOMING_API_KEY;
   if (!expected) {
@@ -349,6 +374,8 @@ export async function POST(request: NextRequest) {
  * before sending real submissions.
  */
 export async function GET(request: NextRequest) {
+  if (!isEnabled()) return shelvedResponse();
+
   const expected = process.env.INCOMING_API_KEY;
   if (!expected) {
     return NextResponse.json({ ok: false, error: 'INCOMING_API_KEY not configured' }, { status: 503 });

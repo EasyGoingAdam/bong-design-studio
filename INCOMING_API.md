@@ -1,5 +1,22 @@
 # Incoming Submissions API
 
+> ## ⏸ SHELVED
+>
+> This feature is currently **disabled** at the server. The endpoint returns
+> HTTP `410 Gone` for all callers. The implementation, schema, UI surfacing,
+> and SQL migrations are kept intact in the repo so re-enabling is a
+> one-line config change later.
+>
+> **To turn it back on:**
+> 1. Set `INCOMING_API_ENABLED=true` in Railway → Variables
+> 2. Set `INCOMING_API_KEY` to a strong shared secret (`openssl rand -hex 32`)
+> 3. Run the SQL migration in `supabase-migration-submissions.sql` (only if not already run)
+> 4. Redeploy
+>
+> Everything below describes the contract as it WILL behave when re-enabled.
+
+---
+
 Push a finished design from an external tool into Design Studio as a
 ready-to-work-on concept. Submissions land directly in the **Approved**
 column so the team can take them straight to manufacturing.
