@@ -55,6 +55,30 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [generating, setGenerating] = useState(false);
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
+
+  /**
+   * Per-session version history. Every generate / edit ADDS an entry
+   * (newest first). The active*Url is what's shown in the preview and
+   * what the user saves when they click "Use This Version" — but every
+   * version stays accessible via the thumbnail strip below the preview
+   * so nothing is ever lost mid-iteration.
+   */
+  type HistoryEntry = { url: string; label: string; kind: 'generated' | 'edited'; createdAt: number };
+  const [coilHistory, setCoilHistory] = useState<HistoryEntry[]>([]);
+  const [baseHistory, setBaseHistory] = useState<HistoryEntry[]>([]);
+
+  const addCoilToHistory = (url: string, kind: 'generated' | 'edited' = 'generated') => {
+    setCoilHistory((prev) => {
+      const idx = prev.length + 1;
+      return [{ url, kind, label: `${kind === 'edited' ? 'Edit' : 'Gen'} ${idx}`, createdAt: Date.now() }, ...prev];
+    });
+  };
+  const addBaseToHistory = (url: string, kind: 'generated' | 'edited' = 'generated') => {
+    setBaseHistory((prev) => {
+      const idx = prev.length + 1;
+      return [{ url, kind, label: `${kind === 'edited' ? 'Edit' : 'Gen'} ${idx}`, createdAt: Date.now() }, ...prev];
+    });
+  };
   const [error, setError] = useState('');
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [showSamples, setShowSamples] = useState(false);
@@ -91,8 +115,8 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
 
     setGenerating(true);
     setError('');
-    setGeneratedCoilUrl('');
-    setGeneratedBaseUrl('');
+    // Don't clear the active preview — keep showing the previous result
+    // until the new one arrives, so the history strip stays visible.
 
     try {
       // Generate BOTH images in parallel (faster + same cost)
@@ -117,13 +141,13 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
+      addCoilToHistory(coilData.imageUrl, 'generated');
 
       if (baseRes) {
         const baseData = await baseRes.json();
         if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
         setGeneratedBaseUrl(baseData.imageUrl);
-      } else {
-        setGeneratedBaseUrl('');
+        addBaseToHistory(baseData.imageUrl, 'generated');
       }
 
     } catch (err: unknown) {
@@ -562,6 +586,36 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                     ✎ Edit this image
                   </button>
                 )}
+                {coilHistory.length > 1 && (
+                  <div className="mt-2">
+                    <div className="text-[10px] text-muted mb-1 flex items-center justify-between">
+                      <span>History — {coilHistory.length} version{coilHistory.length !== 1 ? 's' : ''}</span>
+                      <span className="italic">click any to switch</span>
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {coilHistory.map((h) => (
+                        <button
+                          key={h.url}
+                          onClick={() => setGeneratedCoilUrl(h.url)}
+                          className={`shrink-0 w-14 rounded border-2 transition-all overflow-hidden ${
+                            generatedCoilUrl === h.url
+                              ? 'border-accent ring-2 ring-accent/30'
+                              : 'border-border hover:border-accent/60'
+                          }`}
+                          title={`${h.label} — ${new Date(h.createdAt).toLocaleTimeString()}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={h.url} alt={h.label} className="w-full h-14 object-cover bg-background" />
+                          <div className={`text-[8px] py-0.5 truncate ${
+                            h.kind === 'edited' ? 'bg-accent/10 text-accent' : 'bg-background text-muted'
+                          }`}>
+                            {h.label}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               {!coilOnly && (
                 <div>
@@ -589,6 +643,36 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                     >
                       ✎ Edit this image
                     </button>
+                  )}
+                  {baseHistory.length > 1 && (
+                    <div className="mt-2">
+                      <div className="text-[10px] text-muted mb-1 flex items-center justify-between">
+                        <span>History — {baseHistory.length} version{baseHistory.length !== 1 ? 's' : ''}</span>
+                        <span className="italic">click any to switch</span>
+                      </div>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1">
+                        {baseHistory.map((h) => (
+                          <button
+                            key={h.url}
+                            onClick={() => setGeneratedBaseUrl(h.url)}
+                            className={`shrink-0 w-14 rounded border-2 transition-all overflow-hidden ${
+                              generatedBaseUrl === h.url
+                                ? 'border-accent ring-2 ring-accent/30'
+                                : 'border-border hover:border-accent/60'
+                            }`}
+                            title={`${h.label} — ${new Date(h.createdAt).toLocaleTimeString()}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={h.url} alt={h.label} className="w-full h-14 object-cover bg-background" />
+                            <div className={`text-[8px] py-0.5 truncate ${
+                              h.kind === 'edited' ? 'bg-accent/10 text-accent' : 'bg-background text-muted'
+                            }`}>
+                              {h.label}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -698,8 +782,16 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           imageUrl={editingImage.url}
           label={editingImage.part}
           onEdited={({ url }) => {
-            if (editingImage.part === 'coil') setGeneratedCoilUrl(url);
-            else setGeneratedBaseUrl(url);
+            // CRITICAL: don't replace, ADD. The previous version stays in
+            // the history strip below the preview so the team can compare
+            // and pick whichever they like best when saving the concept.
+            if (editingImage.part === 'coil') {
+              setGeneratedCoilUrl(url);
+              addCoilToHistory(url, 'edited');
+            } else {
+              setGeneratedBaseUrl(url);
+              addBaseToHistory(url, 'edited');
+            }
           }}
           onClose={() => setEditingImage(null)}
         />

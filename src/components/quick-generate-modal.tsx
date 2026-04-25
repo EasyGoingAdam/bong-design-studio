@@ -7,6 +7,7 @@ import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
+import { EditImageModal } from './edit-image-modal';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production Ready' },
@@ -62,6 +63,34 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [generating, setGenerating] = useState(false);
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
+
+  // Per-session version history. Same pattern as the AI Generate tab —
+  // every generate / edit ADDS an entry, nothing is replaced. The active
+  // URL is what's saved to the concept on accept, but every prior version
+  // stays accessible via the thumbnail strip below the preview.
+  type HistoryEntry = { url: string; label: string; kind: 'generated' | 'edited'; createdAt: number };
+  const [coilHistory, setCoilHistory] = useState<HistoryEntry[]>(
+    concept.coilImageUrl ? [{ url: concept.coilImageUrl, label: 'Existing', kind: 'generated', createdAt: 0 }] : []
+  );
+  const [baseHistory, setBaseHistory] = useState<HistoryEntry[]>(
+    concept.baseImageUrl ? [{ url: concept.baseImageUrl, label: 'Existing', kind: 'generated', createdAt: 0 }] : []
+  );
+
+  const addCoilToHistory = (url: string, kind: 'generated' | 'edited' = 'generated') => {
+    setCoilHistory((prev) => [
+      { url, kind, label: `${kind === 'edited' ? 'Edit' : 'Gen'} ${prev.length + 1}`, createdAt: Date.now() },
+      ...prev,
+    ]);
+  };
+  const addBaseToHistory = (url: string, kind: 'generated' | 'edited' = 'generated') => {
+    setBaseHistory((prev) => [
+      { url, kind, label: `${kind === 'edited' ? 'Edit' : 'Gen'} ${prev.length + 1}`, createdAt: Date.now() },
+      ...prev,
+    ]);
+  };
+
+  // For inline editing of a generated image before saving
+  const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
@@ -113,8 +142,8 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
     setGenerating(true);
     setError('');
-    setGeneratedCoilUrl('');
-    setGeneratedBaseUrl('');
+    // Don't clear the active preview — keep showing the previous result
+    // until the new one arrives, and keep all prior versions in history.
     setSaved(false);
 
     try {
@@ -141,13 +170,13 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       const coilData = await coilRes.json();
       if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
       setGeneratedCoilUrl(coilData.imageUrl);
+      addCoilToHistory(coilData.imageUrl, 'generated');
 
       if (baseRes) {
         const baseData = await baseRes.json();
         if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
         setGeneratedBaseUrl(baseData.imageUrl);
-      } else {
-        setGeneratedBaseUrl('');
+        addBaseToHistory(baseData.imageUrl, 'generated');
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Generation failed');
@@ -489,6 +518,34 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                         <div className="w-full h-full flex items-center justify-center text-xs text-muted">Failed</div>
                       )}
                     </div>
+                    {generatedCoilUrl && (
+                      <button
+                        onClick={() => setEditingImage({ part: 'coil', url: generatedCoilUrl })}
+                        className="mt-1.5 w-full py-1 bg-accent hover:bg-accent-hover text-white text-[11px] font-medium rounded transition-colors"
+                      >
+                        ✎ Edit
+                      </button>
+                    )}
+                    {coilHistory.length > 1 && (
+                      <div className="mt-1.5">
+                        <div className="text-[9px] text-muted mb-0.5">{coilHistory.length} versions — click to switch</div>
+                        <div className="flex gap-1 overflow-x-auto">
+                          {coilHistory.map((h) => (
+                            <button
+                              key={h.url}
+                              onClick={() => setGeneratedCoilUrl(h.url)}
+                              className={`shrink-0 w-10 h-10 rounded border-2 overflow-hidden ${
+                                generatedCoilUrl === h.url ? 'border-accent ring-1 ring-accent/40' : 'border-border'
+                              }`}
+                              title={h.label}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={h.url} alt={h.label} className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {!coilOnly && (
                     <div>
@@ -503,6 +560,34 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                           <div className="w-full h-full flex items-center justify-center text-xs text-muted">Failed</div>
                         )}
                       </div>
+                      {generatedBaseUrl && (
+                        <button
+                          onClick={() => setEditingImage({ part: 'base', url: generatedBaseUrl })}
+                          className="mt-1.5 w-full py-1 bg-accent hover:bg-accent-hover text-white text-[11px] font-medium rounded transition-colors"
+                        >
+                          ✎ Edit
+                        </button>
+                      )}
+                      {baseHistory.length > 1 && (
+                        <div className="mt-1.5">
+                          <div className="text-[9px] text-muted mb-0.5">{baseHistory.length} versions — click to switch</div>
+                          <div className="flex gap-1 overflow-x-auto">
+                            {baseHistory.map((h) => (
+                              <button
+                                key={h.url}
+                                onClick={() => setGeneratedBaseUrl(h.url)}
+                                className={`shrink-0 w-10 h-10 rounded border-2 overflow-hidden ${
+                                  generatedBaseUrl === h.url ? 'border-accent ring-1 ring-accent/40' : 'border-border'
+                                }`}
+                                title={h.label}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={h.url} alt={h.label} className="w-full h-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -544,6 +629,25 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           )}
         </div>
       </div>
+
+      {editingImage && (
+        <EditImageModal
+          imageUrl={editingImage.url}
+          label={editingImage.part}
+          conceptId={concept.id}
+          onEdited={({ url }) => {
+            // Add to history (preserve old) and switch the active preview
+            if (editingImage.part === 'coil') {
+              setGeneratedCoilUrl(url);
+              addCoilToHistory(url, 'edited');
+            } else {
+              setGeneratedBaseUrl(url);
+              addBaseToHistory(url, 'edited');
+            }
+          }}
+          onClose={() => setEditingImage(null)}
+        />
+      )}
     </div>
   );
 }
