@@ -123,13 +123,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-semibold tracking-tight">Design Studio</h1>
           <span className="text-xs text-muted bg-border/50 px-2 py-0.5 rounded-full">Laser Etch Manager</span>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          aria-label="Open settings"
-          className="text-sm text-muted hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-surface-hover"
-        >
-          Settings
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Visible build indicator — lets you confirm at a glance which
+              deploy you're seeing in the browser. Hover for the build time. */}
+          <span
+            className="text-[10px] text-muted font-mono px-1.5 py-0.5 bg-background border border-border rounded"
+            title={`Built ${process.env.NEXT_PUBLIC_BUILD_TIME || 'unknown'}`}
+          >
+            v{process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'}
+          </span>
+          <button
+            onClick={() => setShowSettings(true)}
+            aria-label="Open settings"
+            className="text-sm text-muted hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-surface-hover"
+          >
+            Settings
+          </button>
+        </div>
       </header>
 
       {/* Tab Navigation */}
