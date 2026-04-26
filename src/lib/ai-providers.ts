@@ -95,12 +95,13 @@ const PROVIDER_CONFIG = {
   openai_v2: {
     model: OPENAI_IMAGE_MODEL_V2,
     endpoint: 'https://api.openai.com/v1/images/generations',
-    // V2 likely keeps the same param shape as v1 — same whitelist.
-    validQualities: ['low', 'medium', 'high', 'auto'] as const,
-    defaultQuality: 'high', // higher default since it's the "best" tier
+    // gpt-image-2's documented request shape is MINIMAL — model + prompt + size.
+    // Passing extra fields (quality, n, etc.) causes 400 "Unknown parameter".
+    // Confirmed against the OpenAI SDK sample:
+    //   openai.images.generate({ model: 'gpt-image-2', prompt, size: '1024x1024' })
     validSizes: ['1024x1024', '1536x1024', '1024x1536'] as const,
     defaultSize: '1024x1024',
-    allowedBodyKeys: ['model', 'prompt', 'n', 'size', 'quality'] as const,
+    allowedBodyKeys: ['model', 'prompt', 'size'] as const,
   },
   gemini: {
     model: 'gemini-2.5-flash-image',
@@ -217,17 +218,21 @@ export function getOpenAIRequestBody(params: ImageGenParams): Record<string, unk
 }
 
 /**
- * Get the OpenAI v2 request body. Same shape as v1 but uses the v2 model
- * identifier and applies the v2-specific prompt tuning automatically.
+ * Get the OpenAI v2 request body.
+ *
+ * gpt-image-2 documented request shape (per OpenAI SDK sample):
+ *   { model, prompt, size }
+ *
+ * Do NOT add quality, n, response_format, or other v1 params — gpt-image-2
+ * 400s on unknown parameters. The allowedBodyKeys whitelist enforces this
+ * automatically as a safety net.
  */
 export function getOpenAIv2RequestBody(params: ImageGenParams): Record<string, unknown> {
   const tunedPrompt = tuneOpenAIv2Prompt(params.prompt);
   const body: Record<string, unknown> = {
     model: PROVIDER_CONFIG.openai_v2.model,
     prompt: tunedPrompt,
-    n: 1,
     size: params.size,
-    quality: params.quality,
   };
   const allowed = new Set<string>(PROVIDER_CONFIG.openai_v2.allowedBodyKeys);
   const filtered: Record<string, unknown> = {};
