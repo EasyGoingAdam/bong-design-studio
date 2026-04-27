@@ -266,7 +266,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Images */}
           <div className="lg:col-span-2 space-y-4">
-            <div className={`grid gap-4 ${concept.coilOnly ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <div className={`grid gap-3 sm:gap-4 grid-cols-1 ${concept.coilOnly ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-muted">Coil{concept.coilOnly && <span className="ml-1 text-[10px] text-accent">(coil-only design)</span>}</span>

@@ -263,15 +263,15 @@ export function WorkflowBoard({
   }, [concepts]);
 
   return (
-    <div className="p-6 h-full">
-      <div className="flex items-center justify-between mb-4 gap-4">
+    <div className="p-3 sm:p-6 h-full">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3 md:gap-4">
         <div className="min-w-0">
-          <h2 className="text-2xl font-bold">Workflow Board</h2>
-          <p className="text-sm text-muted">
+          <h2 className="text-xl sm:text-2xl font-bold">Workflow Board</h2>
+          <p className="text-xs sm:text-sm text-muted">
             Drag concepts between stages{hasSelection ? '' : ' — click checkboxes to multi-select'}
           </p>
         </div>
-        <div className="flex items-center gap-2 w-full max-w-xl">
+        <div className="flex items-center gap-2 w-full md:max-w-xl">
           <div className="relative flex-1">
             <input
               type="text"
@@ -406,7 +406,7 @@ export function WorkflowBoard({
             return (
               <div
                 key={col}
-                className={`flex-shrink-0 w-72 bg-surface border border-border rounded-xl border-t-2 ${COLUMN_COLORS[col]} flex flex-col`}
+                className={`flex-shrink-0 w-64 sm:w-72 bg-surface border border-border rounded-xl border-t-2 ${COLUMN_COLORS[col]} flex flex-col`}
               >
                 {/* Column Header */}
                 <div className="p-3 border-b border-border">

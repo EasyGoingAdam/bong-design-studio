@@ -113,10 +113,10 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
 
       {/* PRODUCTION QUEUE — the hero module */}
       <div className="bg-gradient-to-br from-blue-50 to-accent/5 border-2 border-blue-200 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-blue-200 bg-white/50">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-4 sm:p-5 border-b border-blue-200 bg-white/50">
           <div>
             <div className="flex items-baseline gap-3 flex-wrap">
-              <span className="text-5xl font-black text-blue-700 tabular-nums leading-none">
+              <span className="text-4xl sm:text-5xl font-black text-blue-700 tabular-nums leading-none">
                 {stats.readyForMfg}
               </span>
               <div>
@@ -131,17 +131,17 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-6 shrink-0">
-            <div className="text-right">
+          <div className="flex items-center gap-4 sm:gap-6 md:shrink-0">
+            <div className="text-left md:text-right">
               <div className="text-xs text-blue-700/70">Ship-ready concepts</div>
-              <div className="text-2xl font-bold text-green-700 tabular-nums">
+              <div className="text-xl sm:text-2xl font-bold text-green-700 tabular-nums">
                 {stats.shipReady}<span className="text-xs text-blue-700/70">/{stats.liveCount}</span>
               </div>
               <div className="text-[10px] text-blue-700/70">avg {stats.avgReadiness}% complete</div>
             </div>
-            <div className="text-right">
+            <div className="text-left md:text-right">
               <div className="text-xs text-blue-700/70">Manufactured this week</div>
-              <div className="text-2xl font-bold text-blue-900 tabular-nums">
+              <div className="text-xl sm:text-2xl font-bold text-blue-900 tabular-nums">
                 {stats.manufacturedThisWeek}
               </div>
             </div>

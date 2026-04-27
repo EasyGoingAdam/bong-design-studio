@@ -238,7 +238,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold">AI Concept Generation</h2>

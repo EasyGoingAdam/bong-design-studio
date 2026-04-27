@@ -115,21 +115,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <ToastProvider>
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Bar */}
-      <header className="border-b border-border px-6 py-3 flex items-center justify-between bg-surface shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
+      <header className="border-b border-border px-3 sm:px-6 py-3 flex items-center justify-between bg-surface shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm shrink-0">
             DS
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">Design Studio</h1>
-          <span className="text-xs text-muted bg-border/50 px-2 py-0.5 rounded-full">Laser Etch Manager</span>
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">Design Studio</h1>
+          {/* Subtitle pill — hidden on small phones to save space */}
+          <span className="hidden md:inline text-xs text-muted bg-border/50 px-2 py-0.5 rounded-full">Laser Etch Manager</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Visible build indicator — confirms which deploy is actually
               running in your browser. Hover for the build time. The bright
               color (vs muted) makes it impossible to miss when checking
               whether a refresh actually picked up the latest deploy. */}
           <span
-            className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded"
+            className="hidden sm:inline text-[11px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded"
             title={`Build ${process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'} — ${process.env.NEXT_PUBLIC_BUILD_TIME || 'unknown time'}`}
           >
             BUILD v{process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'}
@@ -144,9 +145,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <nav className="border-b border-border bg-surface px-6 shrink-0" role="navigation" aria-label="Main navigation">
-        <div className="flex gap-1 items-center">
+      {/* Tab Navigation — horizontally scrollable on mobile so all tabs stay reachable */}
+      <nav className="border-b border-border bg-surface px-2 sm:px-6 shrink-0 overflow-x-auto" role="navigation" aria-label="Main navigation">
+        <div className="flex gap-1 items-center min-w-max">
           {PRIMARY_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -155,7 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 setShowMoreMenu(false);
                 if (tab.id !== 'detail') setSelectedConceptId(null);
               }}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+              className={`px-3 sm:px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'text-accent'
                   : 'text-muted hover:text-foreground'
@@ -170,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
           {activeTab === 'detail' && selectedConceptId && (
             <button
-              className="px-4 py-3 text-sm font-medium text-accent relative"
+              className="px-3 sm:px-4 py-3 text-sm font-medium text-accent relative whitespace-nowrap"
             >
               <span className="mr-1.5">◉</span>
               Concept Detail
@@ -179,7 +180,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           {/* More dropdown (pushed to the right) */}
-          <div className="ml-auto relative">
+          <div className="ml-auto relative shrink-0">
             <button
               onClick={() => setShowMoreMenu((v) => !v)}
               onBlur={() => setTimeout(() => setShowMoreMenu(false), 150)}

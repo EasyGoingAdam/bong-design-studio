@@ -275,7 +275,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4" onClick={() => {
+    <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => {
       if ((generatedCoilUrl || generatedBaseUrl) && !saved) {
         if (window.confirm('You have unsaved generated images. Close anyway?')) onClose();
       } else {
@@ -283,11 +283,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       }
     }}>
       <div
-        className="bg-surface border border-border rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl w-full max-w-3xl max-h-[96vh] sm:max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-surface border-b border-border px-6 py-4 rounded-t-xl z-10">
+        <div className="sticky top-0 bg-surface border-b border-border px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl z-10">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold">
@@ -303,7 +303,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-3 sm:p-6 space-y-4">
           {/* Current images (if any) */}
           {hasExistingImages && (
             <div className="bg-background border border-border rounded-lg p-3">
@@ -424,7 +424,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-muted mb-1">Contrast</label>
               <Select

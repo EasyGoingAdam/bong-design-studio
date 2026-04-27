@@ -295,14 +295,14 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-2 sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-image-title"
     >
       <div
-        className="bg-surface border border-border rounded-xl w-full max-w-4xl max-h-[92vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-xl w-full max-w-4xl max-h-[96vh] sm:max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -318,7 +318,7 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
           <button onClick={onClose} className="text-muted hover:text-foreground text-lg leading-none">×</button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
           {/* Original (always pinned) + Active attempt preview */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -585,8 +585,9 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
             </div>
           </div>
 
-          {/* Strength + Preserve toggles (only relevant for Small Edit mode) + Apply */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Strength + Preserve toggles (only relevant for Small Edit mode) + Apply.
+              Stacks on mobile, 3-col on tablet+ */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <div className={`text-xs font-medium mb-1.5 ${runMode === 'redo' ? 'text-muted' : ''}`}>
                 Strength {runMode === 'redo' && <span className="text-[10px] font-normal italic">(edit only)</span>}
