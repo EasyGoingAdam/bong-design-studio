@@ -124,13 +124,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-xs text-muted bg-border/50 px-2 py-0.5 rounded-full">Laser Etch Manager</span>
         </div>
         <div className="flex items-center gap-3">
-          {/* Visible build indicator — lets you confirm at a glance which
-              deploy you're seeing in the browser. Hover for the build time. */}
+          {/* Visible build indicator — confirms which deploy is actually
+              running in your browser. Hover for the build time. The bright
+              color (vs muted) makes it impossible to miss when checking
+              whether a refresh actually picked up the latest deploy. */}
           <span
-            className="text-[10px] text-muted font-mono px-1.5 py-0.5 bg-background border border-border rounded"
-            title={`Built ${process.env.NEXT_PUBLIC_BUILD_TIME || 'unknown'}`}
+            className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded"
+            title={`Build ${process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'} — ${process.env.NEXT_PUBLIC_BUILD_TIME || 'unknown time'}`}
           >
-            v{process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'}
+            BUILD v{process.env.NEXT_PUBLIC_BUILD_SHA || 'dev'}
           </span>
           <button
             onClick={() => setShowSettings(true)}
