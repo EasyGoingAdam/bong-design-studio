@@ -40,21 +40,26 @@ const QUICK_CHIPS: { label: string; prompt: string }[] = [
 ];
 
 type Strength = 'subtle' | 'medium' | 'major';
+type RunMode = 'edit' | 'redo';
 
 /**
- * One iteration of the edit pipeline. Every Apply Edit click pushes a new
- * attempt onto the array — nothing is destroyed. Users can:
- *   - browse all attempts as thumbnails (newest first)
- *   - view any attempt at full size in the preview pane
- *   - "Branch" the next edit from any older attempt
- *   - Accept any attempt as the final result
+ * One iteration of the edit pipeline. Every Apply click pushes a new
+ * attempt onto the array — nothing is destroyed.
+ *
+ * `kind` distinguishes:
+ *   - 'edit' — a small targeted change via /v1/images/edits, preserves
+ *     composition. Branches off whichever source the user picked.
+ *   - 'redo' — a complete regeneration via /v1/images/generations using
+ *     the user's prompt as the instruction. Ignores the source image
+ *     entirely. Use when a small edit can't get there.
  */
 interface EditAttempt {
   id: string;
   url: string;
+  kind: 'edit' | 'redo';
   promptSentToOpenAI: string;
   composedPromptText: string;       // user-facing summary of what was asked
-  basedOnLabel: string;             // 'Original' | 'Attempt N'
+  basedOnLabel: string;             // 'Original' | 'Attempt N' | 'New generation'
   strength: Strength;
   preserveComposition: boolean;
   preserveSubject: boolean;
@@ -71,6 +76,11 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
   const [strength, setStrength] = useState<Strength>('medium');
   const [preserveComposition, setPreserveComposition] = useState(true);
   const [preserveSubject, setPreserveSubject] = useState(true);
+
+  // 'edit' = small targeted change (default). 'redo' = full regenerate
+  // from the user's prompt. Both produce new attempts in the history
+  // strip so users can compare the two approaches side-by-side.
+  const [runMode, setRunMode] = useState<RunMode>('edit');
 
   // ---------- session edit history ----------
   const [attempts, setAttempts] = useState<EditAttempt[]>([]);
@@ -158,7 +168,7 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
     }
   };
 
-  // ---------- run edit ----------
+  // ---------- run edit OR total redo ----------
   const canRun = !!composedPrompt && !editing;
 
   const run = async () => {
@@ -167,39 +177,75 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
       return;
     }
     if (!composedPrompt) {
-      setError('Pick a quick chip or type an adjustment first.');
+      setError(runMode === 'redo'
+        ? 'Type a description for the redo first.'
+        : 'Pick a quick chip or type an adjustment first.');
       return;
     }
     setEditing(true);
     setError('');
 
     try {
-      const res = await fetch('/api/edit-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: sourceUrl,
-          editPrompt: composedPrompt,
-          apiKey: openAIKey,
-          strength,
-          preserveComposition,
-          preserveSubject,
-          folder: 'edited',
-          // Unique filename per concept + part + edit → no storage collisions
-          filename: `${conceptId || 'standalone'}-${label}-${Date.now()}`,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Edit failed');
-        return;
+      let newUrl: string;
+      let promptUsed: string;
+
+      if (runMode === 'redo') {
+        // TOTAL REDO — call /api/generate-image with the composed prompt
+        // as the entire instruction. Source image is NOT sent. Output is
+        // a fresh design, not a modification.
+        const res = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: composedPrompt,
+            apiKey: openAIKey,
+            size: '1024x1024',
+            model: 'openai',
+            quality: 'medium',
+            folder: 'redone',
+            filename: `${conceptId || 'standalone'}-${label}-redo-${Date.now()}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Redo failed');
+          return;
+        }
+        newUrl = data.imageUrl;
+        promptUsed = composedPrompt;
+      } else {
+        // SMALL EDIT — current behavior. /api/edit-image with the source
+        // image + the user's adjustment.
+        const res = await fetch('/api/edit-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: sourceUrl,
+            editPrompt: composedPrompt,
+            apiKey: openAIKey,
+            strength,
+            preserveComposition,
+            preserveSubject,
+            folder: 'edited',
+            filename: `${conceptId || 'standalone'}-${label}-${Date.now()}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Edit failed');
+          return;
+        }
+        newUrl = data.url;
+        promptUsed = data.prompt || composedPrompt;
       }
+
       const newAttempt: EditAttempt = {
         id: `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        url: data.url,
-        promptSentToOpenAI: data.prompt || composedPrompt,
+        url: newUrl,
+        kind: runMode,
+        promptSentToOpenAI: promptUsed,
         composedPromptText: composedPromptText || '(no description)',
-        basedOnLabel: sourceLabel,
+        basedOnLabel: runMode === 'redo' ? 'New generation' : sourceLabel,
         strength,
         preserveComposition,
         preserveSubject,
@@ -207,9 +253,6 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
       };
       setAttempts((prev) => {
         const next = [...prev, newAttempt];
-        // Make the new one active and the new branch source so successive
-        // edits naturally chain off it (user can override either by
-        // clicking on a different thumbnail).
         setActiveIdx(next.length - 1);
         setSourceIdx(next.length - 1);
         return next;
@@ -356,10 +399,17 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
                           : 'border-border hover:border-accent/60'
                       } ${sourceIdx === i ? 'outline outline-2 outline-purple-500 outline-offset-1' : ''}`}
                       onClick={() => setActiveIdx(i)}
-                      title={`View Attempt ${i + 1}: ${a.composedPromptText}`}
+                      title={`View ${a.kind === 'redo' ? 'Redo' : 'Edit'} ${i + 1}: ${a.composedPromptText}`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={a.url} alt={`Attempt ${i + 1}`} className="w-full h-full object-cover bg-background" />
+                      <span
+                        className={`absolute top-1 left-1 text-[8px] px-1 rounded font-bold ${
+                          a.kind === 'redo' ? 'bg-orange-500 text-white' : 'bg-accent text-white'
+                        }`}
+                      >
+                        {a.kind === 'redo' ? 'REDO' : 'EDIT'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between mt-1 gap-1">
                       <div className="min-w-0 flex-1">
@@ -486,26 +536,67 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
           {/* Free-text adjustment */}
           <div>
             <label className="block text-xs font-medium mb-1.5">
-              Custom adjustment <span className="text-muted font-normal">(optional)</span>
+              {runMode === 'redo' ? 'Describe the new design' : 'Custom adjustment'}{' '}
+              <span className="text-muted font-normal">{runMode === 'redo' ? '(required)' : '(optional)'}</span>
             </label>
             <textarea
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
-              placeholder='e.g. "remove the outer border", "make the eyes larger", "add a subtle stipple texture to the mountain"'
+              placeholder={runMode === 'redo'
+                ? 'e.g. "Bold geometric mandala with thick black lines on white background"'
+                : 'e.g. "remove the outer border", "make the eyes larger", "add a subtle stipple texture to the mountain"'}
               rows={2}
               className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
             />
           </div>
 
-          {/* Strength + toggles + Apply */}
+          {/* MODE: Small Edit vs Total Redo */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5">Iteration mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRunMode('edit')}
+                className={`text-left p-2.5 border-2 rounded-lg transition-colors ${
+                  runMode === 'edit'
+                    ? 'bg-accent/10 border-accent'
+                    : 'bg-background border-border hover:border-accent/40'
+                }`}
+              >
+                <div className="text-sm font-semibold">✎ Small edit</div>
+                <div className="text-[10px] text-muted leading-tight">
+                  Modify the existing image. Preserves composition, applies your tweak.
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRunMode('redo')}
+                className={`text-left p-2.5 border-2 rounded-lg transition-colors ${
+                  runMode === 'redo'
+                    ? 'bg-orange-500/10 border-orange-500'
+                    : 'bg-background border-border hover:border-orange-300'
+                }`}
+              >
+                <div className="text-sm font-semibold">✦ Total redo</div>
+                <div className="text-[10px] text-muted leading-tight">
+                  Generate a brand new image from your description. Composition is NOT preserved.
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Strength + Preserve toggles (only relevant for Small Edit mode) + Apply */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <div className="text-xs font-medium mb-1.5">Strength</div>
-              <div className="flex gap-1 bg-background border border-border rounded-lg p-0.5">
+              <div className={`text-xs font-medium mb-1.5 ${runMode === 'redo' ? 'text-muted' : ''}`}>
+                Strength {runMode === 'redo' && <span className="text-[10px] font-normal italic">(edit only)</span>}
+              </div>
+              <div className={`flex gap-1 bg-background border border-border rounded-lg p-0.5 ${runMode === 'redo' ? 'opacity-50' : ''}`}>
                 {(['subtle', 'medium', 'major'] as Strength[]).map((s) => (
                   <button
                     key={s}
                     onClick={() => setStrength(s)}
+                    disabled={runMode === 'redo'}
                     className={`flex-1 text-xs py-1 rounded transition-colors capitalize ${
                       strength === s ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
                     }`}
@@ -516,13 +607,16 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
               </div>
             </div>
             <div>
-              <div className="text-xs font-medium mb-1.5">Preserve</div>
-              <div className="space-y-1">
+              <div className={`text-xs font-medium mb-1.5 ${runMode === 'redo' ? 'text-muted' : ''}`}>
+                Preserve {runMode === 'redo' && <span className="text-[10px] font-normal italic">(edit only)</span>}
+              </div>
+              <div className={`space-y-1 ${runMode === 'redo' ? 'opacity-50' : ''}`}>
                 <label className="flex items-center gap-2 text-xs">
                   <input
                     type="checkbox"
                     checked={preserveComposition}
                     onChange={(e) => setPreserveComposition(e.target.checked)}
+                    disabled={runMode === 'redo'}
                     className="accent-accent"
                   />
                   Composition
@@ -532,6 +626,7 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
                     type="checkbox"
                     checked={preserveSubject}
                     onChange={(e) => setPreserveSubject(e.target.checked)}
+                    disabled={runMode === 'redo'}
                     className="accent-accent"
                   />
                   Main subject
@@ -542,9 +637,15 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
               <button
                 onClick={run}
                 disabled={!canRun}
-                className="w-full py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className={`w-full py-2 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                  runMode === 'redo'
+                    ? 'bg-orange-600 hover:bg-orange-700'
+                    : 'bg-accent hover:bg-accent-hover'
+                }`}
               >
-                {editing ? 'Editing…' : `Apply Edit → New Attempt`}
+                {editing
+                  ? (runMode === 'redo' ? 'Generating…' : 'Editing…')
+                  : runMode === 'redo' ? '✦ Total Redo → New Attempt' : '✎ Apply Edit → New Attempt'}
               </button>
               <p className="text-[10px] text-muted mt-1 text-center italic">adds to history, never replaces</p>
             </div>
