@@ -856,9 +856,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         </div>
       )}
 
-      {/* AI History */}
+      {/* AI History — every image ever generated for this concept */}
       {activeSection === 'ai' && (
         <div className="space-y-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+            <div className="font-medium mb-0.5">All generated images for this concept</div>
+            <p className="leading-snug">
+              Every image is auto-saved here the moment it's generated — even if you close the modal without applying it.
+              {concept.aiGenerations.length > 0 && ` ${concept.aiGenerations.length} record${concept.aiGenerations.length === 1 ? '' : 's'} so far.`}
+            </p>
+          </div>
           {concept.aiGenerations.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">No AI generations yet.</p>
           ) : (

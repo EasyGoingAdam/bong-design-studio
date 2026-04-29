@@ -68,7 +68,7 @@ interface EditAttempt {
 }
 
 export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }: Props) {
-  const { openAIKey } = useAppStore();
+  const { openAIKey, addAIGeneration } = useAppStore();
   const { toast } = useToast();
 
   // ---------- form state ----------
@@ -258,6 +258,25 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
         setSourceIdx(next.length - 1);
         return next;
       });
+
+      // CRITICAL: auto-save the attempt to the concept's AI History
+      // IMMEDIATELY — not waiting for the user to accept. If they X out
+      // without picking one, every attempt is still in the AI History
+      // tab and accessible from the workflow card. Only save when we
+      // have a concept context (skip for standalone use on the AI tab
+      // before a concept exists).
+      if (conceptId) {
+        addAIGeneration(conceptId, {
+          prompt: promptUsed,
+          coilPrompt: label === 'coil' ? promptUsed : '',
+          basePrompt: label === 'base' ? promptUsed : '',
+          mode: 'production_bw',
+          coilImageUrl: label === 'coil' ? newUrl : '',
+          baseImageUrl: label === 'base' ? newUrl : '',
+          model: 'gpt-image-1',
+          provider: 'openai',
+        });
+      }
     } catch {
       setError('Network error — please try again.');
     } finally {

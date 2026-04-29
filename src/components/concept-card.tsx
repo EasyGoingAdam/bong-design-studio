@@ -60,8 +60,19 @@ export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept
 
       {/* Footer with AI Generate */}
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-border">
-        <span className="text-xs text-muted">{concept.designer}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs text-muted truncate">{concept.designer}</span>
+          {concept.aiGenerations.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClick(); }}
+              className="text-[10px] bg-accent/10 hover:bg-accent/20 text-accent px-1.5 py-0.5 rounded font-medium shrink-0 transition-colors"
+              title={`${concept.aiGenerations.length} AI generation${concept.aiGenerations.length === 1 ? '' : 's'} saved — click to view all`}
+            >
+              ✦ {concept.aiGenerations.length}
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           {onGenerate && (
             <button
               onClick={(e) => { e.stopPropagation(); onGenerate(); }}
@@ -122,8 +133,16 @@ export function ConceptCardMini({ concept, onClick }: { concept: Concept; onClic
         <PriorityBadge priority={concept.priority} />
       </div>
 
-      <div className="text-[10px] text-muted mt-1.5">
-        {new Date(concept.createdAt).toLocaleDateString()}
+      <div className="text-[10px] text-muted mt-1.5 flex items-center justify-between">
+        <span>{new Date(concept.createdAt).toLocaleDateString()}</span>
+        {concept.aiGenerations.length > 0 && (
+          <span
+            className="text-[9px] bg-accent/10 text-accent px-1.5 py-0.5 rounded font-medium"
+            title={`${concept.aiGenerations.length} AI generation${concept.aiGenerations.length === 1 ? '' : 's'} saved — open this concept to view all`}
+          >
+            ✦ {concept.aiGenerations.length} gen{concept.aiGenerations.length === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
     </div>
   );

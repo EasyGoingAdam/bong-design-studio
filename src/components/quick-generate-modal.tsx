@@ -199,17 +199,35 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       let lastUsedProvider: string | undefined = coilData.provider as string | undefined;
       let anyFellBack = !!coilData.fellBack;
 
+      let baseImageUrl = '';
       if (baseRes) {
         const baseData = await safeJsonResponse(baseRes);
         if (!baseRes.ok || !baseData.imageUrl) {
           throw new Error((baseData.error as string) || 'Failed to generate base image');
         }
-        setGeneratedBaseUrl(baseData.imageUrl as string);
-        addBaseToHistory(baseData.imageUrl as string, 'generated');
+        baseImageUrl = baseData.imageUrl as string;
+        setGeneratedBaseUrl(baseImageUrl);
+        addBaseToHistory(baseImageUrl, 'generated');
         lastUsedModel = (baseData.model as string | undefined) || lastUsedModel;
         lastUsedProvider = (baseData.provider as string | undefined) || lastUsedProvider;
         anyFellBack = anyFellBack || !!baseData.fellBack;
       }
+
+      // CRITICAL: auto-save every successful generation to the concept's
+      // aiGenerations history IMMEDIATELY — not waiting for the user to
+      // click Save. This way if they X out without saving, the work is
+      // still in the concept's AI History tab and accessible via the
+      // generation count badge on the workflow card.
+      addAIGeneration(concept.id, {
+        prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
+        coilPrompt,
+        basePrompt,
+        mode,
+        coilImageUrl: coilData.imageUrl as string,
+        baseImageUrl,
+        model: lastUsedModel,
+        provider: lastUsedProvider,
+      });
 
       // Stash for the save handler so the persisted AIGenerationRecord
       // reflects the actual model that produced the images.
@@ -234,33 +252,17 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const handleSave = () => {
     // Update concept images — persist the coil-only flag too so the rest
     // of the app (concept-detail, mockup-studio, etc.) hides the base UI.
+    // The AIGenerationRecord was already saved automatically when the
+    // images came back from OpenAI — see the generate handler. So this
+    // function is now strictly about promoting the active preview to be
+    // the concept's MAIN coil/base images + creating a Version snapshot.
     updateConcept(concept.id, {
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: coilOnly ? '' : generatedBaseUrl,
       coilOnly,
     });
 
-    // Save AI generation record — prefer the model/provider the server
-    // ACTUALLY used (post-fallback); fall back to the user's selection
-    // only if the server didn't report (e.g. older deploys).
-    const modelLabel =
-      lastModelUsed
-      ?? (aiModel === 'gemini' ? 'gemini-2.5-flash-image'
-        : aiModel === 'openai_v2' ? 'gpt-image-2'
-        : 'gpt-image-1');
-    const providerLabel = lastProviderUsed ?? aiModel;
-    addAIGeneration(concept.id, {
-      prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
-      coilPrompt,
-      basePrompt,
-      mode,
-      coilImageUrl: generatedCoilUrl,
-      baseImageUrl: generatedBaseUrl,
-      model: modelLabel,
-      provider: providerLabel,
-    });
-
-    // Save as new version
+    // Save as new version (snapshot)
     addVersion(concept.id, {
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: generatedBaseUrl,
@@ -269,7 +271,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     });
 
     setSaved(true);
-    toast('Images saved as new version', 'success');
+    toast('Images saved as the active version', 'success');
   };
 
   const handleSaveAndClose = () => {
