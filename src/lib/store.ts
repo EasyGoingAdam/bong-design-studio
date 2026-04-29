@@ -12,6 +12,7 @@ import {
   ManufacturingRecord,
 } from './types';
 import { sampleUsers } from './sample-data';
+import { safeJsonArray, safeJsonResponse } from './fetch-helpers';
 
 interface AppState {
   concepts: Concept[];
@@ -127,28 +128,35 @@ export const useAppStore = create<AppState>()((set, get) => ({
       ]);
 
       if (conceptsRes.ok) {
-        const conceptsData = await conceptsRes.json();
-        set({ concepts: conceptsData });
+        // safeJsonArray returns [] if the body isn't a valid JSON array
+        // (e.g. server returned an HTML error page). Prevents the
+        // "failed to execute 'json' on Response" crash that would
+        // otherwise abort initialization and leave the app in a broken
+        // half-loaded state.
+        const conceptsData = await safeJsonArray(conceptsRes);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        set({ concepts: conceptsData as any });
       }
 
       if (templatesRes.ok) {
-        const templatesData = await templatesRes.json();
+        const templatesData = await safeJsonArray(templatesRes);
         if (templatesData.length > 0) {
-          set({ templates: templatesData });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          set({ templates: templatesData as any });
         }
       }
 
       // Load settings from server
       if (settingsRes.ok) {
-        const settings = await settingsRes.json();
+        const settings = await safeJsonResponse(settingsRes);
         if (settings.openai_key) {
-          set({ openAIKey: settings.openai_key });
+          set({ openAIKey: settings.openai_key as string });
         }
         if (settings.gemini_key) {
-          set({ geminiKey: settings.gemini_key });
+          set({ geminiKey: settings.gemini_key as string });
         }
         if (settings.user_name) {
-          const name = settings.user_name;
+          const name = settings.user_name as string;
           set({
             currentUser: {
               ...get().currentUser,
@@ -169,8 +177,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
     try {
       const res = await fetch('/api/concepts');
       if (res.ok) {
-        const data = await res.json();
-        set({ concepts: data });
+        const data = await safeJsonArray(res);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        set({ concepts: data as any });
       }
     } catch (err) {
       console.error('Failed to refresh concepts:', err);

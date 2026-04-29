@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
+import { safeJsonResponse } from '@/lib/fetch-helpers';
 
 export interface EditImageResult {
   url: string;
@@ -155,12 +156,12 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: sourceUrl, apiKey: openAIKey }),
       });
-      const data = await res.json();
+      const data = await safeJsonResponse(res);
       if (!res.ok) {
-        setError(data.error || 'Could not fetch suggestions');
+        setError((data.error as string) || 'Could not fetch suggestions');
         return;
       }
-      setAiSuggestions(data.suggestions || []);
+      setAiSuggestions((data.suggestions as { label: string; prompt: string }[] | undefined) || []);
     } catch {
       setError('Network error — could not fetch suggestions.');
     } finally {
@@ -206,12 +207,12 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
             filename: `${conceptId || 'standalone'}-${label}-redo-${Date.now()}`,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || 'Redo failed');
+        const data = await safeJsonResponse(res);
+        if (!res.ok || !data.imageUrl) {
+          setError((data.error as string) || 'Redo failed');
           return;
         }
-        newUrl = data.imageUrl;
+        newUrl = data.imageUrl as string;
         promptUsed = composedPrompt;
       } else {
         // SMALL EDIT — current behavior. /api/edit-image with the source
@@ -230,13 +231,13 @@ export function EditImageModal({ imageUrl, label, conceptId, onEdited, onClose }
             filename: `${conceptId || 'standalone'}-${label}-${Date.now()}`,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || 'Edit failed');
+        const data = await safeJsonResponse(res);
+        if (!res.ok || !data.url) {
+          setError((data.error as string) || 'Edit failed');
           return;
         }
-        newUrl = data.url;
-        promptUsed = data.prompt || composedPrompt;
+        newUrl = data.url as string;
+        promptUsed = (data.prompt as string) || composedPrompt;
       }
 
       const newAttempt: EditAttempt = {

@@ -8,6 +8,7 @@ import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
 import { EditImageModal } from './edit-image-modal';
+import { safeJsonResponse } from '@/lib/fetch-helpers';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production Ready' },
@@ -185,24 +186,28 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
       const [coilRes, baseRes] = await Promise.all([coilJob, baseJob]);
 
-      const coilData = await coilRes.json();
-      if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
-      setGeneratedCoilUrl(coilData.imageUrl);
-      addCoilToHistory(coilData.imageUrl, 'generated');
+      const coilData = await safeJsonResponse(coilRes);
+      if (!coilRes.ok || !coilData.imageUrl) {
+        throw new Error((coilData.error as string) || 'Failed to generate coil image');
+      }
+      setGeneratedCoilUrl(coilData.imageUrl as string);
+      addCoilToHistory(coilData.imageUrl as string, 'generated');
 
       // Track the ACTUAL model/provider for whichever generation just ran
       // so we save accurate metadata even if the server fell back.
-      let lastUsedModel: string | undefined = coilData.model;
-      let lastUsedProvider: string | undefined = coilData.provider;
+      let lastUsedModel: string | undefined = coilData.model as string | undefined;
+      let lastUsedProvider: string | undefined = coilData.provider as string | undefined;
       let anyFellBack = !!coilData.fellBack;
 
       if (baseRes) {
-        const baseData = await baseRes.json();
-        if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
-        setGeneratedBaseUrl(baseData.imageUrl);
-        addBaseToHistory(baseData.imageUrl, 'generated');
-        lastUsedModel = baseData.model || lastUsedModel;
-        lastUsedProvider = baseData.provider || lastUsedProvider;
+        const baseData = await safeJsonResponse(baseRes);
+        if (!baseRes.ok || !baseData.imageUrl) {
+          throw new Error((baseData.error as string) || 'Failed to generate base image');
+        }
+        setGeneratedBaseUrl(baseData.imageUrl as string);
+        addBaseToHistory(baseData.imageUrl as string, 'generated');
+        lastUsedModel = (baseData.model as string | undefined) || lastUsedModel;
+        lastUsedProvider = (baseData.provider as string | undefined) || lastUsedProvider;
         anyFellBack = anyFellBack || !!baseData.fellBack;
       }
 

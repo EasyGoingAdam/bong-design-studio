@@ -9,6 +9,7 @@ import { ImageDownloadButtons } from './image-download';
 import { useToast } from './toast';
 import { DesignReviewer } from './design-reviewer';
 import { EditImageModal } from './edit-image-modal';
+import { safeJsonResponse } from '@/lib/fetch-helpers';
 
 const MODE_OPTIONS = [
   { value: 'production_bw', label: 'Production Ready' },
@@ -142,22 +143,26 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           });
       const [coilRes, baseRes] = await Promise.all([coilJob, baseJob]);
 
-      const coilData = await coilRes.json();
-      if (!coilRes.ok) throw new Error(coilData.error || 'Failed to generate coil image');
-      setGeneratedCoilUrl(coilData.imageUrl);
-      addCoilToHistory(coilData.imageUrl, 'generated');
+      const coilData = await safeJsonResponse(coilRes);
+      if (!coilRes.ok || !coilData.imageUrl) {
+        throw new Error((coilData.error as string) || 'Failed to generate coil image');
+      }
+      setGeneratedCoilUrl(coilData.imageUrl as string);
+      addCoilToHistory(coilData.imageUrl as string, 'generated');
 
-      let lastModel: string | undefined = coilData.model;
-      let lastProvider: string | undefined = coilData.provider;
+      let lastModel: string | undefined = coilData.model as string | undefined;
+      let lastProvider: string | undefined = coilData.provider as string | undefined;
       let anyFellBack = !!coilData.fellBack;
 
       if (baseRes) {
-        const baseData = await baseRes.json();
-        if (!baseRes.ok) throw new Error(baseData.error || 'Failed to generate base image');
-        setGeneratedBaseUrl(baseData.imageUrl);
-        addBaseToHistory(baseData.imageUrl, 'generated');
-        lastModel = baseData.model || lastModel;
-        lastProvider = baseData.provider || lastProvider;
+        const baseData = await safeJsonResponse(baseRes);
+        if (!baseRes.ok || !baseData.imageUrl) {
+          throw new Error((baseData.error as string) || 'Failed to generate base image');
+        }
+        setGeneratedBaseUrl(baseData.imageUrl as string);
+        addBaseToHistory(baseData.imageUrl as string, 'generated');
+        lastModel = (baseData.model as string | undefined) || lastModel;
+        lastProvider = (baseData.provider as string | undefined) || lastProvider;
         anyFellBack = anyFellBack || !!baseData.fellBack;
       }
 
