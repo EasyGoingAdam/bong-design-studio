@@ -10,6 +10,7 @@ import { ImageDownloadButtons } from './image-download';
 import { DesignReviewer } from './design-reviewer';
 import { EditImageModal } from './edit-image-modal';
 import { SavePresetModal } from './save-preset-modal';
+import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
 import { useToast } from './toast';
@@ -17,7 +18,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
-  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, openAIKey } = useAppStore();
+  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, addAIGeneration, openAIKey } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing'>('overview');
   const [commentText, setCommentText] = useState('');
@@ -34,6 +35,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const [inverting, setInverting] = useState<string | null>(null);
+  const [makingXL, setMakingXL] = useState<string | null>(null);
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
   const [showSavePreset, setShowSavePreset] = useState(false);
 
@@ -104,6 +106,93 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       toast(`Invert failed: ${message}`, 'error');
     } finally {
       setInverting(null);
+    }
+  };
+
+  /**
+   * Generate an XL Piece Version — same design recomposed for a taller
+   * canvas. Uses gpt-image-1's edit endpoint with the original image as
+   * reference + the standard XL prompt + portrait size (1024×1536, the
+   * tallest fixed aspect OpenAI offers — closest to "25% taller").
+   *
+   * The XL output is saved as a new AIGenerationRecord AND a Version
+   * snapshot. The original image stays untouched so both versions live
+   * side by side in AI History.
+   */
+  const handleMakeXL = async (part: 'coil' | 'base') => {
+    if (!concept) return;
+    const sourceUrl = part === 'coil' ? concept.coilImageUrl : concept.baseImageUrl;
+    if (!sourceUrl) {
+      toast(`No ${part} image to convert — generate one first`, 'error');
+      return;
+    }
+    if (!openAIKey) {
+      toast('Set your OpenAI API key in Settings first', 'error');
+      return;
+    }
+    setMakingXL(part);
+    try {
+      const xlPrompt =
+        'Create the same laser-etching design, but formatted for an XL piece with a canvas that is approximately 25% taller. ' +
+        'Do not stretch the existing artwork. Recompose the design naturally to fill the taller space while preserving the ' +
+        'original design as closely as possible — same subject, same layout style, same core artwork, same black-and-white ' +
+        'engraving look. Keep it pure black and white, engraving-ready, with no gray, no shading, no gradients, and no ' +
+        'background clutter. The output is a TALLER portrait-oriented canvas — recompose the composition vertically to ' +
+        'fill it naturally without distortion.';
+
+      const res = await fetch('/api/edit-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: sourceUrl,
+          editPrompt: xlPrompt,
+          apiKey: openAIKey,
+          // Tallest fixed aspect OpenAI offers. The user's spec said "~25%
+          // taller"; the API doesn't support arbitrary aspects so we use
+          // the closest available portrait option (1024×1536).
+          size: '1024x1536',
+          strength: 'subtle',
+          preserveComposition: true,
+          preserveSubject: true,
+          folder: 'xl',
+          filename: `${concept.id.slice(0, 8)}-${part}-xl-${Date.now()}`,
+        }),
+      });
+      const data = await safeJsonResponse(res);
+      if (!res.ok || !data.url) {
+        toast((data.error as string) || 'XL generation failed', 'error');
+        return;
+      }
+      const xlUrl = data.url as string;
+
+      // Save as a new AI generation record with [XL Piece Version] prefix
+      // so the History tab can detect and badge it.
+      const xlPromptLabel = `[XL Piece Version] ${data.prompt || xlPrompt}`;
+      addAIGeneration(concept.id, {
+        prompt: xlPromptLabel,
+        coilPrompt: part === 'coil' ? xlPromptLabel : '',
+        basePrompt: part === 'base' ? xlPromptLabel : '',
+        mode: 'production_bw',
+        coilImageUrl: part === 'coil' ? xlUrl : '',
+        baseImageUrl: part === 'base' ? xlUrl : '',
+        model: 'gpt-image-1',
+        provider: 'openai',
+      });
+
+      // Also as a Version snapshot so it shows in the Versions tab
+      addVersion(concept.id, {
+        coilImageUrl: part === 'coil' ? xlUrl : concept.coilImageUrl,
+        baseImageUrl: part === 'base' ? xlUrl : concept.baseImageUrl,
+        combinedImageUrl: '',
+        notes: `XL Piece Version — ${part} recomposed for taller canvas (1024×1536). Original preserved.`,
+      });
+
+      toast(`XL ${part} version generated — see AI History tab`, 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'XL generation failed';
+      toast(message, 'error');
+    } finally {
+      setMakingXL(null);
     }
   };
 
@@ -317,6 +406,14 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         ✦ Regenerate
                       </button>
                     </div>
+                    <button
+                      onClick={() => handleMakeXL('coil')}
+                      disabled={makingXL === 'coil'}
+                      className="mt-1.5 w-full text-xs px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors disabled:opacity-60"
+                      title="Generate the same design recomposed for an XL (taller) coil. Both versions are saved."
+                    >
+                      {makingXL === 'coil' ? 'Generating XL…' : '▦ Make for XL Piece'}
+                    </button>
                     <div className="mt-1.5">
                       <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
                     </div>
@@ -374,6 +471,14 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         ✦ Regenerate
                       </button>
                     </div>
+                    <button
+                      onClick={() => handleMakeXL('base')}
+                      disabled={makingXL === 'base'}
+                      className="mt-1.5 w-full text-xs px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors disabled:opacity-60"
+                      title="Generate the same design recomposed for an XL (taller) base. Both versions are saved."
+                    >
+                      {makingXL === 'base' ? 'Generating XL…' : '▦ Make for XL Piece'}
+                    </button>
                     <div className="mt-1.5">
                       <EtchingScoreBadge imageUrl={concept.baseImageUrl} label="base" />
                     </div>
@@ -886,6 +991,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         title={`Model: ${gen.model}`}
                       >
                         {gen.provider === 'openai_v2' ? '✦ ChatGPT 2.0' : gen.provider === 'gemini' ? 'Gemini' : 'ChatGPT'}
+                      </span>
+                    )}
+                    {/* XL Piece Version badge — detected via the prompt prefix the
+                        handleMakeXL handler stamps on every XL record. */}
+                    {(gen.prompt?.startsWith('[XL Piece Version]') || gen.coilPrompt?.startsWith('[XL Piece Version]') || gen.basePrompt?.startsWith('[XL Piece Version]')) && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded font-bold bg-orange-100 text-orange-800 border border-orange-300"
+                        title="Generated as an XL Piece Version — taller canvas, original design preserved"
+                      >
+                        ▦ XL PIECE
                       </span>
                     )}
                   </div>
