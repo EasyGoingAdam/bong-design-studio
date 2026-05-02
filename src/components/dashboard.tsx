@@ -11,64 +11,75 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
   const { concepts } = useAppStore();
 
   const stats = useMemo(() => {
-    const byStatus = (s: ConceptStatus) => concepts.filter((c) => c.status === s).length;
-    const thisMonth = concepts.filter((c) => {
-      const d = new Date(c.createdAt);
-      const now = new Date();
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length;
+    // Single-pass aggregation: one walk over `concepts` instead of seven
+    // separate filter/reduce/map passes. Also calls computeReadiness ONCE
+    // per non-archived concept (was being called twice before — once for
+    // shipReady, once for avgReadiness).
+    const counts: Record<string, number> = {
+      ideation: 0, in_review: 0, approved: 0, ready_for_manufacturing: 0,
+      manufactured: 0, archived: 0,
+    };
+    const collections: Record<string, number> = {};
+    const approvalTimesMs: number[] = [];
+    let manufacturedThisWeek = 0;
+    let thisMonth = 0;
+    let versionsTotal = 0;
+    let liveCount = 0;
+    let shipReady = 0;
+    let readinessSum = 0;
 
-    const manufacturedThisWeek = concepts.filter((c) => {
-      if (c.status !== 'manufactured') return false;
-      const mfgDate = c.manufacturingRecord?.dateManufactured
-        ? new Date(c.manufacturingRecord.dateManufactured)
-        : new Date(c.updatedAt);
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      return mfgDate >= weekAgo;
-    }).length;
+    const now = Date.now();
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const monthStartMs = monthStart.getTime();
+    const weekAgoMs = now - 7 * 24 * 60 * 60 * 1000;
 
-    const collections = concepts.reduce((acc, c) => {
-      if (c.collection) acc[c.collection] = (acc[c.collection] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    const topCollection = Object.entries(collections).sort((a, b) => b[1] - a[1])[0];
+    for (const c of concepts) {
+      counts[c.status] = (counts[c.status] ?? 0) + 1;
+      if (c.collection) collections[c.collection] = (collections[c.collection] ?? 0) + 1;
+      versionsTotal += c.versions.length;
 
-    const approvalTimes = concepts
-      .filter((c) => c.approvalLogs.length > 0)
-      .map((c) => {
-        const approved = c.approvalLogs.find((a) => a.action === 'approved');
-        if (!approved) return null;
-        return (new Date(approved.createdAt).getTime() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-      })
-      .filter((t): t is number => t !== null);
-    const avgApproval = approvalTimes.length > 0
-      ? Math.round(approvalTimes.reduce((a, b) => a + b, 0) / approvalTimes.length)
-      : 0;
+      const createdMs = new Date(c.createdAt).getTime();
+      if (createdMs >= monthStartMs) thisMonth += 1;
 
-    // Production-readiness across all non-archived concepts
-    const live = concepts.filter((c) => c.status !== 'archived');
-    const shipReady = live.filter((c) => computeReadiness(c).ready).length;
-    const avgReadiness = live.length > 0
-      ? Math.round(live.reduce((sum, c) => sum + computeReadiness(c).percent, 0) / live.length)
+      if (c.status === 'manufactured') {
+        const mfgMs = c.manufacturingRecord?.dateManufactured
+          ? new Date(c.manufacturingRecord.dateManufactured).getTime()
+          : new Date(c.updatedAt).getTime();
+        if (mfgMs >= weekAgoMs) manufacturedThisWeek += 1;
+      }
+
+      const approved = c.approvalLogs.find((a) => a.action === 'approved');
+      if (approved) {
+        approvalTimesMs.push(new Date(approved.createdAt).getTime() - createdMs);
+      }
+
+      if (c.status !== 'archived') {
+        liveCount += 1;
+        const r = computeReadiness(c);
+        if (r.ready) shipReady += 1;
+        readinessSum += r.percent;
+      }
+    }
+
+    const topCollectionEntry = Object.entries(collections).sort((a, b) => b[1] - a[1])[0];
+    const avgApprovalDays = approvalTimesMs.length > 0
+      ? Math.round(approvalTimesMs.reduce((a, b) => a + b, 0) / approvalTimesMs.length / (1000 * 60 * 60 * 24))
       : 0;
 
     return {
-      ideation: byStatus('ideation'),
-      inReview: byStatus('in_review'),
-      approved: byStatus('approved'),
-      readyForMfg: byStatus('ready_for_manufacturing'),
-      manufactured: byStatus('manufactured'),
+      ideation: counts.ideation,
+      inReview: counts.in_review,
+      approved: counts.approved,
+      readyForMfg: counts.ready_for_manufacturing,
+      manufactured: counts.manufactured,
       thisMonth,
       manufacturedThisWeek,
-      topCollection: topCollection ? `${topCollection[0]} (${topCollection[1]})` : 'None',
-      avgApproval: avgApproval > 0 ? `${avgApproval} days` : 'N/A',
-      avgVersions: concepts.length > 0
-        ? (concepts.reduce((a, c) => a + c.versions.length, 0) / concepts.length).toFixed(1)
-        : '0',
+      topCollection: topCollectionEntry ? `${topCollectionEntry[0]} (${topCollectionEntry[1]})` : 'None',
+      avgApproval: avgApprovalDays > 0 ? `${avgApprovalDays} days` : 'N/A',
+      avgVersions: concepts.length > 0 ? (versionsTotal / concepts.length).toFixed(1) : '0',
       shipReady,
-      avgReadiness,
-      liveCount: live.length,
+      avgReadiness: liveCount > 0 ? Math.round(readinessSum / liveCount) : 0,
+      liveCount,
     };
   }, [concepts]);
 

@@ -245,15 +245,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
     // Optimistic update
     set((state) => ({ concepts: [...state.concepts, concept] }));
 
-    // Persist to API
+    // Persist to API. If the server rejects the insert, ROLL BACK the
+    // optimistic update so the user doesn't see phantom concepts that
+    // disappear on next page load.
     try {
-      await fetch('/api/concepts', {
+      const res = await fetch('/api/concepts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(concept),
       });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
     } catch (err) {
-      console.error('Failed to save concept to API:', err);
+      console.error('Failed to save concept to API — rolling back:', err);
+      set((state) => ({ concepts: state.concepts.filter((c) => c.id !== concept.id) }));
+      throw err;
     }
 
     return concept;

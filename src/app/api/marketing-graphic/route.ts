@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { uploadImage } from '@/lib/supabase';
+
+// sharp is dynamically imported below — it's a 30MB native module and
+// only matters when this route is hit. Static import was loading it on
+// every cold start of any neighboring route in the same lambda group.
 
 /**
  * Composite a marketing graphic from a product photo + product name + coil design.
@@ -162,6 +165,9 @@ export async function POST(request: NextRequest) {
     const coilBadgeSize = body.coilBadgeSize ?? 280;
     // Scale font size relative to canvas width so it reads at any aspect
     const fontSize = Math.round(width * 0.042);
+
+    // Dynamic import — see top-of-file comment.
+    const sharp = (await import('sharp')).default;
 
     // 1. Load and cover-fit the product photo
     const productBuffer = await fetchBuffer(body.productPhoto);

@@ -17,27 +17,35 @@ const COLUMN_COLORS: Record<ConceptStatus, string> = {
   archived: 'border-t-gray-300',
 };
 
-// Rich text search used by the per-column filters
-function matchesSearch(concept: Concept, q: string): boolean {
+/**
+ * Build a single lower-cased search haystack per concept once, then do a
+ * cheap substring check per keystroke. Previously this function called
+ * .toLowerCase() ~13 times per concept on EVERY keystroke — 200 concepts
+ * meant 2,600 redundant lowercase ops per character typed.
+ */
+function buildSearchHaystack(concept: Concept): string {
+  return [
+    concept.name,
+    concept.collection,
+    concept.designer,
+    concept.description,
+    ...concept.tags,
+    concept.specs.designStyleName,
+    concept.specs.designTheme,
+    concept.intendedAudience,
+    concept.manufacturingNotes,
+    concept.marketingStory || '',
+    concept.priority,
+    concept.lifecycleType,
+    concept.source || '',
+    concept.submitterName || '',
+    concept.submitterEmail || '',
+  ].join(' ').toLowerCase();
+}
+
+function matchesHaystack(haystack: string, q: string): boolean {
   if (!q) return true;
-  const lower = q.toLowerCase();
-  return (
-    concept.name.toLowerCase().includes(lower) ||
-    concept.collection.toLowerCase().includes(lower) ||
-    concept.designer.toLowerCase().includes(lower) ||
-    concept.description.toLowerCase().includes(lower) ||
-    concept.tags.some((t) => t.toLowerCase().includes(lower)) ||
-    concept.specs.designStyleName.toLowerCase().includes(lower) ||
-    concept.specs.designTheme.toLowerCase().includes(lower) ||
-    concept.intendedAudience.toLowerCase().includes(lower) ||
-    concept.manufacturingNotes.toLowerCase().includes(lower) ||
-    (concept.marketingStory || '').toLowerCase().includes(lower) ||
-    concept.priority.toLowerCase().includes(lower) ||
-    concept.lifecycleType.toLowerCase().includes(lower) ||
-    (concept.source || '').toLowerCase().includes(lower) ||
-    (concept.submitterName || '').toLowerCase().includes(lower) ||
-    (concept.submitterEmail || '').toLowerCase().includes(lower)
-  );
+  return haystack.includes(q.toLowerCase());
 }
 
 export function WorkflowBoard({
@@ -64,9 +72,20 @@ export function WorkflowBoard({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
+  // Build a search haystack per concept ONCE per concepts change. Each
+  // keystroke just does a cheap `.includes(lower)` against the precomputed
+  // string. This is O(N) on concepts change, O(1) per keystroke per concept.
+  const haystacks = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of concepts) map.set(c.id, buildSearchHaystack(c));
+    return map;
+  }, [concepts]);
+
   const columns = useMemo(() => {
     const map: Record<string, Concept[]> = {};
     const g = globalSearch.trim();
+    const mfgQ = mfgSearch.trim();
+    const archiveQ = archiveSearch.trim();
 
     // If AI matches are active, build a lookup of allowed ids + their order/score.
     const aiMatchMap = aiMatches
@@ -82,19 +101,19 @@ export function WorkflowBoard({
           .filter((c) => aiMatchMap.has(c.id))
           .sort((a, b) => (aiMatchMap.get(a.id)!.order - aiMatchMap.get(b.id)!.order));
       } else if (g) {
-        items = items.filter((c) => matchesSearch(c, g));
+        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', g));
       }
 
-      if (col === 'manufactured' && mfgSearch.trim()) {
-        items = items.filter((c) => matchesSearch(c, mfgSearch.trim()));
+      if (col === 'manufactured' && mfgQ) {
+        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', mfgQ));
       }
-      if (col === 'archived' && archiveSearch.trim()) {
-        items = items.filter((c) => matchesSearch(c, archiveSearch.trim()));
+      if (col === 'archived' && archiveQ) {
+        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', archiveQ));
       }
       map[col] = items;
     }
     return map;
-  }, [concepts, globalSearch, mfgSearch, archiveSearch, aiMatches]);
+  }, [concepts, haystacks, globalSearch, mfgSearch, archiveSearch, aiMatches]);
 
   const runAISearch = async () => {
     const q = globalSearch.trim();

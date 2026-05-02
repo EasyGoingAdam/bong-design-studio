@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Concept } from '@/lib/types';
 import { computeReadiness, ReadinessCheck } from '@/lib/readiness';
 
@@ -10,7 +11,10 @@ import { computeReadiness, ReadinessCheck } from '@/lib/readiness';
  * ring when ready, amber when close, red when hard-blockers present.
  */
 export function ReadinessChecklist({ concept }: { concept: Concept }) {
-  const report = computeReadiness(concept);
+  // Memoize so the 8-check walk doesn't re-run on every parent render.
+  // Concept detail re-renders on every keystroke in any edit field — this
+  // saved hundreds of array allocations per second on slow phones.
+  const report = useMemo(() => computeReadiness(concept), [concept]);
 
   const ringColor =
     report.ready ? 'text-green-600'

@@ -213,36 +213,49 @@ export function MockupComposer({ concept, onClose }: Props) {
     setMultiAngleRunning(true);
     setError('');
     const anglesToRun: Angle[] = ['front', 'three_quarter_right', 'side', 'back'];
-    const collected: { angle: Angle; url: string }[] = [];
+    const sharedBody = {
+      blankProductUrl: blankProduct,
+      coilDesignUrl: concept.coilImageUrl,
+      baseDesignUrl: includeBase && concept.baseImageUrl ? concept.baseImageUrl : undefined,
+      apiKey: openAIKey,
+      etchStyle,
+      placement,
+      background,
+      size,
+      editInstruction: composeInstruction(),
+      folder: 'mockups',
+      filename: concept.name,
+    };
+
     try {
-      for (const a of anglesToRun) {
-        const res = await fetch('/api/mockup-product', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            blankProductUrl: blankProduct,
-            coilDesignUrl: concept.coilImageUrl,
-            baseDesignUrl: includeBase && concept.baseImageUrl ? concept.baseImageUrl : undefined,
-            apiKey: openAIKey,
-            angle: a,
-            etchStyle,
-            placement,
-            background,
-            size,
-            editInstruction: composeInstruction(),
-            folder: 'mockups',
-            filename: concept.name,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          collected.push({ angle: a, url: data.url });
-          setAngleVariants([...collected]);
-        } else {
-          toast(`Angle "${a}" failed: ${data.error || 'unknown'}`, 'error');
-        }
-      }
-      toast(`Rendered ${collected.length} angle${collected.length !== 1 ? 's' : ''}`, 'success');
+      // Run all 4 angles in parallel — was sequential, taking 4× the
+      // wall-clock time. OpenAI's image-edits endpoint accepts
+      // concurrent requests fine, so 4 angles now finish in roughly the
+      // time of 1.
+      const results = await Promise.all(
+        anglesToRun.map(async (a) => {
+          try {
+            const res = await fetch('/api/mockup-product', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...sharedBody, angle: a }),
+            });
+            const data = await res.json();
+            if (res.ok) return { angle: a, url: data.url as string, ok: true as const };
+            return { angle: a, url: '', ok: false as const, error: (data.error as string) || 'unknown' };
+          } catch {
+            return { angle: a, url: '', ok: false as const, error: 'Network error' };
+          }
+        }),
+      );
+
+      const collected = results.filter((r) => r.ok).map((r) => ({ angle: r.angle, url: r.url }));
+      setAngleVariants([...collected]);
+
+      const failed = results.filter((r) => !r.ok);
+      failed.forEach((f) => toast(`Angle "${f.angle}" failed: ${f.error}`, 'error'));
+
+      toast(`Rendered ${collected.length} of ${anglesToRun.length} angles`, collected.length === anglesToRun.length ? 'success' : 'info');
     } finally {
       setMultiAngleRunning(false);
     }
