@@ -10,6 +10,8 @@ import { ImageDownloadButtons } from './image-download';
 import { DesignReviewer } from './design-reviewer';
 import { EditImageModal } from './edit-image-modal';
 import { SavePresetModal } from './save-preset-modal';
+import { SharePreviewModal } from './share-preview-modal';
+import { AutoPilotModal } from './auto-pilot-modal';
 import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
@@ -38,6 +40,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [makingXL, setMakingXL] = useState<string | null>(null);
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
   const [showSavePreset, setShowSavePreset] = useState(false);
+  const [showSharePreview, setShowSharePreview] = useState(false);
+  const [showAutoPilot, setShowAutoPilot] = useState(false);
 
   const handleInvert = async (part: 'coil' | 'base') => {
     if (!concept) {
@@ -316,6 +320,20 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             title="Save this concept as a reusable preset"
           >
             ★ Save as Preset
+          </button>
+          <button
+            onClick={() => setShowSharePreview(true)}
+            className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover"
+            title="Generate a public, view-only URL to share with customers or collaborators"
+          >
+            🔗 Share Preview
+          </button>
+          <button
+            onClick={() => setShowAutoPilot(true)}
+            className="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-600 to-accent hover:opacity-90 text-white rounded-lg font-medium"
+            title="One-click pipeline: generate, score, auto-fix, write the marketing story"
+          >
+            ✦ Auto-Pilot
           </button>
           {concept.status !== 'approved' && (
             <button onClick={handleApprove} className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg">
@@ -1078,6 +1096,21 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Save as Preset Modal */}
       {showSavePreset && concept && (
         <SavePresetModal concept={concept} onClose={() => setShowSavePreset(false)} />
+      )}
+
+      {/* Share Preview Modal */}
+      {showSharePreview && concept && (
+        <SharePreviewModal
+          conceptId={concept.id}
+          conceptName={concept.name}
+          designerName={concept.designer}
+          onClose={() => setShowSharePreview(false)}
+        />
+      )}
+
+      {/* Auto-Pilot Modal */}
+      {showAutoPilot && concept && (
+        <AutoPilotModal concept={concept} onClose={() => setShowAutoPilot(false)} />
       )}
 
       {/* Edit Image Modal */}
