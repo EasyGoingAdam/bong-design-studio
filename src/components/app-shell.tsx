@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Dashboard } from './dashboard';
@@ -17,12 +18,14 @@ import { PresetLibrary } from './preset-library';
 import { BenchmarkDashboard } from './benchmark-dashboard';
 import { MarketingStudio } from './marketing-studio';
 import { MockupStudio } from './mockup-studio';
+import { HolidayCalendar } from './holiday-calendar';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
+  { id: 'calendar', label: 'Calendar', icon: '◷' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
   { id: 'presets', label: 'Presets', icon: '★' },
@@ -39,7 +42,13 @@ const SECONDARY_TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [activeTab, setActiveTab] = useState<Tab>('workflow');
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // The Calendar lives at its own URL (`/calendar`) so it can be linked,
+  // bookmarked, and shared. Initialize activeTab from the URL on mount.
+  const initialTab: Tab = pathname === '/calendar' ? 'calendar' : 'workflow';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // Remember which tab the user came from so "back" returns them there
   // instead of always snapping to Workflow.
   const [previousTab, setPreviousTab] = useState<Tab>('workflow');
@@ -47,6 +56,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
+
+  // Keep tab ↔ URL in sync. If the user navigates via browser back/forward
+  // or pastes /calendar directly, switch the active tab accordingly.
+  useEffect(() => {
+    if (pathname === '/calendar' && activeTab !== 'calendar') {
+      setActiveTab('calendar');
+    } else if (pathname === '/' && activeTab === 'calendar') {
+      setActiveTab('workflow');
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auth state
   const [authChecked, setAuthChecked] = useState(false);
@@ -116,13 +135,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Bar */}
       <header className="border-b border-border px-3 sm:px-6 py-3 flex items-center justify-between bg-surface shrink-0 gap-2">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm shrink-0">
-            DS
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="brand-mark shrink-0">DS</div>
+          <div className="min-w-0">
+            <h1 className="serif text-lg sm:text-xl font-medium tracking-tight truncate leading-none">Design Studio</h1>
+            <div className="hidden md:block eyebrow mt-1">Laser Etch Concept Manager</div>
           </div>
-          <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">Design Studio</h1>
-          {/* Subtitle pill — hidden on small phones to save space */}
-          <span className="hidden md:inline text-xs text-muted bg-border/50 px-2 py-0.5 rounded-full">Laser Etch Manager</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Visible build indicator — confirms which deploy is actually
@@ -138,7 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => setShowSettings(true)}
             aria-label="Open settings"
-            className="text-sm text-muted hover:text-foreground transition-colors px-3 py-1.5 rounded-md hover:bg-surface-hover"
+            className="text-sm text-muted hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-surface-hover border border-transparent hover:border-border"
           >
             Settings
           </button>
@@ -155,6 +173,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 setActiveTab(tab.id);
                 setShowMoreMenu(false);
                 if (tab.id !== 'detail') setSelectedConceptId(null);
+                // Calendar has its own URL so it can be shared/bookmarked.
+                // Other tabs are URL-less (single-page) — push back to root
+                // when leaving calendar so the URL stays clean.
+                if (tab.id === 'calendar' && pathname !== '/calendar') {
+                  router.push('/calendar');
+                } else if (tab.id !== 'calendar' && pathname === '/calendar') {
+                  router.push('/');
+                }
               }}
               className={`px-3 sm:px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === tab.id
@@ -255,6 +281,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {initialized && activeTab === 'marketing' && <MarketingStudio />}
         {initialized && activeTab === 'mockup' && <MockupStudio />}
         {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
+        {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
         {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
         )}

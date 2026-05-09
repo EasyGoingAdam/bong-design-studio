@@ -1,29 +1,71 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @theme inline {
-  --color-background: #f8f9fb;
-  --color-foreground: #1a1a2e;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f1f3f7;
-  --color-border: #e2e5eb;
-  --color-border-light: #d0d4dc;
-  --color-muted: #7c8296;
-  --color-accent: #6c5ce7;
-  --color-accent-hover: #5a49d6;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Warm editorial palette */
+  --color-background: #f5f1ea;
+  --color-foreground: #1a1714;
+  --color-surface: #faf7f1;
+  --color-surface-hover: #f0eade;
+  --color-border: #d9d0c2;
+  /* "border-light" is a HOVER state in this codebase — must be MORE visible
+     than --color-border, not less. Mapped to the editorial "strong" tone. */
+  --color-border-light: #c4b8a5;
+  --color-muted: #7a716a;
+
+  /* Vermilion accent */
+  --color-accent: #d94e1f;
+  --color-accent-hover: #b8401a;
+
+  --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
+  --font-serif: 'Fraunces', 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', var(--font-geist-mono), ui-monospace, monospace;
+}
+
+:root {
+  /* Status hues — muted, editorial */
+  --st-ideation: #8a6dab;
+  --st-ideation-bg: #ece4f3;
+  --st-review: #b8893a;
+  --st-review-bg: #f5ebd6;
+  --st-approved: #5a8a4f;
+  --st-approved-bg: #e3eddd;
+  --st-ready: #3a7392;
+  --st-ready-bg: #dde9ef;
+  --st-mfg: #2d6a5a;
+  --st-mfg-bg: #d8e7e1;
+  --st-archived: #8a8278;
+  --st-archived-bg: #ebe7e0;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d0d4dc #f1f3f7;
+  scrollbar-color: #c4b8a5 #f5f1ea;
 }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d0c2; border-radius: 999px; border: 2px solid #f5f1ea; }
+::-webkit-scrollbar-thumb:hover { background: #c4b8a5; }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
 }
+
+.serif { font-family: 'Fraunces', 'Times New Roman', serif; font-optical-sizing: auto; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* Editorial display type */
+.display-xl { font-family: 'Fraunces', serif; font-weight: 400; font-size: 88px; line-height: 0.92; letter-spacing: -0.04em; font-variation-settings: "opsz" 144; }
+.display-lg { font-family: 'Fraunces', serif; font-weight: 400; font-size: 56px; line-height: 0.95; letter-spacing: -0.03em; font-variation-settings: "opsz" 144; }
+.display-md { font-family: 'Fraunces', serif; font-weight: 400; font-size: 36px; line-height: 1.02; letter-spacing: -0.02em; font-variation-settings: "opsz" 96; }
+.display-sm { font-family: 'Fraunces', serif; font-weight: 500; font-size: 24px; line-height: 1.1; letter-spacing: -0.015em; font-variation-settings: "opsz" 48; }
+
+.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #7a716a; }
 
 /* Custom drag-and-drop styles */
 [data-rfd-draggable-context-id] {
@@ -35,21 +77,52 @@ body {
 }
 
 .kanban-card:hover {
-  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.08);
+  box-shadow: 0 6px 24px -8px rgba(26, 23, 20, 0.12);
 }
 
 /* Modal backdrop */
 .modal-backdrop {
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-/* Placeholder image pattern */
+/* Placeholder image pattern — editorial diagonal weave */
 .placeholder-pattern {
+  background-color: #ebe5d9;
   background-image:
-    linear-gradient(45deg, #eef0f4 25%, transparent 25%),
-    linear-gradient(-45deg, #eef0f4 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #eef0f4 75%),
-    linear-gradient(-45deg, transparent 75%, #eef0f4 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    linear-gradient(135deg, transparent 46%, rgba(0,0,0,0.06) 46%, rgba(0,0,0,0.06) 54%, transparent 54%),
+    linear-gradient(45deg, transparent 46%, rgba(0,0,0,0.06) 46%, rgba(0,0,0,0.06) 54%, transparent 54%);
+  background-size: 14px 14px;
 }
+
+/* Status pill helpers — usable from components */
+.st-ideation { background: var(--st-ideation-bg); color: var(--st-ideation); }
+.st-review   { background: var(--st-review-bg);   color: var(--st-review); }
+.st-approved { background: var(--st-approved-bg); color: var(--st-approved); }
+.st-ready    { background: var(--st-ready-bg);    color: var(--st-ready); }
+.st-mfg      { background: var(--st-mfg-bg);      color: var(--st-mfg); }
+.st-archived { background: var(--st-archived-bg); color: var(--st-archived); }
+
+/* Kanban col header strip */
+.col-strip { height: 2px; }
+.col-strip-ideation { background: var(--st-ideation); }
+.col-strip-review   { background: var(--st-review); }
+.col-strip-approved { background: var(--st-approved); }
+.col-strip-ready    { background: var(--st-ready); }
+.col-strip-mfg      { background: var(--st-mfg); }
+.col-strip-archived { background: var(--st-archived); }
+
+/* Brand mark */
+.brand-mark {
+  width: 36px; height: 36px;
+  border: 1.5px solid #1a1714;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500;
+  letter-spacing: -0.02em;
+  position: relative;
+}
+.brand-mark::before {
+  content: ''; position: absolute; inset: 3px;
+  border: 0.5px solid #1a1714; pointer-events: none;
+}
+

@@ -118,8 +118,9 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Dashboard</h2>
-        <p className="text-sm text-muted">What's ready to ship, and what's moving toward production.</p>
+        <div className="eyebrow mb-1">Studio Overview</div>
+        <h2 className="display-sm">Dashboard</h2>
+        <p className="text-sm text-muted mt-1">What&apos;s ready to ship, and what&apos;s moving toward production.</p>
       </div>
 
       {/* PRODUCTION QUEUE — the hero module */}

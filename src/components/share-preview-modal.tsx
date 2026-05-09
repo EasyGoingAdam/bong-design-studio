@@ -46,7 +46,8 @@ export function SharePreviewModal({ conceptId, conceptName, designerName, onClos
   useEffect(() => {
     fetch(`/api/concepts/${conceptId}/share-links`)
       .then((r) => (r.ok ? r.json() : []))
-      .then(setLinks)
+      .then((data) => setLinks(Array.isArray(data) ? data : []))
+      .catch(() => setLinks([]))
       .finally(() => setLoading(false));
   }, [conceptId]);
 
@@ -195,17 +196,17 @@ export function SharePreviewModal({ conceptId, conceptName, designerName, onClos
                 {links.map((link) => {
                   const expired = link.expiresAt && new Date(link.expiresAt).getTime() < Date.now();
                   const status = link.revoked
-                    ? { label: 'Revoked', cls: 'bg-red-100 text-red-700 border-red-200' }
+                    ? { label: 'Revoked', cls: 'bg-red-100 text-red-700' }
                     : expired
-                      ? { label: 'Expired', cls: 'bg-gray-100 text-gray-700 border-gray-200' }
-                      : { label: 'Active', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+                      ? { label: 'Expired', cls: 'st-archived' }
+                      : { label: 'Active', cls: 'st-approved' };
                   return (
                     <div
                       key={link.id}
                       className={`bg-surface border rounded-lg p-3 ${link.revoked || expired ? 'opacity-60' : 'border-border'}`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${status.cls}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${status.cls}`}>
                           {status.label}
                         </span>
                         <span className="text-[10px] text-muted">

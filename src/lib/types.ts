@@ -209,19 +209,23 @@ export const STATUS_LABELS: Record<ConceptStatus, string> = {
   archived: 'Archived',
 };
 
+// Editorial muted hues — see globals.css for the .st-* base classes.
 export const STATUS_COLORS: Record<ConceptStatus, string> = {
-  ideation: 'bg-purple-100 text-purple-700 border-purple-200',
-  in_review: 'bg-amber-100 text-amber-700 border-amber-200',
-  approved: 'bg-green-100 text-green-700 border-green-200',
-  ready_for_manufacturing: 'bg-blue-100 text-blue-700 border-blue-200',
-  manufactured: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  archived: 'bg-gray-100 text-gray-500 border-gray-200',
+  ideation: 'st-ideation',
+  in_review: 'st-review',
+  approved: 'st-approved',
+  ready_for_manufacturing: 'st-ready',
+  manufactured: 'st-mfg',
+  archived: 'st-archived',
 };
 
+// Editorial palette — only "urgent" pops red (genuine alarm signal).
+// The rest sit quietly in muted/border tones so they don't compete with the
+// status pills next to them in the kanban + concept-detail headers.
 export const PRIORITY_COLORS: Record<PriorityLevel, string> = {
-  low: 'bg-slate-100 text-slate-600',
-  medium: 'bg-blue-100 text-blue-600',
-  high: 'bg-orange-100 text-orange-600',
+  low: 'bg-background text-muted',
+  medium: 'st-ready',
+  high: 'st-review',
   urgent: 'bg-red-100 text-red-700',
 };
 

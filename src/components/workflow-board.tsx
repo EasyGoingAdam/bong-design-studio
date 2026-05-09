@@ -8,13 +8,13 @@ import { ConceptCardMini } from './concept-card';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 
-const COLUMN_COLORS: Record<ConceptStatus, string> = {
-  ideation: 'border-t-purple-400',
-  in_review: 'border-t-amber-400',
-  approved: 'border-t-green-400',
-  ready_for_manufacturing: 'border-t-blue-400',
-  manufactured: 'border-t-emerald-400',
-  archived: 'border-t-gray-300',
+const COLUMN_STRIP: Record<ConceptStatus, string> = {
+  ideation: 'col-strip-ideation',
+  in_review: 'col-strip-review',
+  approved: 'col-strip-approved',
+  ready_for_manufacturing: 'col-strip-ready',
+  manufactured: 'col-strip-mfg',
+  archived: 'col-strip-archived',
 };
 
 /**
@@ -285,8 +285,9 @@ export function WorkflowBoard({
     <div className="p-3 sm:p-6 h-full">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3 md:gap-4">
         <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-bold">Workflow Board</h2>
-          <p className="text-xs sm:text-sm text-muted">
+          <div className="eyebrow mb-1">Production Pipeline</div>
+          <h2 className="display-sm">Workflow</h2>
+          <p className="text-xs sm:text-sm text-muted mt-1">
             Drag concepts between stages{hasSelection ? '' : ' — click checkboxes to multi-select'}
           </p>
         </div>
@@ -425,8 +426,9 @@ export function WorkflowBoard({
             return (
               <div
                 key={col}
-                className={`flex-shrink-0 w-64 sm:w-72 bg-surface border border-border rounded-xl border-t-2 ${COLUMN_COLORS[col]} flex flex-col`}
+                className="flex-shrink-0 w-64 sm:w-72 bg-surface border border-border rounded-lg flex flex-col overflow-hidden"
               >
+                <div className={`col-strip ${COLUMN_STRIP[col]}`} />
                 {/* Column Header */}
                 <div className="p-3 border-b border-border">
                   <div className="flex items-center justify-between">

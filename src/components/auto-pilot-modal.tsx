@@ -150,6 +150,22 @@ export function AutoPilotModal({ concept, onClose }: Props) {
         });
       }
 
+      // If foundational generation failed entirely (no coil AND no base, or
+      // no coil for a coil-only concept), the rest of the pipeline has
+      // nothing to operate on. Mark every downstream step as skipped with an
+      // explanatory reason and exit early so the user isn't misled by a
+      // string of green "skipped" badges that look like successes.
+      const noUsableImage = !coilUrl && (concept.coilOnly || !baseUrl);
+      if (noUsableImage) {
+        const reason = 'No image to process — generation failed';
+        ['score-coil', 'score-base', 'fix-coil', 'fix-base', 'story'].forEach((id) =>
+          updateStep(id, { status: 'skipped', result: reason })
+        );
+        updateStep('review', { status: 'failed', error: 'Pipeline aborted — generation failed. Check API key, quota, and try again.' });
+        setRunning(false);
+        return;
+      }
+
       // ----- Step 3 + 4: Etching score (parallel) -----
       const scoreCoilJob = coilUrl ? scoreImage(coilUrl, openAIKey) : Promise.resolve(null);
       const scoreBaseJob = baseUrl ? scoreImage(baseUrl, openAIKey) : Promise.resolve(null);

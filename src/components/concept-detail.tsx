@@ -289,14 +289,16 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       </button>
 
       <div className="mb-4">
-        <div className="flex items-start justify-between mb-2">
+        <div className="flex items-start justify-between mb-3">
           <div>
-            <h2 className="text-2xl font-bold">{concept.name}</h2>
-            <div className="flex flex-wrap items-center gap-2 mt-1">
+            {concept.collection && (
+              <div className="eyebrow mb-2">{concept.collection}</div>
+            )}
+            <h2 className="display-md">{concept.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
               <StatusBadge status={concept.status} />
               <PriorityBadge priority={concept.priority} />
               <LifecycleBadge type={concept.lifecycleType} />
-              <span className="text-xs text-muted">{concept.collection}</span>
             </div>
           </div>
         </div>
