@@ -166,6 +166,24 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
         ].filter(Boolean).join('\n'),
       });
       toast(`Imported as Concept "${concept.name}"`, 'success');
+
+      // Fire-and-forget: tell CFP we linked this design so their admin shows
+      // a "Linked in etching tool" badge. Idempotent on their side, so retries
+      // are safe. Failures here don't block the UX — the concept already
+      // exists locally.
+      fetch(`/api/cfp/designs/${d.id}/import-receipts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conceptId: concept.id,
+          conceptUrl: typeof window !== 'undefined'
+            ? `${window.location.origin}/?concept=${concept.id}`
+            : '',
+          conceptName: concept.name,
+          importedBy: currentUser?.name || 'Design Studio',
+        }),
+      }).catch(() => { /* non-fatal */ });
+
       onOpenConcept(concept.id);
     } catch {
       toast('Could not import — try again', 'error');
