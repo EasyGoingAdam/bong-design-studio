@@ -12,6 +12,8 @@ import { EditImageModal } from './edit-image-modal';
 import { SavePresetModal } from './save-preset-modal';
 import { SharePreviewModal } from './share-preview-modal';
 import { AutoPilotModal } from './auto-pilot-modal';
+import { CostCalculatorModal } from './cost-calculator-modal';
+import { BulkVariantsModal } from './bulk-variants-modal';
 import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
@@ -42,6 +44,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [showSharePreview, setShowSharePreview] = useState(false);
   const [showAutoPilot, setShowAutoPilot] = useState(false);
+  const [showCostCalc, setShowCostCalc] = useState(false);
+  const [showBulkVariants, setShowBulkVariants] = useState(false);
 
   const handleInvert = async (part: 'coil' | 'base') => {
     if (!concept) {
@@ -336,6 +340,20 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             title="One-click pipeline: generate, score, auto-fix, write the marketing story"
           >
             ✦ Auto-Pilot
+          </button>
+          <button
+            onClick={() => setShowBulkVariants(true)}
+            className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover"
+            title="Generate up to 6 stylistic variants in parallel"
+          >
+            ✦ Variants
+          </button>
+          <button
+            onClick={() => setShowCostCalc(true)}
+            className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover"
+            title="Compute unit cost and suggested retail"
+          >
+            $ Cost
           </button>
           {concept.status !== 'approved' && (
             <button onClick={handleApprove} className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg">
@@ -1113,6 +1131,20 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Auto-Pilot Modal */}
       {showAutoPilot && concept && (
         <AutoPilotModal concept={concept} onClose={() => setShowAutoPilot(false)} />
+      )}
+
+      {/* Cost Calculator Modal */}
+      {showCostCalc && concept && (
+        <CostCalculatorModal concept={concept} onClose={() => setShowCostCalc(false)} />
+      )}
+
+      {/* Bulk Variants Modal */}
+      {showBulkVariants && concept && (
+        <BulkVariantsModal
+          concept={concept}
+          onClose={() => setShowBulkVariants(false)}
+          onOpenConcept={(id) => { setShowBulkVariants(false); onBack(); setTimeout(() => window.location.hash = `#${id}`, 0); }}
+        />
       )}
 
       {/* Edit Image Modal */}

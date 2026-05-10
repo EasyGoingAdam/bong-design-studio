@@ -19,12 +19,19 @@ import { BenchmarkDashboard } from './benchmark-dashboard';
 import { MarketingStudio } from './marketing-studio';
 import { MockupStudio } from './mockup-studio';
 import { HolidayCalendar } from './holiday-calendar';
+import { CustomerDesigns } from './customer-designs';
+import { InsightsDashboard } from './insights-dashboard';
+import { CompareView } from './compare-view';
+import { ConceptLineage } from './concept-lineage';
+import { DropPlanner } from './drop-planner';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
+  { id: 'customer', label: 'Customer Designs', icon: '◐' },
+  { id: 'drops', label: 'Drops', icon: '◇' },
   { id: 'calendar', label: 'Calendar', icon: '◷' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
@@ -38,6 +45,9 @@ const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
 const SECONDARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '◫' },
   { id: 'concepts', label: 'Concepts', icon: '▦' },
+  { id: 'insights', label: 'Insights', icon: '◑' },
+  { id: 'compare', label: 'Compare', icon: '⊞' },
+  { id: 'lineage', label: 'Lineage', icon: '⌥' },
   { id: 'benchmark', label: 'Benchmark', icon: '⚖' },
 ];
 
@@ -45,9 +55,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // The Calendar lives at its own URL (`/calendar`) so it can be linked,
-  // bookmarked, and shared. Initialize activeTab from the URL on mount.
-  const initialTab: Tab = pathname === '/calendar' ? 'calendar' : 'workflow';
+  // Tabs that have their own bookmarkable URL. Add new entries here when
+  // promoting a tab to a real route.
+  const PATH_TO_TAB: Record<string, Tab> = {
+    '/calendar': 'calendar',
+    '/customer-designs': 'customer',
+    '/compare': 'compare',
+    '/drops': 'drops',
+  };
+  const TAB_TO_PATH: Partial<Record<Tab, string>> = {
+    calendar: '/calendar',
+    customer: '/customer-designs',
+    compare: '/compare',
+    drops: '/drops',
+  };
+  const initialTab: Tab = PATH_TO_TAB[pathname] || 'workflow';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   // Remember which tab the user came from so "back" returns them there
   // instead of always snapping to Workflow.
@@ -57,12 +79,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
 
-  // Keep tab ↔ URL in sync. If the user navigates via browser back/forward
-  // or pastes /calendar directly, switch the active tab accordingly.
+  // Keep tab ↔ URL in sync for routed tabs. Browser back/forward or direct
+  // URL pastes switch the active tab; navigating to / from a routed tab
+  // resets to the default Workflow.
   useEffect(() => {
-    if (pathname === '/calendar' && activeTab !== 'calendar') {
-      setActiveTab('calendar');
-    } else if (pathname === '/' && activeTab === 'calendar') {
+    const targetTab = PATH_TO_TAB[pathname];
+    if (targetTab && targetTab !== activeTab) {
+      setActiveTab(targetTab);
+    } else if (pathname === '/' && TAB_TO_PATH[activeTab]) {
       setActiveTab('workflow');
     }
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -173,12 +197,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 setActiveTab(tab.id);
                 setShowMoreMenu(false);
                 if (tab.id !== 'detail') setSelectedConceptId(null);
-                // Calendar has its own URL so it can be shared/bookmarked.
-                // Other tabs are URL-less (single-page) — push back to root
-                // when leaving calendar so the URL stays clean.
-                if (tab.id === 'calendar' && pathname !== '/calendar') {
-                  router.push('/calendar');
-                } else if (tab.id !== 'calendar' && pathname === '/calendar') {
+                // Routed tabs get their own URL; non-routed tabs reset to /.
+                const targetPath = TAB_TO_PATH[tab.id];
+                if (targetPath && pathname !== targetPath) {
+                  router.push(targetPath);
+                } else if (!targetPath && TAB_TO_PATH[activeTab]) {
                   router.push('/');
                 }
               }}
@@ -282,6 +305,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {initialized && activeTab === 'mockup' && <MockupStudio />}
         {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
         {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'lineage' && <ConceptLineage onOpenConcept={openConcept} />}
+        {initialized && activeTab === 'drops' && <DropPlanner onOpenConcept={openConcept} />}
         {initialized && activeTab === 'detail' && selectedConceptId && (
           <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
         )}

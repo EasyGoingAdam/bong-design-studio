@@ -1,5 +1,7 @@
-@import "tailwindcss";
+/* Google Fonts must come before @import "tailwindcss" — Tailwind expands
+   inline and any subsequent @import is rejected by the CSS spec. */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
 
 @theme inline {
   /* Warm editorial palette */
