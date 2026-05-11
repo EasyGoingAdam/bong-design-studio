@@ -300,7 +300,9 @@ function DropFormModal({
       const event = HOLIDAY_EVENTS.find((h) => h.id === id);
       if (event) {
         const d = nextOccurrence(event);
-        setLaunchDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        if (d) {
+          setLaunchDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        }
       }
     }
   };
