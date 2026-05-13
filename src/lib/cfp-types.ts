@@ -18,7 +18,7 @@ export type CfpStatus =
 
 export type CfpSource = 'site' | 'shopify_iframe' | 'shopify_iframe_test';
 
-export type CfpGlycerinColor = 'Red' | 'Blue' | 'Purple' | 'Green' | 'Pink';
+export type CfpGlycerinColor = 'Clear' | 'Red' | 'Blue' | 'Purple' | 'Green' | 'Pink';
 
 export interface CfpVersion {
   id: string;
@@ -87,6 +87,11 @@ export const CFP_STATUS_META: Record<CfpStatus, { label: string; cls: string }> 
 };
 
 export const CFP_GLYCERIN_HEX: Record<CfpGlycerinColor, string> = {
+  // Clear glycerin renders as a soft glass-like swatch — falls back to
+  // the closest solid color we can express in a CSS hex if the consumer
+  // can't render a gradient. Components that DO support gradients should
+  // detect Clear and use the radial style from the consumer side.
+  Clear:  '#e6ecf1',
   Red:    '#c0392b',
   Blue:   '#2e6da4',
   Purple: '#7d4ca0',
