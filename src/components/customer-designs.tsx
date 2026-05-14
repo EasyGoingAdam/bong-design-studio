@@ -5,6 +5,8 @@ import {
   CfpDesign,
   CfpListResponse,
   CfpStatus,
+  CfpActivityEvent,
+  CfpCustomerResponse,
   CFP_STATUS_META,
   CFP_STATUS_FORWARD,
   CFP_STATUS_TERMINAL,
@@ -26,7 +28,7 @@ import { SkeletonCardGrid, SkeletonShimmerStyles } from './skeleton';
  */
 export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { toast } = useToast();
-  const { currentUser, addConcept } = useAppStore();
+  const { currentUser, addConcept, addVersion } = useAppStore();
 
   const [designs, setDesigns] = useState<CfpDesign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,9 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
     params.set('limit', '50');
     params.set('sort', 'submitted');
     params.set('order', 'desc');
+    // Inline each row's customer summary so cards can show "Nth submission
+    // from this customer" without a follow-up GET /customers/{email}.
+    params.set('expand', 'customer');
     if (submittedOnly) params.set('submittedOnly', '1');
     if (statusFilter !== 'all') params.set('status', statusFilter);
     if (colorFilter !== 'all') params.set('glycerinColor', colorFilter);
@@ -131,9 +136,31 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
    */
   const importToConcepts = async (d: CfpDesign) => {
     const ver = d.selectedVersion?.versionNumber || d.allVersions[0]?.versionNumber;
-    const coilImageUrl = ver
-      ? `/api/cfp/designs/${d.id}/files/v${ver}/png`
-      : '';
+    if (!ver) {
+      toast('This design has no versions yet', 'error');
+      return;
+    }
+
+    // Archive the customer's image to OUR storage first — gives us a
+    // permanent URL that survives CFP_API_KEY rotation, customer-side
+    // version deletion, etc. Falls back to the live proxy URL if the
+    // archive step fails, so the import never gets stuck.
+    let coilImageUrl = `/api/cfp/designs/${d.id}/files/v${ver}/png`;
+    let archived = false;
+    try {
+      const arcRes = await fetch(`/api/cfp/designs/${d.id}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: ver, format: 'png' }),
+      });
+      if (arcRes.ok) {
+        const arc = await arcRes.json();
+        if (arc.url) {
+          coilImageUrl = arc.url;
+          archived = true;
+        }
+      }
+    } catch { /* keep proxy URL fallback */ }
 
     const tags = [
       'customer-design',
@@ -164,9 +191,28 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
           d.orderNumber && `Order: ${d.orderNumber}`,
           d.glycerinColor && `Glycerin: ${d.glycerinColor}`,
           d.widthMm && `Dimensions: ${d.widthMm} × ${d.heightMm} mm`,
+          archived ? 'Customer original image archived to permanent storage.' : 'Customer image linked via CFP proxy (not archived).',
         ].filter(Boolean).join('\n'),
       });
-      toast(`Imported as Concept "${concept.name}"`, 'success');
+
+      // Snapshot the customer's original as version #1 of the new Concept
+      // so any subsequent edit / regenerate / "Make for XL" the team runs
+      // can be rolled back to the literal design the customer submitted.
+      try {
+        await addVersion(concept.id, {
+          coilImageUrl,
+          baseImageUrl: '',
+          prompt: d.userPrompt || d.theme || d.textRequested || '',
+          notes: `Customer original — CFP design ${d.id.slice(0, 8)} v${ver}${archived ? ' (archived to our storage)' : ''}`,
+        });
+      } catch { /* non-fatal — concept itself is already saved */ }
+
+      toast(
+        archived
+          ? `Imported & archived as "${concept.name}"`
+          : `Imported as "${concept.name}" (live proxy — archive failed)`,
+        archived ? 'success' : 'info'
+      );
 
       // Fire-and-forget: tell CFP we linked this design so their admin shows
       // a "Linked in etching tool" badge. Idempotent on their side, so retries
@@ -204,13 +250,32 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
             Live feed from <span className="mono">customize-freezepipe.com</span> — triage, advance status, add notes.
           </p>
         </div>
-        <button
-          onClick={() => fetchDesigns(false)}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:border-border-light disabled:opacity-50"
-        >
-          {loading ? '⟳ Refreshing…' : '⟳ Refresh'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              // Use the current filters in the URL so the CSV reflects exactly
+              // what the user is looking at on screen.
+              const params = new URLSearchParams();
+              if (submittedOnly) params.set('submittedOnly', '1');
+              if (statusFilter !== 'all') params.set('status', statusFilter);
+              if (colorFilter !== 'all') params.set('glycerinColor', colorFilter);
+              if (search.trim()) params.set('q', search.trim());
+              window.location.href = `/api/cfp/designs.csv?${params.toString()}`;
+            }}
+            disabled={loading || !!error}
+            className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:border-border-light disabled:opacity-50"
+            title="Export current view as CSV"
+          >
+            ↓ CSV
+          </button>
+          <button
+            onClick={() => fetchDesigns(false)}
+            disabled={loading}
+            className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:border-border-light disabled:opacity-50"
+          >
+            {loading ? '⟳ Refreshing…' : '⟳ Refresh'}
+          </button>
+        </div>
       </div>
 
       {/* Setup-error banner */}
@@ -412,6 +477,13 @@ function DesignCard({ design: d, onOpen }: { design: CfpDesign; onOpen: () => vo
             </a>
           )}
           {d.orderNumber && <div className="mono text-[10px]">{d.orderNumber}</div>}
+          {d.customer && d.customer.designCount > 1 && (
+            <div className="text-[10px] text-muted">
+              {d.customer.submittedCount > 1
+                ? `${d.customer.submittedCount} submissions from this customer`
+                : `${d.customer.designCount} designs · ${d.customer.submittedCount} submitted`}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -457,12 +529,43 @@ function DesignDrawer({
   const [note, setNote] = useState('');
   const [busyStatus, setBusyStatus] = useState<CfpStatus | null>(null);
   const [activeVersion, setActiveVersion] = useState<number>(d.selectedVersion?.versionNumber || 1);
+  // Activity timeline — lazy-loaded only when the user opens that disclosure
+  const [activity, setActivity] = useState<CfpActivityEvent[] | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [customerView, setCustomerView] = useState<CfpCustomerResponse | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const loadActivity = async () => {
+    if (activity !== null || activityLoading) return;
+    setActivityLoading(true);
+    try {
+      const res = await fetch(`/api/cfp/designs/${d.id}/activity?limit=200`);
+      const data = await res.json().catch(() => ({ events: [] }));
+      setActivity(Array.isArray(data.events) ? data.events : []);
+    } catch {
+      setActivity([]);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const loadCustomerHistory = async () => {
+    if (!d.customerEmail || customerLoading) return;
+    setCustomerLoading(true);
+    try {
+      const res = await fetch(`/api/cfp/customers/${encodeURIComponent(d.customerEmail)}?limit=50`);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setCustomerView(data);
+    } finally {
+      setCustomerLoading(false);
+    }
+  };
 
   const v = d.allVersions.find((x) => x.versionNumber === activeVersion) || d.selectedVersion;
   // Use our authenticated proxy so the browser never sees the bearer token.
@@ -554,6 +657,14 @@ function DesignDrawer({
               >
                 ⇪ Import to Concepts
               </button>
+              <a
+                href={`/api/cfp/designs/${d.id}/zip?selectedOnly=1`}
+                download
+                className="text-xs px-3 py-1.5 bg-surface border border-border rounded-lg hover:border-foreground"
+                title="Download a ZIP of every version + manifest.json"
+              >
+                ↓ ZIP all
+              </a>
             </div>
           )}
           {d.allVersions.length > 1 && (
@@ -611,6 +722,91 @@ function DesignDrawer({
                     <div className="eyebrow mb-1">Final prompt</div>
                     <p className="text-muted whitespace-pre-wrap">{d.finalPromptSentToOpenai}</p>
                   </div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Activity timeline — lazy-loaded on disclosure open */}
+          <details
+            className="bg-background border border-border rounded-lg p-3 text-xs"
+            onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) loadActivity(); }}
+          >
+            <summary className="cursor-pointer font-medium">Activity timeline</summary>
+            <div className="mt-3">
+              {activityLoading && <div className="text-muted">Loading…</div>}
+              {!activityLoading && activity !== null && activity.length === 0 && (
+                <div className="text-muted italic">No activity recorded yet.</div>
+              )}
+              {!activityLoading && activity !== null && activity.length > 0 && (
+                <ol className="space-y-2 max-h-72 overflow-y-auto">
+                  {activity.map((ev) => (
+                    <li key={ev.id} className="flex gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="font-medium">{prettyEditType(ev.editType)}</span>
+                          {ev.editedByEmail && (
+                            <span className="text-muted text-[10px]">
+                              {ev.editedByType === 'admin' ? 'admin' : 'customer'} · {ev.editedByEmail}
+                            </span>
+                          )}
+                          {ev.changedFields && ev.changedFields.length > 0 && (
+                            <span className="text-muted text-[10px]">
+                              [{ev.changedFields.join(', ')}]
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-muted text-[10px] mt-0.5 mono">
+                          {new Date(ev.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </details>
+
+          {/* Customer history — lazy-loaded on first open */}
+          {d.customerEmail && (
+            <details
+              className="bg-background border border-border rounded-lg p-3 text-xs"
+              onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) loadCustomerHistory(); }}
+            >
+              <summary className="cursor-pointer font-medium">
+                Customer history ({d.customerEmail})
+              </summary>
+              <div className="mt-3">
+                {customerLoading && <div className="text-muted">Loading…</div>}
+                {!customerLoading && customerView && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-[11px]">
+                      <Field label="Designs" value={String(customerView.summary.designCount)} />
+                      <Field label="Submitted" value={String(customerView.summary.submittedCount)} />
+                      <Field label="First seen" value={new Date(customerView.summary.firstSeenAt).toLocaleDateString()} />
+                      <Field label="Last seen" value={new Date(customerView.summary.lastSeenAt).toLocaleDateString()} />
+                    </div>
+                    <div className="eyebrow mb-2">Other designs</div>
+                    <ul className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {customerView.designs
+                        .filter((other) => other.id !== d.id)
+                        .map((other) => (
+                          <li key={other.id} className="flex items-center gap-2 text-[11px]">
+                            <span className={`px-1.5 py-0.5 rounded-full font-medium ${CFP_STATUS_META[other.status]?.cls || ''}`}>
+                              {CFP_STATUS_META[other.status]?.label || other.status}
+                            </span>
+                            <span className="flex-1 truncate">{other.textRequested || other.theme || 'Untitled'}</span>
+                            <span className="text-muted mono">
+                              {new Date(other.createdAt).toLocaleDateString()}
+                            </span>
+                          </li>
+                        ))}
+                      {customerView.designs.filter((other) => other.id !== d.id).length === 0 && (
+                        <li className="text-muted italic">This is their only design so far.</li>
+                      )}
+                    </ul>
+                  </>
                 )}
               </div>
             </details>
@@ -690,4 +886,23 @@ function Field({
       )}
     </div>
   );
+}
+
+/**
+ * Human-readable label for a CFP activity edit type. Falls through to the
+ * raw enum value if we haven't mapped it, so new event types added on
+ * the upstream don't render as blank.
+ */
+function prettyEditType(t: string): string {
+  const map: Record<string, string> = {
+    image_regenerated: 'Image regenerated',
+    image_edited:      'Image edited with feedback',
+    file_uploaded:     'File uploaded',
+    status_changed:    'Status changed',
+    admin_note_added:  'Internal note added',
+    design_submitted:  'Design submitted',
+    field_update:      'Field updated',
+    viewed:            'Viewed',
+  };
+  return map[t] || t;
 }

@@ -56,6 +56,60 @@ export interface CfpDesign {
   finalPromptSentToOpenai?: string;
   complexity?: string;
   fontStyle?: string;
+  // Present only when ?expand=customer is requested on the list
+  customer?: {
+    email: string;
+    designCount: number;
+    submittedCount: number;
+    firstSeenAt: string;
+    lastSeenAt: string;
+  };
+}
+
+/* ───────────── Edit-log timeline ───────────── */
+
+export type CfpEditType =
+  | 'image_regenerated'
+  | 'image_edited'
+  | 'file_uploaded'
+  | 'status_changed'
+  | 'admin_note_added'
+  | 'design_submitted'
+  | 'field_update'
+  | 'viewed';
+
+export interface CfpActivityEvent {
+  id: string;
+  editedByType: 'customer' | 'admin';
+  editedByEmail: string | null;
+  editType: CfpEditType;
+  beforeData: Record<string, unknown> | null;
+  afterData: Record<string, unknown> | null;
+  changedFields: string[] | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export interface CfpActivityResponse {
+  designId: string;
+  events: CfpActivityEvent[];
+}
+
+/* ───────────── Customer history ───────────── */
+
+export interface CfpCustomerSummary {
+  email: string;
+  designCount: number;
+  submittedCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastSubmittedAt: string | null;
+}
+
+export interface CfpCustomerResponse {
+  summary: CfpCustomerSummary;
+  designs: CfpDesign[];
 }
 
 export interface CfpListResponse {
