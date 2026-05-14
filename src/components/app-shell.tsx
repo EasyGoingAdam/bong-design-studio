@@ -205,11 +205,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   router.push('/');
                 }
               }}
-              className={`px-3 sm:px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap ${
+              className={`px-3 sm:px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap min-h-[44px] ${
                 activeTab === tab.id
                   ? 'text-accent'
                   : 'text-muted hover:text-foreground'
               }`}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
+              aria-label={tab.label}
             >
               <span className="mr-1.5">{tab.icon}</span>
               {tab.label}
@@ -233,13 +235,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setShowMoreMenu((v) => !v)}
               onBlur={() => setTimeout(() => setShowMoreMenu(false), 150)}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+              className={`px-4 py-3 text-sm font-medium transition-colors relative min-h-[44px] ${
                 SECONDARY_TABS.some((t) => t.id === activeTab)
                   ? 'text-accent'
                   : 'text-muted hover:text-foreground'
               }`}
               aria-haspopup="menu"
               aria-expanded={showMoreMenu}
+              aria-label="More tabs"
             >
               <span className="mr-1.5">⋯</span>
               More

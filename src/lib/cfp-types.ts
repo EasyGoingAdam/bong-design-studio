@@ -10,7 +10,7 @@ export type CfpStatus =
   | 'new'
   | 'in_progress'
   | 'ready'
-  | 'etched'
+  | 'engraved'
   | 'shipped'
   | 'rejected'
   | 'duplicate'
@@ -79,7 +79,7 @@ export const CFP_STATUS_META: Record<CfpStatus, { label: string; cls: string }> 
   new:         { label: 'New',         cls: 'st-ideation' },
   in_progress: { label: 'In progress', cls: 'st-review' },
   ready:       { label: 'Ready',       cls: 'st-approved' },
-  etched:      { label: 'Etched',      cls: 'st-ready' },
+  engraved:    { label: 'Engraved',    cls: 'st-ready' },
   shipped:     { label: 'Shipped',     cls: 'st-mfg' },
   rejected:    { label: 'Rejected',    cls: 'bg-red-100 text-red-700' },
   duplicate:   { label: 'Duplicate',   cls: 'st-archived' },
@@ -104,7 +104,7 @@ export const CFP_GLYCERIN_HEX: Record<CfpGlycerinColor, string> = {
  * out of the metadata so the order is intentional.
  */
 export const CFP_STATUS_FORWARD: CfpStatus[] = [
-  'new', 'in_progress', 'ready', 'etched', 'shipped',
+  'new', 'in_progress', 'ready', 'engraved', 'shipped',
 ];
 export const CFP_STATUS_TERMINAL: CfpStatus[] = [
   'rejected', 'duplicate', 'archived',

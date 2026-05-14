@@ -56,6 +56,55 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
+  /* Respect iOS notch + home indicator. Pages can opt in by adding
+     pb-safe / pt-safe utility classes via env(safe-area-inset-*). */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ───────────── Mobile-first input baseline ─────────────
+   iOS zooms the viewport on focus when input font-size < 16px. Force
+   16px minimum for input/textarea/select so the page stays put when a
+   field gains focus. Tailwind's text-sm utilities will still adjust
+   styling on larger screens via component-level classes — this only
+   sets a font-size floor.
+*/
+input, textarea, select {
+  font-size: max(16px, 0.875rem);
+}
+@media (min-width: 640px) {
+  input, textarea, select { font-size: inherit; }
+}
+
+/* ───────────── Touch target floor ─────────────
+   WCAG 2.5.5 recommends 44×44 minimum tap targets. Apply to anything
+   that's a button/anchor by default on touch devices, EXCEPT inline
+   icon buttons that explicitly opt out via the .compact class. */
+@media (hover: none) and (pointer: coarse) {
+  button:not(.compact):not([data-rfd-drag-handle-context-id]),
+  a[role="button"]:not(.compact) {
+    min-height: 36px;
+  }
+}
+
+/* ───────────── Bottom-sheet pattern ─────────────
+   Modals on mobile look better anchored to the bottom of the viewport
+   (better thumb reach). Components opt in by using .modal-sheet on the
+   inner card; the base styles already apply via .modal-backdrop.
+*/
+@media (max-width: 639px) {
+  .modal-sheet {
+    border-radius: 14px 14px 0 0 !important;
+    align-self: flex-end !important;
+    max-height: 88vh !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .modal-sheet-backdrop {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
 }
 
 .serif { font-family: 'Fraunces', 'Times New Roman', serif; font-optical-sizing: auto; }

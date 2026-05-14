@@ -13,6 +13,7 @@ import {
 } from '@/lib/cfp-types';
 import { useToast } from './toast';
 import { useAppStore } from '@/lib/store';
+import { SkeletonCardGrid, SkeletonShimmerStyles } from './skeleton';
 
 /**
  * Customer Designs — reads live data from the Customize Freeze Pipe
@@ -233,7 +234,7 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
         <Stat label="Total" value={stats.total} />
         <Stat label="New" value={stats.byStatus.new || 0} accent={(stats.byStatus.new || 0) > 0} />
         <Stat label="In progress" value={stats.byStatus.in_progress || 0} />
-        <Stat label="Etched" value={stats.byStatus.etched || 0} />
+        <Stat label="Engraved" value={stats.byStatus.engraved || 0} />
         <Stat label="Shipped" value={stats.byStatus.shipped || 0} />
       </div>
 
@@ -284,12 +285,13 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
         ))}
       </div>
 
-      {/* Loading state */}
+      {/* Loading state — skeleton grid keeps the layout stable while
+          designs stream in (no jump from empty → grid). */}
       {loading && designs.length === 0 && (
-        <div className="text-center py-12">
-          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto" />
-          <div className="text-sm text-muted mt-3">Fetching live designs…</div>
-        </div>
+        <>
+          <SkeletonShimmerStyles />
+          <SkeletonCardGrid count={6} />
+        </>
       )}
 
       {/* Empty state */}
@@ -477,13 +479,20 @@ function DesignDrawer({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 bg-black/60 modal-backdrop modal-sheet-backdrop z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Customer design: ${d.textRequested || d.theme || 'untitled'}`}
     >
       <div
-        className="bg-surface border border-border rounded-t-xl sm:rounded-xl w-full max-w-3xl max-h-[95vh] overflow-y-auto"
+        className="bg-surface border border-border rounded-t-xl sm:rounded-xl w-full max-w-3xl max-h-[95vh] overflow-y-auto modal-sheet"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile sheet handle — small visual cue users can swipe/dismiss */}
+        <div className="sm:hidden flex justify-center py-2">
+          <div className="w-10 h-1 bg-border rounded-full" aria-hidden />
+        </div>
         {/* Header */}
         <div className="sticky top-0 bg-surface border-b border-border p-4 flex items-start justify-between gap-3 z-10">
           <div className="min-w-0">
