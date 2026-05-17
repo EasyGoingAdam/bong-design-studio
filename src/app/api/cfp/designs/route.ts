@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
+import { withLog, log } from '@/lib/log';
 
 /**
  * Proxy: GET /api/cfp/designs?…
- * Forwards every query param to the external CFP /designs endpoint, hiding
- * the API key from the browser. Returns the response body 1:1 so the
- * client can use the upstream pagination cursor as-is.
+ * Forwards every query param to the external CFP /designs endpoint,
+ * hiding the API key from the browser. Returns the response body 1:1
+ * so the client can use the upstream pagination cursor as-is.
  */
-export async function GET(req: NextRequest) {
+export const GET = withLog('cfp.designs.list', async (req: NextRequest) => {
   if (!getCfpConfig()) {
+    log.warn('cfp.designs.list.unconfigured');
     return NextResponse.json(
       { error: 'Customize Freeze Pipe API not configured. Set CFP_API_KEY env var.' },
       { status: 503 }
@@ -29,4 +31,4 @@ export async function GET(req: NextRequest) {
       { status: 502 }
     );
   }
-}
+});

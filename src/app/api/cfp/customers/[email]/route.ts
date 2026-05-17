@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
+import { withLog } from '@/lib/log';
 
-/**
- * Proxy: GET /api/cfp/customers/{email}?limit=N
- *
- * Returns { summary, designs[] } — every design a single customer has
- * created, with first/last seen timestamps and submitted counts.
- *
- * The email is URL-encoded on the client (e.g. adam%40example.com); we
- * forward it as-is. The CFP server matches case-insensitively.
- */
-export async function GET(
+export const GET = withLog<{ email: string }>('cfp.customer', async (
   req: NextRequest,
-  { params }: { params: Promise<{ email: string }> }
-) {
+  { params }
+) => {
   if (!getCfpConfig()) {
     return NextResponse.json({ error: 'CFP_API_KEY not configured' }, { status: 503 });
   }
@@ -32,4 +24,4 @@ export async function GET(
       { status: 502 }
     );
   }
-}
+});

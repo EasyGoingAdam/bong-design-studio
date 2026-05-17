@@ -16,6 +16,7 @@ import {
 import { useToast } from './toast';
 import { useAppStore } from '@/lib/store';
 import { SkeletonCardGrid, SkeletonShimmerStyles } from './skeleton';
+import { log, timer } from '@/lib/log';
 
 /**
  * Customer Designs — reads live data from the Customize Freeze Pipe
@@ -91,6 +92,10 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
   }, [submittedOnly, statusFilter, colorFilter, search]);
 
   const updateStatus = async (id: string, next: CfpStatus, note?: string) => {
+    const t = timer();
+    log.info('client.cfp.patch.start', {
+      design_id: id.slice(0, 8), new_status: next, has_note: !!note,
+    });
     try {
       const res = await fetch(`/api/cfp/designs/${id}`, {
         method: 'PATCH',
@@ -103,14 +108,24 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        log.error('client.cfp.patch.fail', {
+          design_id: id.slice(0, 8), status: res.status, duration_ms: t(),
+          req_id: res.headers.get('x-request-id'),
+          err: err.error,
+        });
         toast(err.error || 'Status change failed', 'error');
         return false;
       }
-      // Optimistic local update
+      log.info('client.cfp.patch.ok', {
+        design_id: id.slice(0, 8), new_status: next, duration_ms: t(),
+      });
       setDesigns((prev) => prev.map((d) => d.id === id ? { ...d, status: next } : d));
       toast(`Marked ${CFP_STATUS_META[next].label.toLowerCase()}`, 'success');
       return true;
-    } catch {
+    } catch (err) {
+      log.error('client.cfp.patch.network', {
+        design_id: id.slice(0, 8), duration_ms: t(), err,
+      });
       toast('Network error', 'error');
       return false;
     }
@@ -137,9 +152,15 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
   const importToConcepts = async (d: CfpDesign) => {
     const ver = d.selectedVersion?.versionNumber || d.allVersions[0]?.versionNumber;
     if (!ver) {
+      log.warn('client.cfp.import.no_version', { design_id: d.id.slice(0, 8) });
       toast('This design has no versions yet', 'error');
       return;
     }
+
+    const tTotal = timer();
+    log.info('client.cfp.import.start', {
+      design_id: d.id.slice(0, 8), version: ver, has_email: !!d.customerEmail,
+    });
 
     // Archive the customer's image to OUR storage first — gives us a
     // permanent URL that survives CFP_API_KEY rotation, customer-side
@@ -147,20 +168,35 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
     // archive step fails, so the import never gets stuck.
     let coilImageUrl = `/api/cfp/designs/${d.id}/files/v${ver}/png`;
     let archived = false;
-    try {
-      const arcRes = await fetch(`/api/cfp/designs/${d.id}/archive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version: ver, format: 'png' }),
-      });
-      if (arcRes.ok) {
-        const arc = await arcRes.json();
-        if (arc.url) {
-          coilImageUrl = arc.url;
-          archived = true;
+    {
+      const t = timer();
+      try {
+        const arcRes = await fetch(`/api/cfp/designs/${d.id}/archive`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: ver, format: 'png' }),
+        });
+        if (arcRes.ok) {
+          const arc = await arcRes.json();
+          if (arc.url) {
+            coilImageUrl = arc.url;
+            archived = true;
+            log.info('client.cfp.import.archive.ok', {
+              design_id: d.id.slice(0, 8), bytes: arc.bytes, duration_ms: t(),
+            });
+          }
+        } else {
+          log.warn('client.cfp.import.archive.fail', {
+            design_id: d.id.slice(0, 8), status: arcRes.status, duration_ms: t(),
+            req_id: arcRes.headers.get('x-request-id'),
+          });
         }
+      } catch (err) {
+        log.error('client.cfp.import.archive.network', {
+          design_id: d.id.slice(0, 8), duration_ms: t(), err,
+        });
       }
-    } catch { /* keep proxy URL fallback */ }
+    }
 
     const tags = [
       'customer-design',
@@ -231,8 +267,17 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
         }),
       }).catch(() => { /* non-fatal */ });
 
+      log.info('client.cfp.import.complete', {
+        design_id: d.id.slice(0, 8),
+        concept_id: concept.id.slice(0, 8),
+        archived,
+        duration_ms: tTotal(),
+      });
       onOpenConcept(concept.id);
-    } catch {
+    } catch (err) {
+      log.error('client.cfp.import.fail', {
+        design_id: d.id.slice(0, 8), duration_ms: tTotal(), err,
+      });
       toast('Could not import — try again', 'error');
     }
   };

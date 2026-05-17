@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
+import { withLog, log } from '@/lib/log';
 
 /**
  * Proxy: POST /api/cfp/designs/{id}/import-receipts
  *
  * Tells the CFP admin "this design has been imported into our local
- * Concepts table as <conceptId>". CFP shows it as a "Linked in etching
- * tool" badge with deep-link.
+ * Concepts table as <conceptId>". CFP shows it as a "Linked in
+ * engraving tool" badge with deep-link.
  *
  * Idempotent on (designId, conceptId) — re-POSTs upsert so safe to retry.
  *
@@ -14,15 +15,21 @@ import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
  *   { conceptId, conceptUrl, conceptName, importedBy, importedAt? }
  */
 
-export async function POST(
+export const POST = withLog<{ id: string }>('cfp.receipts.add', async (
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }
+) => {
   if (!getCfpConfig()) {
     return NextResponse.json({ error: 'CFP_API_KEY not configured' }, { status: 503 });
   }
   const { id } = await params;
   const payload = await req.json().catch(() => ({}));
+
+  log.info('cfp.receipts.add.intent', {
+    design_id: id.slice(0, 8),
+    concept_id: typeof payload.conceptId === 'string' ? payload.conceptId.slice(0, 8) : undefined,
+    actor: payload.importedBy,
+  });
 
   try {
     const upstream = await cfpFetch(
@@ -40,12 +47,12 @@ export async function POST(
       { status: 502 }
     );
   }
-}
+});
 
-export async function GET(
+export const GET = withLog<{ id: string }>('cfp.receipts.list', async (
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }
+) => {
   if (!getCfpConfig()) {
     return NextResponse.json({ error: 'CFP_API_KEY not configured' }, { status: 503 });
   }
@@ -56,4 +63,4 @@ export async function GET(
     status: upstream.status,
     headers: { 'Content-Type': 'application/json' },
   });
-}
+});

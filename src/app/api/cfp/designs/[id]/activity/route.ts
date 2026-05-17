@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
+import { withLog } from '@/lib/log';
 
-/**
- * Proxy: GET /api/cfp/designs/{id}/activity?limit=N
- * Forwards to the CFP edit-log endpoint and returns the full timeline
- * (regenerations, edits, uploads, status changes, notes, submissions).
- * Newest events first; max 500 per request.
- */
-export async function GET(
+export const GET = withLog<{ id: string }>('cfp.activity', async (
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { params }
+) => {
   if (!getCfpConfig()) {
     return NextResponse.json({ error: 'CFP_API_KEY not configured' }, { status: 503 });
   }
@@ -29,4 +24,4 @@ export async function GET(
       { status: 502 }
     );
   }
-}
+});

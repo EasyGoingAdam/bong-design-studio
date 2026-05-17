@@ -1,30 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase';
+import { log, timer, newRequestId } from '@/lib/log';
 
 /**
  * Webhook receiver for the Customize Freeze Pipe app.
  *
  * Configure on customize-freezepipe.com/admin/settings:
  *   URL    → https://<this-app>/api/webhooks/cfp
- *   Events → design_submitted, status_changed, note_added
- *   Secret → set CFP_WEBHOOK_SECRET to the same value the admin shows on
- *            creation (it's only shown once)
+ *   Events → design_submitted, status_changed, note_added,
+ *            image_regenerated, version_added (all 5)
+ *   Secret → set CFP_WEBHOOK_SECRET to the same value the admin shows
+ *            on creation (only displayed once)
  *
- * What it does:
- *   1. Verifies HMAC-SHA256 signature against raw body using the shared
- *      secret (constant-time comparison). 401 on mismatch.
- *   2. Rejects timestamps more than 5 minutes off (replay protection).
- *   3. Logs the event to a `cfp_webhook_events` Supabase table for audit.
- *      The table is best-effort — if the insert fails (table missing,
- *      Supabase down) the webhook still returns 200 so CFP doesn't keep
- *      logging failures upstream.
+ * Lifecycle per delivery:
+ *   1. Verify HMAC-SHA256 signature (constant-time). 401 on mismatch.
+ *   2. Replay protection (X-Cfp-Timestamp within 5 min).
+ *   3. Audit-log to cfp_webhook_events Supabase table (idempotent on
+ *      delivery_id). Best-effort — won't 5xx if the table is missing.
+ *   4. Always return 200 on valid deliveries so CFP doesn't log retries.
  *
- * Migration to run in Supabase if you want webhook history:
+ * Every step has its own log line so we can grep for failures by stage
+ * without enabling debug verbosity:
+ *   op=cfp.webhook.recv     — entry
+ *   op=cfp.webhook.sig_fail / sig_ok
+ *   op=cfp.webhook.stale    — replay-window rejection
+ *   op=cfp.webhook.persist  — audit-log insert (ok / fail)
+ *   op=cfp.webhook.done     — exit (always)
+ *
+ * Migration to enable webhook history (optional):
  *   create table cfp_webhook_events (
  *     id uuid primary key default gen_random_uuid(),
  *     event_type text not null,
- *     delivery_id text not null unique,  -- de-dupes accidental retries
+ *     delivery_id text not null unique,
  *     design_id text,
  *     payload jsonb not null,
  *     received_at timestamptz default now()
@@ -46,30 +54,44 @@ function verifySignature(rawBody: string, signatureHeader: string, secret: strin
 }
 
 export async function POST(req: NextRequest) {
+  const reqId = newRequestId();
+  const elapsed = timer();
+
   const secret = process.env.CFP_WEBHOOK_SECRET;
+  const eventType = req.headers.get('x-cfp-event') || 'unknown';
+  const deliveryId = req.headers.get('x-cfp-delivery-id') || '';
+  const timestamp = req.headers.get('x-cfp-timestamp') || '';
+
+  log.info('cfp.webhook.recv', {
+    req_id: reqId, event_type: eventType, delivery_id: deliveryId.slice(0, 8),
+  });
+
   if (!secret) {
-    // Don't leak the misconfiguration to the caller — return 200 to avoid
-    // upstream retry loops, but log loudly server-side.
-    console.error('[cfp-webhook] CFP_WEBHOOK_SECRET not configured — rejecting');
+    log.error('cfp.webhook.unconfigured', { req_id: reqId });
     return NextResponse.json({ ok: false, reason: 'not_configured' }, { status: 503 });
   }
 
   const rawBody = await req.text();
   const signature = req.headers.get('x-cfp-signature') || '';
-  const timestamp = req.headers.get('x-cfp-timestamp') || '';
-  const eventType = req.headers.get('x-cfp-event') || 'unknown';
-  const deliveryId = req.headers.get('x-cfp-delivery-id') || '';
-
   if (!signature) {
+    log.warn('cfp.webhook.no_signature', { req_id: reqId });
     return NextResponse.json({ ok: false, reason: 'missing_signature' }, { status: 401 });
   }
   if (!verifySignature(rawBody, signature, secret)) {
+    log.warn('cfp.webhook.sig_fail', {
+      req_id: reqId, event_type: eventType, delivery_id: deliveryId.slice(0, 8),
+    });
     return NextResponse.json({ ok: false, reason: 'invalid_signature' }, { status: 401 });
   }
+
   // Replay protection — drop deliveries with stale timestamps.
   if (timestamp) {
     const ts = Date.parse(timestamp);
-    if (!isNaN(ts) && Math.abs(Date.now() - ts) > REPLAY_WINDOW_MS) {
+    const drift = isNaN(ts) ? Infinity : Math.abs(Date.now() - ts);
+    if (!isNaN(ts) && drift > REPLAY_WINDOW_MS) {
+      log.warn('cfp.webhook.stale', {
+        req_id: reqId, drift_ms: drift, event_type: eventType,
+      });
       return NextResponse.json({ ok: false, reason: 'stale_timestamp' }, { status: 401 });
     }
   }
@@ -78,6 +100,7 @@ export async function POST(req: NextRequest) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    log.error('cfp.webhook.invalid_json', { req_id: reqId, event_type: eventType });
     return NextResponse.json({ ok: false, reason: 'invalid_json' }, { status: 400 });
   }
 
@@ -90,8 +113,9 @@ export async function POST(req: NextRequest) {
 
   // Best-effort persist. Idempotent via UNIQUE on delivery_id.
   if (deliveryId) {
+    const t = timer();
     try {
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('cfp_webhook_events')
         .insert({
           event_type: eventType,
@@ -99,18 +123,36 @@ export async function POST(req: NextRequest) {
           design_id: designId,
           payload,
         });
+      if (error) {
+        // Duplicate delivery_id or missing table — both non-fatal.
+        log.warn('cfp.webhook.persist.fail', {
+          req_id: reqId, event_type: eventType,
+          delivery_id: deliveryId.slice(0, 8),
+          duration_ms: t(), code: error.code, err: error.message,
+        });
+      } else {
+        log.info('cfp.webhook.persist', {
+          req_id: reqId, event_type: eventType,
+          design_id: designId?.slice(0, 8), duration_ms: t(),
+        });
+      }
     } catch (e) {
-      // Table missing or duplicate delivery_id — both are non-fatal.
-      console.warn('[cfp-webhook] persist failed:', e);
+      log.warn('cfp.webhook.persist.exception', {
+        req_id: reqId, duration_ms: t(), err: e,
+      });
     }
   }
 
-  return NextResponse.json({ ok: true, deliveryId });
+  log.info('cfp.webhook.done', {
+    req_id: reqId, event_type: eventType, duration_ms: elapsed(),
+  });
+
+  return NextResponse.json({ ok: true, deliveryId, requestId: reqId });
 }
 
 /**
- * GET is mostly for health-checks. Returns whether the secret is configured
- * without leaking the secret itself.
+ * GET — health-check. Returns whether the secret is configured without
+ * leaking the secret itself.
  */
 export async function GET() {
   return NextResponse.json({

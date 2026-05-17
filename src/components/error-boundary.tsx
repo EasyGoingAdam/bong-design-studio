@@ -1,6 +1,7 @@
 'use client';
 
 import { Component, ReactNode, ErrorInfo } from 'react';
+import { log } from '@/lib/log';
 
 interface Props {
   children: ReactNode;
@@ -38,13 +39,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Structured log — easy to grep in Railway logs.
-    // eslint-disable-next-line no-console
-    console.error('[error-boundary]', {
+    // Single structured line — same format the server uses so logs
+    // remain consistently greppable across client + server.
+    log.error('react.boundary.caught', {
       scope: this.props.scope || 'root',
-      message: error.message,
-      stack: error.stack,
-      componentStack: info.componentStack,
+      err: error,
+      component_stack: info.componentStack?.split('\n').slice(0, 3).join(' '),
     });
   }
 

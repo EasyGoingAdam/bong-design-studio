@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cfpFetch, getCfpConfig } from '@/lib/cfp-client';
+import { withLog } from '@/lib/log';
 
-/**
- * Proxy: GET /api/cfp/designs.csv?...
- *
- * Streams a CSV export of designs. Same filters as /designs (status,
- * source, glycerinColor, q, submittedOnly, since, until, sort, order)
- * — passed straight through. Useful for ops audits + ad-hoc reporting
- * (paste into spreadsheet, run pivot tables).
- */
-export async function GET(req: NextRequest) {
+export const GET = withLog('cfp.csv', async (req: NextRequest) => {
   if (!getCfpConfig()) {
     return NextResponse.json({ error: 'CFP_API_KEY not configured' }, { status: 503 });
   }
@@ -38,4 +31,4 @@ export async function GET(req: NextRequest) {
       { status: 502 }
     );
   }
-}
+});
