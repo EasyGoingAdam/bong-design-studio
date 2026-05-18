@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { log } from '@/lib/log';
 
 // ---------------------------------------------------------------------------
 // Helper: convert snake_case DB rows -> camelCase frontend Concept type
@@ -231,98 +232,149 @@ export async function GET() {
 // ---------------------------------------------------------------------------
 // POST /api/concepts  — create a new concept
 // ---------------------------------------------------------------------------
+
+/**
+ * Insert a row, gracefully dropping columns the production schema is
+ * missing. Production databases sometimes lag behind app code when a
+ * migration hasn't been applied yet; we'd rather lose a few field values
+ * than break "Create Concept" entirely for the team.
+ *
+ * Detection: Supabase/PostgREST returns the column name verbatim in the
+ * error message — `Could not find the 'foo' column of 'bar' in the
+ * schema cache`. We parse it out, drop that key, and retry. Capped to
+ * 20 attempts so a runaway can't loop forever.
+ *
+ * Anything stripped is logged so Railway logs show exactly which
+ * columns are missing — surfaces the underlying migration gap without
+ * blocking the user.
+ */
+const COLUMN_NOT_FOUND_RE = /Could not find the '([^']+)' column/i;
+
+async function insertWithMissingColumnFallback<T extends Record<string, unknown>>(
+  table: string,
+  row: T,
+  context: string
+): Promise<{ data: Record<string, unknown> | null; error: { message: string } | null; strippedColumns: string[] }> {
+  const strippedColumns: string[] = [];
+  let attempt: Record<string, unknown> = { ...row };
+  for (let i = 0; i < 20; i++) {
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .insert(attempt)
+      .select()
+      .single();
+    if (!error) {
+      return { data, error: null, strippedColumns };
+    }
+    const m = error.message.match(COLUMN_NOT_FOUND_RE);
+    if (!m) {
+      log.error('concepts.insert.fail', { table, context, err: error.message });
+      return { data: null, error, strippedColumns };
+    }
+    const missingCol = m[1];
+    log.warn('concepts.insert.column_missing', {
+      table, context, column: missingCol, attempt: i + 1,
+    });
+    strippedColumns.push(missingCol);
+    delete attempt[missingCol];
+    if (Object.keys(attempt).length === 0) {
+      log.error('concepts.insert.all_columns_missing', { table, context });
+      return { data: null, error, strippedColumns };
+    }
+  }
+  log.error('concepts.insert.retry_exhausted', { table, context, strippedColumns });
+  return { data: null, error: { message: 'Retry exhausted on missing-column fallback' }, strippedColumns };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
     const now = new Date().toISOString();
 
-    // Insert concept
-    const { data: concept, error: conceptErr } = await supabaseAdmin
-      .from('concepts')
-      .insert({
-        name: body.name ?? 'Untitled Concept',
-        collection: body.collection ?? '',
-        status: body.status ?? 'ideation',
-        designer: body.designer ?? '',
-        tags: body.tags ?? [],
-        description: body.description ?? '',
-        intended_audience: body.intendedAudience ?? '',
-        manufacturing_notes: body.manufacturingNotes ?? '',
-        marketing_story: body.marketingStory ?? '',
-        coil_image_url: body.coilImageUrl ?? '',
-        base_image_url: body.baseImageUrl ?? '',
-        combined_image_url: body.combinedImageUrl ?? '',
-        product_photo_url: body.productPhotoUrl ?? '',
-        marketing_graphic_url: body.marketingGraphicUrl ?? '',
-        marketing_tagline: body.marketingTagline ?? '',
-        blank_product_url: body.blankProductUrl ?? '',
-        product_mockup_url: body.productMockupUrl ?? '',
-        product_mockup_angles: body.productMockupAngles ?? [],
-        coil_only: body.coilOnly ?? false,
-        source: body.source ?? '',
-        external_id: body.externalId ?? '',
-        external_url: body.externalUrl ?? '',
-        submitter_email: body.submitterEmail ?? '',
-        submitter_name: body.submitterName ?? '',
-        priority: body.priority ?? 'medium',
-        lifecycle_type: body.lifecycleType ?? 'evergreen',
-        created_at: now,
-        updated_at: now,
-      })
-      .select()
-      .single();
+    const conceptRow = {
+      name: body.name ?? 'Untitled Concept',
+      collection: body.collection ?? '',
+      status: body.status ?? 'ideation',
+      designer: body.designer ?? '',
+      tags: body.tags ?? [],
+      description: body.description ?? '',
+      intended_audience: body.intendedAudience ?? '',
+      manufacturing_notes: body.manufacturingNotes ?? '',
+      marketing_story: body.marketingStory ?? '',
+      coil_image_url: body.coilImageUrl ?? '',
+      base_image_url: body.baseImageUrl ?? '',
+      combined_image_url: body.combinedImageUrl ?? '',
+      product_photo_url: body.productPhotoUrl ?? '',
+      marketing_graphic_url: body.marketingGraphicUrl ?? '',
+      marketing_tagline: body.marketingTagline ?? '',
+      blank_product_url: body.blankProductUrl ?? '',
+      product_mockup_url: body.productMockupUrl ?? '',
+      product_mockup_angles: body.productMockupAngles ?? [],
+      coil_only: body.coilOnly ?? false,
+      source: body.source ?? '',
+      external_id: body.externalId ?? '',
+      external_url: body.externalUrl ?? '',
+      submitter_email: body.submitterEmail ?? '',
+      submitter_name: body.submitterName ?? '',
+      priority: body.priority ?? 'medium',
+      lifecycle_type: body.lifecycleType ?? 'evergreen',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: concept, error: conceptErr, strippedColumns } =
+      await insertWithMissingColumnFallback('concepts', conceptRow, 'concept');
 
     if (conceptErr || !concept) {
-      return NextResponse.json({ error: conceptErr?.message ?? 'Failed to create concept' }, { status: 500 });
+      return NextResponse.json(
+        { error: conceptErr?.message ?? 'Failed to create concept', strippedColumns },
+        { status: 500 }
+      );
+    }
+    if (strippedColumns.length > 0) {
+      log.warn('concepts.insert.degraded', {
+        context: 'concept', stripped_count: strippedColumns.length,
+        columns: strippedColumns.join(','),
+      });
     }
 
-    const conceptId = concept.id;
+    const conceptId = (concept as { id: string }).id;
     const specs = body.specs ?? {};
     const coilSpecs = body.coilSpecs ?? {};
     const baseSpecs = body.baseSpecs ?? {};
 
-    // Insert specs in parallel
+    // Insert specs in parallel — each uses the same defensive fallback so
+    // a missing column on any of the three child tables doesn't tank the
+    // whole concept creation.
     const [specsRes, coilRes, baseRes] = await Promise.all([
-      supabaseAdmin
-        .from('concept_specs')
-        .insert({
-          concept_id: conceptId,
-          design_style_name: specs.designStyleName ?? '',
-          design_theme: specs.designTheme ?? '',
-          pattern_density: specs.patternDensity ?? 'medium',
-          laser_complexity: specs.laserComplexity ?? 3,
-          estimated_etching_time: specs.estimatedEtchingTime ?? '',
-          surface_coverage: specs.surfaceCoverage ?? 50,
-          line_thickness: specs.lineThickness ?? '',
-          bw_contrast_guidance: specs.bwContrastGuidance ?? '',
-          symmetry_requirement: specs.symmetryRequirement ?? 'none',
-          coordination_mode: specs.coordinationMode ?? 'thematic',
-          production_feasibility: specs.productionFeasibility ?? 3,
-          risk_notes: specs.riskNotes ?? '',
-        })
-        .select()
-        .single(),
-      supabaseAdmin
-        .from('coil_specs')
-        .insert({
-          concept_id: conceptId,
-          dimensions: coilSpecs.dimensions ?? '',
-          printable_area: coilSpecs.printableArea ?? '',
-          notes: coilSpecs.notes ?? '',
-        })
-        .select()
-        .single(),
-      supabaseAdmin
-        .from('base_specs')
-        .insert({
-          concept_id: conceptId,
-          dimensions: baseSpecs.dimensions ?? '',
-          printable_area: baseSpecs.printableArea ?? '',
-          notes: baseSpecs.notes ?? '',
-        })
-        .select()
-        .single(),
+      insertWithMissingColumnFallback('concept_specs', {
+        concept_id: conceptId,
+        design_style_name: specs.designStyleName ?? '',
+        design_theme: specs.designTheme ?? '',
+        pattern_density: specs.patternDensity ?? 'medium',
+        laser_complexity: specs.laserComplexity ?? 3,
+        estimated_etching_time: specs.estimatedEtchingTime ?? '',
+        surface_coverage: specs.surfaceCoverage ?? 50,
+        line_thickness: specs.lineThickness ?? '',
+        bw_contrast_guidance: specs.bwContrastGuidance ?? '',
+        symmetry_requirement: specs.symmetryRequirement ?? 'none',
+        coordination_mode: specs.coordinationMode ?? 'thematic',
+        production_feasibility: specs.productionFeasibility ?? 3,
+        risk_notes: specs.riskNotes ?? '',
+      }, 'concept_specs'),
+      insertWithMissingColumnFallback('coil_specs', {
+        concept_id: conceptId,
+        dimensions: coilSpecs.dimensions ?? '',
+        printable_area: coilSpecs.printableArea ?? '',
+        notes: coilSpecs.notes ?? '',
+      }, 'coil_specs'),
+      insertWithMissingColumnFallback('base_specs', {
+        concept_id: conceptId,
+        dimensions: baseSpecs.dimensions ?? '',
+        printable_area: baseSpecs.printableArea ?? '',
+        notes: baseSpecs.notes ?? '',
+      }, 'base_specs'),
     ]);
 
     const result = dbConceptToFrontend(
