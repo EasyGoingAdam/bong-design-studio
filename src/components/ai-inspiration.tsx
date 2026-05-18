@@ -7,6 +7,7 @@ import { useToast } from './toast';
 import { CoilBaseRelationship } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { QUICK_PICK_POOL } from '@/lib/quick-picks';
+import { log } from '@/lib/log';
 
 interface BrainstormResult {
   id?: string; // db id from archive
@@ -158,37 +159,74 @@ export function AIInspiration({ onOpenConcept }: { onOpenConcept: (id: string) =
   });
 
   const handleUseThis = async (result: BrainstormResult, index: number) => {
+    log.info('client.brainstorm.use_idea.start', {
+      name: result.name, has_id: !!result.id,
+    });
     try {
-      const concept = await addConcept(buildConceptFromIdea(result));
-      // Mark idea as used in archive (if it has a db id)
+      const payload = buildConceptFromIdea(result);
+      const concept = await addConcept(payload);
+      log.info('client.brainstorm.use_idea.concept_created', {
+        name: result.name, concept_id: concept.id.slice(0, 8),
+      });
+      // Mark idea as used in archive (if it has a db id). Non-fatal —
+      // a 404 here just means the idea wasn't persisted server-side
+      // (some fresh AI-generated ones aren't saved until later). DON'T
+      // let this failure bubble up and trigger the rollback toast.
       if (result.id) {
-        fetch(`/api/brainstorm-ideas/${result.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conceptId: concept.id }),
-        }).catch(console.error);
+        try {
+          await fetch(`/api/brainstorm-ideas/${result.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conceptId: concept.id }),
+          });
+        } catch (err) {
+          log.warn('client.brainstorm.mark_used.fail', {
+            idea_id: result.id, err,
+          });
+        }
       }
       setResults((prev) => prev.filter((_, i) => i !== index));
       toast(`"${result.name}" added to Concepts`, 'success');
-    } catch {
-      setError('Failed to create concept. Please try again.');
+    } catch (err) {
+      // Surface the real error to console + state so we can see what
+      // actually failed when a user reports the "Failed to create
+      // concept" toast.
+      log.error('client.brainstorm.use_idea.fail', {
+        name: result.name, err,
+      });
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to create concept: ${msg}`);
     }
   };
 
   const handleUseArchived = async (idea: ArchivedIdea) => {
+    log.info('client.brainstorm.use_archived.start', {
+      idea_id: idea.id, name: idea.name,
+    });
     try {
       const concept = await addConcept(buildConceptFromIdea(idea));
-      await fetch(`/api/brainstorm-ideas/${idea.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conceptId: concept.id }),
+      log.info('client.brainstorm.use_archived.concept_created', {
+        idea_id: idea.id, concept_id: concept.id.slice(0, 8),
       });
+      try {
+        await fetch(`/api/brainstorm-ideas/${idea.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conceptId: concept.id }),
+        });
+      } catch (err) {
+        log.warn('client.brainstorm.mark_used.fail', { idea_id: idea.id, err });
+      }
       setArchiveIdeas((prev) =>
         prev.map((i) => (i.id === idea.id ? { ...i, usedAt: new Date().toISOString(), conceptId: concept.id } : i))
       );
       toast(`"${idea.name}" added to Concepts`, 'success');
-    } catch {
-      toast('Failed to create concept', 'error');
+    } catch (err) {
+      log.error('client.brainstorm.use_archived.fail', {
+        idea_id: idea.id, name: idea.name, err,
+      });
+      const msg = err instanceof Error ? err.message : String(err);
+      toast(`Failed to create concept: ${msg}`, 'error');
     }
   };
 
