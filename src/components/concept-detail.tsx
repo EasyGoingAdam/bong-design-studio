@@ -14,6 +14,7 @@ import { SharePreviewModal } from './share-preview-modal';
 import { AutoPilotModal } from './auto-pilot-modal';
 import { CostCalculatorModal } from './cost-calculator-modal';
 import { BulkVariantsModal } from './bulk-variants-modal';
+import { ConceptAuditTimeline } from './concept-audit-timeline';
 import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
@@ -24,7 +25,7 @@ import { formatDate, formatDateTime } from '@/lib/utils';
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
   const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, addAIGeneration, openAIKey } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
-  const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing' | 'audit'>('overview');
   const [commentText, setCommentText] = useState('');
   const [editing, setEditing] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
@@ -283,6 +284,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
     { id: 'comments' as const, label: `Comments (${concept.comments.length})` },
     { id: 'ai' as const, label: `AI History (${concept.aiGenerations.length})` },
     { id: 'manufacturing' as const, label: 'Manufacturing' },
+    { id: 'audit' as const, label: 'Activity' },
   ];
 
   return (
@@ -1086,6 +1088,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       {/* Manufacturing */}
       {activeSection === 'manufacturing' && (
         <ManufacturingPanel conceptId={conceptId} />
+      )}
+
+      {activeSection === 'audit' && (
+        <ConceptAuditTimeline conceptId={conceptId} />
       )}
 
       <ConfirmDialog

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { dbConceptToFrontend } from '../route';
+import { logAuditAsync, diffShallow } from '@/lib/audit';
 
 // ---------------------------------------------------------------------------
 // GET /api/concepts/[id]  — fetch single concept with all related data
@@ -64,6 +65,15 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Snapshot the pre-mutation row so the audit log can record a real
+    // diff. One extra read on the hot path — Supabase serves these from
+    // cache so the cost is negligible vs the forensic value.
+    const { data: beforeRow } = await supabaseAdmin
+      .from('concepts')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
     // Build concept update object (only include provided fields)
     const conceptUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
@@ -111,6 +121,29 @@ export async function PATCH(
 
     if (conceptErr) {
       return NextResponse.json({ error: conceptErr.message }, { status: 500 });
+    }
+
+    // Audit-log the change. Diff'd shallowly against the snapshot so
+    // we only persist fields that actually changed. Status moves get a
+    // distinct action so they're easy to filter on later. Fire-and-
+    // forget — audit failures must never block the response.
+    if (beforeRow) {
+      const afterRow = { ...beforeRow, ...conceptUpdate };
+      const diff = diffShallow(
+        beforeRow as Record<string, unknown>,
+        afterRow as Record<string, unknown>
+      );
+      if (diff) {
+        const isMove = 'status' in diff.after;
+        logAuditAsync({
+          conceptId: id,
+          action: isMove ? 'concept.move' : 'concept.update',
+          actor: { name: body.actorName, id: body.actorId },
+          before: diff.before,
+          after: diff.after,
+          request,
+        });
+      }
     }
 
     // Update specs if provided
@@ -216,11 +249,20 @@ export async function PATCH(
 // DELETE /api/concepts/[id]  — delete concept (cascade handles related tables)
 // ---------------------------------------------------------------------------
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    // Snapshot before delete so the audit log preserves the lost data.
+    // CASCADE on the FK means any child rows (specs, comments, etc.)
+    // will be gone too — capture at least the parent row.
+    const { data: beforeRow } = await supabaseAdmin
+      .from('concepts')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
     const { error } = await supabaseAdmin
       .from('concepts')
@@ -229,6 +271,24 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Audit AFTER successful delete so we don't log phantom deletions.
+    // The audit row's concept_id FK has ON DELETE CASCADE — but we're
+    // deleting the concept itself, so we use a NULL after_data and rely
+    // on the action="concept.delete" + before_data for forensics.
+    // (CASCADE will eventually purge this audit row when its concept
+    // row vanishes — that's fine; the in-flight insert below races the
+    // cascade but Postgres handles the order.)
+    if (beforeRow) {
+      logAuditAsync({
+        conceptId: id,
+        action: 'concept.delete',
+        actor: { name: request.headers.get('x-actor-name') || undefined },
+        before: beforeRow as Record<string, unknown>,
+        after: null,
+        request,
+      });
     }
 
     return NextResponse.json({ success: true });

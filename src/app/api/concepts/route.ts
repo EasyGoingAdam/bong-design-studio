@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { log } from '@/lib/log';
+import { logAuditAsync } from '@/lib/audit';
 
 // ---------------------------------------------------------------------------
 // Helper: convert snake_case DB rows -> camelCase frontend Concept type
@@ -388,6 +389,25 @@ export async function POST(request: NextRequest) {
       [],
       null
     );
+
+    // Audit-log the creation. after_data captures only identifying fields
+    // (id + name + status + designer + source) — full row goes in concepts
+    // table itself, no need to duplicate that data in the audit log.
+    logAuditAsync({
+      conceptId,
+      action: body.source && body.externalId ? 'import.from_cfp' : 'concept.create',
+      actor: { name: body.designer || undefined },
+      before: null,
+      after: {
+        id: conceptId,
+        name: conceptRow.name,
+        status: conceptRow.status,
+        designer: conceptRow.designer,
+        source: conceptRow.source,
+        external_id: conceptRow.external_id,
+      },
+      request,
+    });
 
     return NextResponse.json(result, { status: 201 });
   } catch (err: unknown) {
