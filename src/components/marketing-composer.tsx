@@ -37,6 +37,10 @@ export function MarketingComposer({ concept, onClose }: Props) {
   const { toast } = useToast();
 
   const [productPhoto, setProductPhoto] = useState<string>(concept.productPhotoUrl || '');
+  // Manual rotation in 90° steps applied server-side. EXIF auto-orient runs
+  // first; this is for screenshots / sideloaded images that lack EXIF and
+  // come through sideways.
+  const [rotateDeg, setRotateDeg] = useState<0 | 90 | 180 | 270>(0);
   const [productName, setProductName] = useState(concept.name);
   const [tagline, setTagline] = useState(concept.marketingTagline || '');
   const [nameStyle, setNameStyle] = useState<NameStyle>('white_pill');
@@ -134,6 +138,7 @@ export function MarketingComposer({ concept, onClose }: Props) {
           aspect,
           coilBadgeSize,
           dimBackground,
+          rotateDeg,
           filenameHint: concept.name,
         }),
       });
@@ -210,16 +215,31 @@ export function MarketingComposer({ concept, onClose }: Props) {
                   <img
                     src={productPhoto}
                     alt="Product"
-                    className="w-full rounded-lg border border-border object-contain bg-background"
-                    style={{ maxHeight: 240 }}
+                    className="w-full rounded-lg border border-border object-contain bg-background transition-transform"
+                    style={{
+                      maxHeight: 240,
+                      transform: `rotate(${rotateDeg}deg)`,
+                    }}
                   />
+                  {/* Rotate button — clockwise 90°. Cycles 0→90→180→270→0.
+                      Preview rotates immediately via CSS transform; the
+                      server-side composite uses the rotateDeg field on
+                      submit so the final graphic matches what's previewed. */}
+                  <button
+                    type="button"
+                    onClick={() => setRotateDeg(((rotateDeg + 90) % 360) as 0 | 90 | 180 | 270)}
+                    className="absolute bottom-2 left-2 text-[11px] bg-background/90 border border-border rounded px-2 py-1 hover:bg-background"
+                    title="Rotate 90° clockwise — apply when the photo lands sideways"
+                  >
+                    ↻ Rotate
+                  </button>
                   <label className="absolute bottom-2 right-2 text-[11px] bg-background/90 border border-border rounded px-2 py-1 cursor-pointer hover:bg-background">
                     Replace
                     <input
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => e.target.files?.[0] && onPhotoSelected(e.target.files[0])}
+                      onChange={(e) => { setRotateDeg(0); e.target.files?.[0] && onPhotoSelected(e.target.files[0]); }}
                     />
                   </label>
                 </div>

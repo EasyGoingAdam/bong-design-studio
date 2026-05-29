@@ -17,6 +17,8 @@ import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { GeneratePresetModal } from './generate-preset-modal';
 import { EditPresetModal } from './edit-preset-modal';
+import { saveUserPreset } from '@/lib/presets';
+import { log } from '@/lib/log';
 
 interface Props {
   onOpenConcept: (id: string) => void;
@@ -41,6 +43,14 @@ export function PresetLibrary({ onOpenConcept }: Props) {
   const [applying, setApplying] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [editing, setEditing] = useState<DesignPreset | null>(null);
+  // Upload-design modal state
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState('');
+  const [uploadStyle, setUploadStyle] = useState('');
+  const [uploadCategory, setUploadCategory] = useState<DesignPreset['category']>('custom');
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState<string>('');
   const [showArchived, setShowArchived] = useState(false);
   const [curatedLastUsed, setCuratedLastUsed] = useState<Record<string, string>>({});
 
@@ -146,6 +156,17 @@ export function PresetLibrary({ onOpenConcept }: Props) {
             title="Describe a style in plain English and AI will create a full preset"
           >
             ✦ Generate from description
+          </button>
+          {/* Upload Design — sideload an existing image (PNG/JPG/SVG) as a
+              user preset preview. Helpful when a designer already has a
+              finished engraving outside the studio and wants to drop it
+              into the preset library for one-click reuse. */}
+          <button
+            onClick={() => setShowUpload(true)}
+            className="text-sm px-3 py-2 bg-surface border border-border hover:border-accent text-foreground rounded-lg font-medium transition-colors whitespace-nowrap"
+            title="Upload an existing design as a new preset"
+          >
+            ↑ Upload Design
           </button>
           <div className="relative w-full sm:w-80">
             <input
@@ -361,6 +382,193 @@ export function PresetLibrary({ onOpenConcept }: Props) {
             setEditing(null);
           }}
         />
+      )}
+
+      {/* Upload Design modal — file picker + minimal metadata.
+          On save: data URI → /api/upload-image → public URL → saveUserPreset.
+          Preview shown inline so the user can confirm the right file. */}
+      {showUpload && (
+        <div
+          className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Upload Design as Preset"
+          onClick={() => !uploadBusy && setShowUpload(false)}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
+              <h3 className="font-semibold">Upload Design</h3>
+              <button
+                onClick={() => !uploadBusy && setShowUpload(false)}
+                className="text-muted hover:text-foreground text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-3 text-sm">
+              <p className="text-xs text-muted">
+                Drop in an existing engraving design as a reusable preset. The image becomes the preview thumbnail.
+              </p>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Preset name *</label>
+                <input
+                  type="text"
+                  value={uploadName}
+                  onChange={(e) => setUploadName(e.target.value)}
+                  placeholder="e.g. KUSHFATHER mandala"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Style note <span className="text-muted font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={uploadStyle}
+                  onChange={(e) => setUploadStyle(e.target.value)}
+                  placeholder="e.g. Bold geometric tribal"
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Category</label>
+                <select
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value as DesignPreset['category'])}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                >
+                  {PRESET_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.emoji} {cat.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Design image *</label>
+                {uploadPreview ? (
+                  <div className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={uploadPreview}
+                      alt="Preset preview"
+                      className="w-full rounded-lg border border-border object-contain bg-background"
+                      style={{ maxHeight: 200 }}
+                    />
+                    <label className="absolute bottom-2 right-2 text-[11px] bg-background/90 border border-border rounded px-2 py-1 cursor-pointer">
+                      Replace
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setUploadFile(f);
+                          const r = new FileReader();
+                          r.onload = () => setUploadPreview(String(r.result || ''));
+                          r.readAsDataURL(f);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="block border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-accent hover:bg-accent/5 transition-colors">
+                    <div className="text-xs text-muted">Click to choose a PNG / JPG / SVG</div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setUploadFile(f);
+                        const r = new FileReader();
+                        r.onload = () => setUploadPreview(String(r.result || ''));
+                        r.readAsDataURL(f);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => !uploadBusy && setShowUpload(false)}
+                  className="flex-1 text-sm px-3 py-2 border border-border rounded-lg hover:bg-background"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={uploadBusy || !uploadFile || !uploadName.trim() || !uploadPreview}
+                  onClick={async () => {
+                    if (!uploadFile || !uploadName.trim() || !uploadPreview) return;
+                    setUploadBusy(true);
+                    log.info('client.preset.upload.start', { name: uploadName, bytes: uploadFile.size });
+                    try {
+                      const res = await fetch('/api/upload-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          data: uploadPreview,
+                          folder: 'presets',
+                          filename: uploadName.trim().slice(0, 40),
+                        }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok || !data.url) {
+                        log.error('client.preset.upload.fail', { status: res.status, err: data.error });
+                        toast(data.error || 'Upload failed', 'error');
+                        return;
+                      }
+                      // Persist as a user preset. The lightweight subset
+                      // of fields is fine — the user can edit the rest
+                      // from the Edit Preset modal later.
+                      saveUserPreset({
+                        name: uploadName.trim(),
+                        description: uploadStyle.trim() || 'Uploaded design',
+                        category: uploadCategory,
+                        tags: ['uploaded'],
+                        stylePrompt: uploadStyle.trim() || 'uploaded design',
+                        themePrompt: '',
+                        coilInstructions: '',
+                        baseInstructions: '',
+                        mode: 'production_bw',
+                        complexityLevel: 3,
+                        relationship: 'thematic',
+                        patternDensity: 'medium',
+                        intendedAudience: '',
+                        priority: 'medium',
+                        lifecycleType: 'evergreen',
+                        previewImageUrl: data.url,
+                      });
+                      refreshUserPresets();
+                      toast(`"${uploadName.trim()}" added to presets`, 'success');
+                      setShowUpload(false);
+                      setUploadFile(null);
+                      setUploadName('');
+                      setUploadStyle('');
+                      setUploadCategory('custom');
+                      setUploadPreview('');
+                      log.info('client.preset.upload.ok', { name: uploadName.trim() });
+                    } catch (err) {
+                      log.error('client.preset.upload.exception', { err });
+                      toast('Network error — please try again.', 'error');
+                    } finally {
+                      setUploadBusy(false);
+                    }
+                  }}
+                  className="flex-1 text-sm px-3 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium disabled:opacity-50"
+                >
+                  {uploadBusy ? 'Uploading…' : 'Save preset'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

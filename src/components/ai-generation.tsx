@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
 import { GenerationMode, CoilBaseRelationship } from '@/lib/types';
 import { Input, TextArea, Select, SliderInput } from './ui';
@@ -99,6 +99,84 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     title, stylePrompt, themePrompt, references, constraints: effectiveConstraints,
     complexityLevel, coilInstructions, baseInstructions,
     relationship, mode, patternDensity: density, contrast, baseShape, coilShape,
+  };
+
+  /* ───────── Design persistence (Save Design / draft auto-save) ─────────
+   * The AI Generation form previously held everything in component state,
+   * so a refresh wiped any in-progress draft AND any generated images.
+   * Now we auto-save the form + URLs + history to localStorage on every
+   * change, and the "Save Design" button is implicit (you don't lose it).
+   * The "Clear draft" button below the form lets the user start fresh.
+   *
+   * Note: storage is per-browser. If the team needs cross-device drafts
+   * later, promote this to a Supabase row keyed by user id.
+   */
+  const DRAFT_KEY = 'ai-generation-draft-v1';
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // Restore on mount — only runs once. Wrapped in a try/catch because
+  // localStorage can throw in private-browsing modes.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      // Only restore fields we know about — silently ignore extras so a
+      // future schema bump doesn't choke on old drafts.
+      if (typeof d.title === 'string') setTitle(d.title);
+      if (typeof d.stylePrompt === 'string') setStylePrompt(d.stylePrompt);
+      if (typeof d.themePrompt === 'string') setThemePrompt(d.themePrompt);
+      if (typeof d.references === 'string') setReferences(d.references);
+      if (typeof d.constraints === 'string') setConstraints(d.constraints);
+      if (typeof d.complexityLevel === 'number') setComplexityLevel(d.complexityLevel);
+      if (typeof d.coilInstructions === 'string') setCoilInstructions(d.coilInstructions);
+      if (typeof d.baseInstructions === 'string') setBaseInstructions(d.baseInstructions);
+      if (typeof d.contrast === 'string') setContrast(d.contrast);
+      if (typeof d.density === 'string') setDensity(d.density);
+      if (typeof d.coilOnly === 'boolean') setCoilOnly(d.coilOnly);
+      if (typeof d.generatedCoilUrl === 'string') setGeneratedCoilUrl(d.generatedCoilUrl);
+      if (typeof d.generatedBaseUrl === 'string') setGeneratedBaseUrl(d.generatedBaseUrl);
+      if (Array.isArray(d.coilHistory)) setCoilHistory(d.coilHistory);
+      if (Array.isArray(d.baseHistory)) setBaseHistory(d.baseHistory);
+      setDraftRestored(true);
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist on every field change. Throttled by React's batching — at
+  // most one write per render. JSON.stringify is fast enough for this
+  // payload that we don't bother memoizing.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        title, stylePrompt, themePrompt, references, constraints,
+        complexityLevel, coilInstructions, baseInstructions,
+        contrast, density, coilOnly,
+        generatedCoilUrl, generatedBaseUrl,
+        coilHistory, baseHistory,
+        savedAt: Date.now(),
+      }));
+    } catch { /* quota / private mode */ }
+  }, [
+    title, stylePrompt, themePrompt, references, constraints,
+    complexityLevel, coilInstructions, baseInstructions,
+    contrast, density, coilOnly,
+    generatedCoilUrl, generatedBaseUrl,
+    coilHistory, baseHistory,
+  ]);
+
+  const clearDraft = () => {
+    setTitle(''); setStylePrompt(''); setThemePrompt(''); setReferences('');
+    setConstraints(''); setCoilInstructions(''); setBaseInstructions('');
+    setGeneratedCoilUrl(''); setGeneratedBaseUrl('');
+    setCoilHistory([]); setBaseHistory([]);
+    setDraftRestored(false);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
+    }
+    toast('Draft cleared', 'info');
   };
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape, coilShape]);
@@ -609,6 +687,26 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           >
             {generating ? '✦ Generating Concepts...' : '✦ Generate Coil + Base Concepts'}
           </button>
+
+          {/* Draft persistence strip — surfaces the auto-save behavior so
+              the team knows their work won't vanish on refresh, plus a
+              one-click escape hatch when they want a fresh canvas. */}
+          <div className="flex items-center justify-between gap-2 text-[11px] text-muted px-1">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" aria-hidden />
+              {draftRestored
+                ? 'Draft auto-restored from last session — keep working or clear it.'
+                : 'Auto-saved as you work — survives reloads.'}
+            </span>
+            <button
+              type="button"
+              onClick={clearDraft}
+              className="hover:text-foreground underline-offset-2 hover:underline"
+              title="Wipe the auto-saved draft from this browser"
+            >
+              Clear draft
+            </button>
+          </div>
         </div>
 
         {/* Output Preview */}

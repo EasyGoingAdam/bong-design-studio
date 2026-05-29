@@ -91,6 +91,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Honor ?tab=<id>&concept=<id> on the root path. The Readiness Checklist
+  // uses these to deep-link to the Mockup / Marketing studio with a
+  // specific concept already selected — clicking "Product mockup" on the
+  // checklist drops you into the mockup tab with the right concept loaded.
+  // Stored in sessionStorage so the destination tab can pick it up on
+  // mount, then cleared so the intent fires exactly once.
+  useEffect(() => {
+    if (pathname !== '/') return;
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const tab = sp.get('tab');
+    const concept = sp.get('concept');
+    if (concept) {
+      try { window.sessionStorage.setItem('studio-intent-concept', concept); } catch {}
+    }
+    if (tab) {
+      // Tab id is validated against the union below; anything we don't
+      // know is ignored.
+      const validTabs: Tab[] = ['workflow','calendar','customer','drops','brainstorm','ai','presets','mockup','marketing','specs','archive','dashboard','concepts','insights','compare','lineage','benchmark'];
+      if ((validTabs as string[]).includes(tab)) {
+        setActiveTab(tab as Tab);
+      }
+    }
+    if (tab || concept) {
+      // Strip the query so a reload doesn't re-fire the intent.
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState({}, '', url.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   // Auth state
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -187,9 +219,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Tab Navigation — horizontally scrollable on mobile so all tabs stay reachable */}
-      <nav className="border-b border-border bg-surface px-2 sm:px-6 shrink-0 overflow-x-auto" role="navigation" aria-label="Main navigation">
-        <div className="flex gap-1 items-center min-w-max">
+      {/* Tab Navigation — horizontally scrollable on mobile so all tabs stay
+          reachable. NOTE: overflow lives on the INNER row, not the <nav>,
+          so the "More" dropdown can escape vertically without being clipped.
+          Previously the dropdown was getting cropped because the parent
+          `overflow-x-auto` implicitly clipped the y-axis too. */}
+      <nav className="border-b border-border bg-surface px-2 sm:px-6 shrink-0 relative" role="navigation" aria-label="Main navigation">
+        <div className="flex gap-1 items-center min-w-max overflow-x-auto">
           {PRIMARY_TABS.map((tab) => (
             <button
               key={tab.id}

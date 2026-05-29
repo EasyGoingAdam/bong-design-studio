@@ -11,10 +11,27 @@ export interface Drop {
   id: string;
   name: string;             // "Halloween 2026"
   launchDate: string;       // ISO date (YYYY-MM-DD)
-  holidayId?: string;       // links to HOLIDAY_EVENTS.id
+  /** @deprecated use holidayIds. Kept for backward-compat with stored data. */
+  holidayId?: string;
+  /** New: support pairing a single drop with multiple holidays — e.g. a
+   *  Christmas/New Year combo drop, or a Halloween+Día de los Muertos
+   *  collection. Reads fall back to [holidayId] when this is undefined. */
+  holidayIds?: string[];
+  /** Mini Drops are smaller / non-traditional / niche launches — Shark
+   *  Week, Dab Day, Pi Day, etc. Same data model; different visual
+   *  treatment so the planner doesn't make a Mini Drop look as
+   *  important as a tentpole release. */
+  isMiniDrop?: boolean;
   conceptIds: string[];
   notes: string;
   createdAt: string;
+}
+
+/** Normalize a stored drop to always expose holidayIds[] for the UI. */
+export function getHolidayIds(drop: Drop): string[] {
+  if (drop.holidayIds && drop.holidayIds.length > 0) return drop.holidayIds;
+  if (drop.holidayId) return [drop.holidayId];
+  return [];
 }
 
 const STORAGE_KEY = 'drops-v1';

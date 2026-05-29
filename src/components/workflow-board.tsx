@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useAppStore } from '@/lib/store';
 import { KANBAN_COLUMNS, STATUS_LABELS, ConceptStatus, Concept, PriorityLevel } from '@/lib/types';
@@ -67,6 +67,22 @@ export function WorkflowBoard({
   // Per-column search (only for Manufactured and Archived since those grow unbounded)
   const [mfgSearch, setMfgSearch] = useState('');
   const [archiveSearch, setArchiveSearch] = useState('');
+  // Sort order applied within each column. Persisted to localStorage so the
+  // designer doesn't have to re-pick on every visit. Default is 'newest'
+  // so freshly-created ideation cards float to the top.
+  type SortMode = 'newest' | 'oldest' | 'updated' | 'priority' | 'default';
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    if (typeof window === 'undefined') return 'newest';
+    try {
+      const saved = window.localStorage.getItem('workflow-sort-v1');
+      return (saved as SortMode) || 'newest';
+    } catch { return 'newest'; }
+  });
+  // Persist whenever it changes so the choice survives reloads.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem('workflow-sort-v1', sortMode); } catch {}
+  }, [sortMode]);
 
   // Multi-select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -100,8 +116,30 @@ export function WorkflowBoard({
         items = items
           .filter((c) => aiMatchMap.has(c.id))
           .sort((a, b) => (aiMatchMap.get(a.id)!.order - aiMatchMap.get(b.id)!.order));
-      } else if (g) {
-        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', g));
+      } else {
+        if (g) {
+          items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', g));
+        }
+        // Apply user-selected sort. AI relevance order is preserved when
+        // AI search is active because we already sorted above.
+        if (sortMode === 'newest') {
+          items = [...items].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        } else if (sortMode === 'oldest') {
+          items = [...items].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        } else if (sortMode === 'updated') {
+          items = [...items].sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          );
+        } else if (sortMode === 'priority') {
+          const rank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+          items = [...items].sort(
+            (a, b) => (rank[a.priority] ?? 99) - (rank[b.priority] ?? 99)
+          );
+        }
       }
 
       if (col === 'manufactured' && mfgQ) {
@@ -113,7 +151,7 @@ export function WorkflowBoard({
       map[col] = items;
     }
     return map;
-  }, [concepts, haystacks, globalSearch, mfgSearch, archiveSearch, aiMatches]);
+  }, [concepts, haystacks, globalSearch, mfgSearch, archiveSearch, aiMatches, sortMode]);
 
   const runAISearch = async () => {
     const q = globalSearch.trim();
@@ -326,6 +364,22 @@ export function WorkflowBoard({
           >
             {aiSearching ? '✦ Thinking…' : '✦ Ask AI'}
           </button>
+          {/* Sort selector — applies within each column. Default 'newest'
+              answers Adam's complaint that fresh ideation cards weren't
+              floating to the top. Persisted in localStorage. */}
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="text-sm px-3 py-2 bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground whitespace-nowrap"
+            title="Sort concepts within each column"
+            aria-label="Sort order"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="updated">Recently updated</option>
+            <option value="priority">By priority</option>
+            <option value="default">Default order</option>
+          </select>
         </div>
       </div>
 

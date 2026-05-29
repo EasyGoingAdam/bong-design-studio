@@ -33,6 +33,10 @@ interface Body {
   dimBackground?: boolean;     // subtle dim overlay for legibility, default false
   folder?: string;             // storage folder, defaults to 'marketing'
   filenameHint?: string;       // slugged into the object name
+  // Manual rotation applied to the product photo BEFORE cover-fit. Useful
+  // when EXIF orientation isn't present (e.g. sideloaded screenshots) and
+  // the photo lands sideways. Multiples of 90 only.
+  rotateDeg?: 0 | 90 | 180 | 270;
 }
 
 const ASPECT_SIZES: Record<Aspect, { width: number; height: number }> = {
@@ -119,13 +123,21 @@ function buildNameSvg(
   const textY = paddingY + fontSize * 0.85;
   const taglineY = textY + taglineFontSize + lineGap;
 
+  // Linux containers (where Railway runs) don't ship with macOS/Windows
+  // system fonts. `system-ui`, `Arial`, `Helvetica` etc. ALL resolved to
+  // missing-glyph rectangles → "black boxes" in the rendered marketing
+  // graphic. Fix: use only generic CSS family names + DejaVu Sans (which
+  // IS present in the base Debian/Ubuntu image fontconfig). librsvg's
+  // fontconfig picks DejaVu when it sees this list.
+  const FONT_FAMILY = "'DejaVu Sans', 'Liberation Sans', sans-serif";
+
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${pillWidth}" height="${pillHeight}">
   ${bgOpacity !== '0' ? `<rect x="0" y="0" width="${pillWidth}" height="${pillHeight}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgFill}" opacity="${bgOpacity}" />` : ''}
   <text
     x="${paddingX}"
     y="${textY}"
-    font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-family="${FONT_FAMILY}"
     font-size="${fontSize}"
     font-weight="700"
     fill="${textFill}"
@@ -137,7 +149,7 @@ function buildNameSvg(
   <text
     x="${paddingX}"
     y="${taglineY}"
-    font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-family="${FONT_FAMILY}"
     font-size="${taglineFontSize}"
     font-weight="500"
     fill="${taglineFill}"
@@ -169,9 +181,16 @@ export async function POST(request: NextRequest) {
     // Dynamic import — see top-of-file comment.
     const sharp = (await import('sharp')).default;
 
-    // 1. Load and cover-fit the product photo
+    // 1. Load + (a) respect EXIF orientation so portrait phone photos
+    // don't land sideways, (b) apply optional manual rotation, then
+    // cover-fit to the canvas. Without .rotate() the EXIF was being
+    // stripped silently and portrait shots came through landscape.
     const productBuffer = await fetchBuffer(body.productPhoto);
-    let bg = sharp(productBuffer).resize(width, height, { fit: 'cover', position: 'center' });
+    const rotateDeg = body.rotateDeg ?? 0;
+    let bg = sharp(productBuffer)
+      .rotate() // EXIF auto-orient — must come BEFORE any other transform
+      .rotate(rotateDeg, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(width, height, { fit: 'cover', position: 'center' });
 
     if (body.dimBackground) {
       // Subtle top-down dim to keep the name/coil readable on bright photos

@@ -135,34 +135,21 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       toast(`No ${part} image to convert — generate one first`, 'error');
       return;
     }
-    if (!openAIKey) {
-      toast('Set your OpenAI API key in Settings first', 'error');
-      return;
-    }
+    // No OpenAI key check — the new endpoint does deterministic sharp
+    // canvas extension server-side, no AI involved.
     setMakingXL(part);
     try {
-      const xlPrompt =
-        'Create the same laser-etching design, but formatted for an XL piece with a canvas that is approximately 25% taller. ' +
-        'Do not stretch the existing artwork. Recompose the design naturally to fill the taller space while preserving the ' +
-        'original design as closely as possible — same subject, same layout style, same core artwork, same black-and-white ' +
-        'engraving look. Keep it pure black and white, engraving-ready, with no gray, no shading, no gradients, and no ' +
-        'background clutter. The output is a TALLER portrait-oriented canvas — recompose the composition vertically to ' +
-        'fill it naturally without distortion.';
-
-      const res = await fetch('/api/edit-image', {
+      const res = await fetch('/api/xl-piece', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageUrl: sourceUrl,
-          editPrompt: xlPrompt,
-          apiKey: openAIKey,
-          // Tallest fixed aspect OpenAI offers. The user's spec said "~25%
-          // taller"; the API doesn't support arbitrary aspects so we use
-          // the closest available portrait option (1024×1536).
-          size: '1024x1536',
-          strength: 'subtle',
-          preserveComposition: true,
-          preserveSubject: true,
+          // 2:3 portrait — same "XL" aspect we standardized on previously.
+          // Original design is centered, untouched, with white (or auto-
+          // detected) padding above and below to fill the taller canvas.
+          targetWidth: 1024,
+          targetHeight: 1536,
+          background: 'auto',
           folder: 'xl',
           filename: `${concept.id.slice(0, 8)}-${part}-xl-${Date.now()}`,
         }),
@@ -175,8 +162,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       const xlUrl = data.url as string;
 
       // Save as a new AI generation record with [XL Piece Version] prefix
-      // so the History tab can detect and badge it.
-      const xlPromptLabel = `[XL Piece Version] ${data.prompt || xlPrompt}`;
+      // so the History tab can detect and badge it. (Not AI anymore but
+      // History UI keys off the prompt prefix for the badge — keeping the
+      // tagging convention for backwards-compat with existing entries.)
+      const xlPromptLabel = `[XL Piece Version] Canvas extended to 1024×1536 (original artwork preserved, no AI)`;
       addAIGeneration(concept.id, {
         prompt: xlPromptLabel,
         coilPrompt: part === 'coil' ? xlPromptLabel : '',
@@ -184,8 +173,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         mode: 'production_bw',
         coilImageUrl: part === 'coil' ? xlUrl : '',
         baseImageUrl: part === 'base' ? xlUrl : '',
-        model: 'gpt-image-1',
-        provider: 'openai',
+        model: 'sharp-extend',
+        provider: 'internal',
       });
 
       // Also as a Version snapshot so it shows in the Versions tab
@@ -193,7 +182,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         coilImageUrl: part === 'coil' ? xlUrl : concept.coilImageUrl,
         baseImageUrl: part === 'base' ? xlUrl : concept.baseImageUrl,
         combinedImageUrl: '',
-        notes: `XL Piece Version — ${part} recomposed for taller canvas (1024×1536). Original preserved.`,
+        notes: `XL Piece Version — ${part} canvas extended to 1024×1536. Original artwork preserved exactly (no AI recomposition).`,
       });
 
       toast(`XL ${part} version generated — see AI History tab`, 'success');
@@ -711,7 +700,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               </div>
             )}
 
-            <ReadinessChecklist concept={concept} />
+            <ReadinessChecklist
+              concept={concept}
+              onTabChange={(tab) => setActiveSection(tab)}
+            />
 
             {(concept.coilImageUrl || concept.baseImageUrl) && (
               <DesignReviewer

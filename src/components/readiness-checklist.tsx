@@ -9,8 +9,23 @@ import { computeReadiness, ReadinessCheck } from '@/lib/readiness';
  *
  * Big percentage + progress bar at the top; grouped check list below. Green
  * ring when ready, amber when close, red when hard-blockers present.
+ *
+ * Hot-link behavior: when a check carries an `action`, the row becomes a
+ * button. Same-tab actions (specs, manufacturing etc.) call onTabChange
+ * so concept-detail can switch tabs in place. External actions navigate
+ * the whole app — used for the mockup/marketing studios which live
+ * outside concept-detail.
  */
-export function ReadinessChecklist({ concept }: { concept: Concept }) {
+type TabId = NonNullable<ReadinessCheck['action']>['tab'];
+
+interface Props {
+  concept: Concept;
+  /** Called when a check with `action.tab` is clicked — concept-detail
+   *  uses this to switch its activeSection without a page navigation. */
+  onTabChange?: (tab: NonNullable<TabId>) => void;
+}
+
+export function ReadinessChecklist({ concept, onTabChange }: Props) {
   // Memoize so the 8-check walk doesn't re-run on every parent render.
   // Concept detail re-renders on every keystroke in any edit field — this
   // saved hundreds of array allocations per second on slow phones.
@@ -66,27 +81,68 @@ export function ReadinessChecklist({ concept }: { concept: Concept }) {
             <div key={g.id}>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5">{g.label}</div>
               <ul className="space-y-1.5">
-                {groupChecks.map((c) => (
-                  <li key={c.id} className="flex items-start gap-2 text-xs">
-                    <span
-                      className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        c.status === 'pass'
-                          ? 'bg-green-100 text-green-700'
-                          : c.status === 'warn'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗'}
-                    </span>
-                    <div className="min-w-0">
-                      <div className={`font-medium leading-tight ${c.status === 'pass' ? 'text-foreground' : 'text-foreground'}`}>
-                        {c.label}
+                {groupChecks.map((c) => {
+                  // Build click handler if this check carries an action.
+                  // External href wins because it leaves the page; tab
+                  // switching stays in-place via onTabChange.
+                  const hasAction = !!(c.action?.tab || c.action?.externalHref);
+                  const onClick = hasAction
+                    ? () => {
+                        if (c.action?.externalHref) {
+                          const sep = c.action.externalHref.includes('?') ? '&' : '?';
+                          const intentQs = c.action.intent ? `${sep}${c.action.intent}` : '';
+                          window.location.href = `${c.action.externalHref}${intentQs}`;
+                          return;
+                        }
+                        if (c.action?.tab && onTabChange) onTabChange(c.action.tab);
+                      }
+                    : undefined;
+
+                  const baseClasses = 'flex items-start gap-2 text-xs w-full text-left';
+                  const interactiveClasses = hasAction
+                    ? ' rounded-md p-1 -m-1 hover:bg-background cursor-pointer'
+                    : '';
+
+                  const content = (
+                    <>
+                      <span
+                        className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          c.status === 'pass'
+                            ? 'bg-green-100 text-green-700'
+                            : c.status === 'warn'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗'}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-medium leading-tight text-foreground">
+                          {c.label}
+                          {hasAction && <span className="ml-1 text-accent opacity-70">→</span>}
+                        </div>
+                        <div className="text-[10px] text-muted leading-snug">{c.detail}</div>
                       </div>
-                      <div className="text-[10px] text-muted leading-snug">{c.detail}</div>
-                    </div>
-                  </li>
-                ))}
+                    </>
+                  );
+
+                  return (
+                    <li key={c.id}>
+                      {hasAction ? (
+                        <button
+                          type="button"
+                          onClick={onClick}
+                          className={baseClasses + interactiveClasses}
+                          title={`Jump to ${c.label}`}
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        <div className={baseClasses}>{content}</div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           );

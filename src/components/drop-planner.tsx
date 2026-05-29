@@ -11,6 +11,7 @@ import {
   addConceptToDrop,
   removeConceptFromDrop,
   daysUntilLaunch,
+  getHolidayIds,
 } from '@/lib/drops';
 import { HOLIDAY_EVENTS, nextOccurrence } from '@/lib/holiday-events';
 import { useToast } from './toast';
@@ -177,18 +178,38 @@ function DropCard({
   const launchDate = new Date(drop.launchDate + 'T00:00:00').toLocaleDateString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   });
-  const holiday = drop.holidayId ? HOLIDAY_EVENTS.find((h) => h.id === drop.holidayId) : null;
+  // Resolve every linked holiday — supports the legacy single holidayId
+  // field AND the new holidayIds[] array via getHolidayIds().
+  const holidayIds = getHolidayIds(drop);
+  const holidays = holidayIds
+    .map((hid) => HOLIDAY_EVENTS.find((h) => h.id === hid))
+    .filter((h): h is NonNullable<typeof h> => !!h);
   const isImminent = days >= 0 && days <= 21;
   const isLate = days < 0;
+  const isMini = !!drop.isMiniDrop;
 
   return (
-    <div className={`bg-surface border rounded-xl overflow-hidden ${isImminent ? 'border-accent' : 'border-border'}`}>
-      <div className="p-5">
+    <div className={`bg-surface border rounded-xl overflow-hidden ${isImminent ? 'border-accent' : 'border-border'} ${isMini ? 'opacity-95' : ''}`}>
+      <div className={isMini ? 'p-4' : 'p-5'}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              {holiday && <span className="text-xl">{holiday.emoji}</span>}
-              <h3 className="serif text-2xl font-medium leading-tight">{drop.name}</h3>
+              {/* Render every holiday's emoji — compact stack so a 2-holiday
+                  drop reads visually (e.g. 🎃💀 for Halloween + DOTD). */}
+              {holidays.length > 0 && (
+                <span className="text-xl" aria-hidden>
+                  {holidays.map((h) => h.emoji).join('')}
+                </span>
+              )}
+              {/* Mini Drop visual: smaller heading, "mini drop" pill. The
+                  data model is the same — only the chrome differs so the
+                  planner can fit more mini drops on screen. */}
+              <h3 className={`serif font-medium leading-tight ${isMini ? 'text-lg' : 'text-2xl'}`}>{drop.name}</h3>
+              {isMini && (
+                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/30 font-semibold">
+                  mini drop
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3 text-xs text-muted flex-wrap">
               <span>{launchDate}</span>
@@ -199,10 +220,16 @@ function DropCard({
                  days === 1 ? 'launches tomorrow' :
                  `${days} days to launch`}
               </span>
-              {holiday && (
+              {holidays.length === 1 && (
                 <>
                   <span>·</span>
-                  <span>paired with {holiday.name}</span>
+                  <span>paired with {holidays[0].name}</span>
+                </>
+              )}
+              {holidays.length > 1 && (
+                <>
+                  <span>·</span>
+                  <span>paired with {holidays.map((h) => h.name).join(' + ')}</span>
                 </>
               )}
             </div>
@@ -290,21 +317,35 @@ function DropFormModal({
   const isEdit = !!drop;
   const [name, setName] = useState(drop?.name || '');
   const [launchDate, setLaunchDate] = useState(drop?.launchDate || '');
-  const [holidayId, setHolidayId] = useState(drop?.holidayId || '');
+  // Multi-holiday support: drops can now pair with 1 OR 2 holidays
+  // (e.g. Halloween + Día de los Muertos, Christmas + NYE). Initialized
+  // from holidayIds[] when present, with legacy holidayId fallback.
+  const [holidayIds, setHolidayIds] = useState<string[]>(() =>
+    drop ? getHolidayIds(drop) : []
+  );
+  const [isMiniDrop, setIsMiniDrop] = useState<boolean>(drop?.isMiniDrop ?? false);
   const [notes, setNotes] = useState(drop?.notes || '');
 
-  // When holiday is picked, auto-fill launch date if blank.
-  const onPickHoliday = (id: string) => {
-    setHolidayId(id);
-    if (!launchDate && id) {
-      const event = HOLIDAY_EVENTS.find((h) => h.id === id);
-      if (event) {
-        const d = nextOccurrence(event);
-        if (d) {
-          setLaunchDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  // Auto-fill launch date when the first holiday is picked. Subsequent
+  // additions DON'T overwrite the date — the user already set it.
+  const togglePickHoliday = (id: string) => {
+    setHolidayIds((prev) => {
+      const has = prev.includes(id);
+      if (has) return prev.filter((x) => x !== id);
+      // Cap at 2 — UI scope is 1 or 2 holidays per drop, not unlimited
+      if (prev.length >= 2) return prev;
+      // Auto-fill date from FIRST picked holiday only
+      if (prev.length === 0 && !launchDate) {
+        const event = HOLIDAY_EVENTS.find((h) => h.id === id);
+        if (event) {
+          const d = nextOccurrence(event);
+          if (d) {
+            setLaunchDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+          }
         }
       }
-    }
+      return [...prev, id];
+    });
   };
 
   useEffect(() => {
@@ -318,7 +359,11 @@ function DropFormModal({
     onSubmit({
       name: name.trim(),
       launchDate,
-      holidayId: holidayId || undefined,
+      // Persist as array; keep legacy holidayId in sync for any consumer
+      // that hasn't been updated yet (none in this app, but future-proof).
+      holidayIds: holidayIds.length > 0 ? holidayIds : undefined,
+      holidayId: holidayIds[0] || undefined,
+      isMiniDrop,
       notes: notes.trim(),
       conceptIds: drop?.conceptIds || [],
     });
@@ -343,19 +388,59 @@ function DropFormModal({
               autoFocus
             />
           </div>
+          {/* Mini Drop toggle — niche / non-traditional / smaller launches
+              (Shark Week, Dab Day, Pi Day, etc). Same data shape; just
+              changes how the drop card looks in the planner so a Mini
+              Drop doesn't visually dominate a major release.            */}
+          <label className="flex items-start gap-2 cursor-pointer select-none p-2 rounded-md border border-border bg-background hover:bg-surface-hover">
+            <input
+              type="checkbox"
+              checked={isMiniDrop}
+              onChange={(e) => setIsMiniDrop(e.target.checked)}
+              className="mt-0.5 accent-accent"
+            />
+            <div className="text-xs">
+              <div className="font-medium">Mark as Mini Drop</div>
+              <div className="text-muted text-[10px]">For niche / non-traditional events like Shark Week, Dab Day, Pi Day. Renders smaller in the planner.</div>
+            </div>
+          </label>
           <div>
-            <label className="eyebrow block mb-1">Pair with holiday <span className="font-normal italic">(optional)</span></label>
-            <select
-              value={holidayId}
-              onChange={(e) => onPickHoliday(e.target.value)}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-foreground"
-            >
-              <option value="">— None —</option>
-              {HOLIDAY_EVENTS.map((h) => (
-                <option key={h.id} value={h.id}>{h.emoji} {h.name}</option>
-              ))}
-            </select>
-            <div className="text-[10px] text-muted mt-1">Picks auto-fill the launch date below.</div>
+            <label className="eyebrow block mb-1">
+              Pair with holiday(s) <span className="font-normal italic">(optional, up to 2)</span>
+            </label>
+            {/* Multi-select via toggle chips. Up to 2 holidays per drop
+                so the planner can fit "Halloween + Día de los Muertos"
+                or "Christmas + NYE" combos without UI bloat. */}
+            <div className="max-h-44 overflow-y-auto bg-background border border-border rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {HOLIDAY_EVENTS.map((h) => {
+                const picked = holidayIds.includes(h.id);
+                const disabled = !picked && holidayIds.length >= 2;
+                return (
+                  <button
+                    type="button"
+                    key={h.id}
+                    onClick={() => !disabled && togglePickHoliday(h.id)}
+                    disabled={disabled}
+                    className={`text-xs text-left px-2 py-1.5 rounded transition-colors ${
+                      picked
+                        ? 'bg-accent text-white'
+                        : disabled
+                          ? 'text-muted opacity-40 cursor-not-allowed'
+                          : 'text-foreground hover:bg-surface-hover'
+                    }`}
+                  >
+                    {h.emoji} {h.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[10px] text-muted mt-1">
+              {holidayIds.length === 0
+                ? 'Picks auto-fill the launch date below.'
+                : holidayIds.length === 1
+                  ? `Selected: 1 holiday. Click another to add a 2nd.`
+                  : `Selected: ${holidayIds.length} / 2 holidays.`}
+            </div>
           </div>
           <div>
             <label className="eyebrow block mb-1">Launch date *</label>
