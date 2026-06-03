@@ -20,6 +20,7 @@ import { MarketingStudio } from './marketing-studio';
 import { MockupStudio } from './mockup-studio';
 import { HolidayCalendar } from './holiday-calendar';
 import { CustomerDesigns } from './customer-designs';
+import { UpcomingHolidayBanner } from './upcoming-holiday-banner';
 import { InsightsDashboard } from './insights-dashboard';
 import { CompareView } from './compare-view';
 import { ConceptLineage } from './concept-lineage';
@@ -189,6 +190,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Upcoming-holiday banner — sits ABOVE the top bar so it's the
+          first thing the team sees on every page. Auto-hides itself
+          when nothing's coming up within 60 days. Dismissible per-event
+          per-day so the same holiday doesn't nag every page load. */}
+      <UpcomingHolidayBanner />
+
       {/* Top Bar */}
       <header className="border-b border-border px-3 sm:px-6 py-3 flex items-center justify-between bg-surface shrink-0 gap-2">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">

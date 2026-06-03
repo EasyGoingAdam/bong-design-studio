@@ -64,6 +64,43 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
 
+  /* ───────── Generation countdown timer ─────────
+   * Track when a generation started so the UI can show an elapsed
+   * counter + an estimated time remaining. The estimate is per-model
+   * because v2 is meaningfully slower than v1/Gemini. Updated every
+   * 250ms while generating; cleared on completion.
+   *
+   * Estimates are empirical — adjust based on observed real-world
+   * latencies. We keep them slightly pessimistic so the UI shows
+   * "still working" rather than "stuck" past the estimate.
+   */
+  const ESTIMATED_GEN_SECONDS: Record<string, number> = {
+    openai_v2: 35, // gpt-image-2 is typically 25-40s
+    openai: 18,    // gpt-image-1 is typically 12-22s
+    gemini: 12,    // Gemini 2.5 Flash Image is typically 8-15s
+  };
+  const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
+  const [genElapsedMs, setGenElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!generating || !genStartedAt) {
+      setGenElapsedMs(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setGenElapsedMs(Date.now() - genStartedAt);
+    }, 250);
+    return () => clearInterval(id);
+  }, [generating, genStartedAt]);
+
+  /** Pretty-print a duration in ms as M:SS or seconds. */
+  const formatElapsed = (ms: number): string => {
+    const totalSec = Math.floor(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   /* ───────── Upload-to-engraving flow ─────────
    * Lets a designer drop in any photo (their dog, a logo sketch, a
    * pinterest-saved tattoo idea) and have AI redraw it as a laser-
@@ -290,6 +327,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     }
 
     setGenerating(true);
+    setGenStartedAt(Date.now());
     setError('');
     // Don't clear the active preview — keep showing the previous result
     // until the new one arrives, so the history strip stays visible.
@@ -438,6 +476,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       setError(err instanceof Error ? err.message : 'Generation failed');
     } finally {
       setGenerating(false);
+      setGenStartedAt(null);
     }
   };
 
@@ -964,8 +1003,31 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
             disabled={generating || !title.trim()}
             className="w-full py-3 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            {generating ? '✦ Generating Concepts...' : '✦ Generate Coil + Base Concepts'}
+            {generating
+              ? (() => {
+                  // Show elapsed time + ETA so the user knows it's working
+                  // and roughly when to expect the image. Past the ETA we
+                  // switch to "still working…" so the message stays honest.
+                  const elapsedSec = Math.floor(genElapsedMs / 1000);
+                  const etaSec = ESTIMATED_GEN_SECONDS[aiModel] ?? 25;
+                  const remaining = etaSec - elapsedSec;
+                  if (remaining > 0) {
+                    return `✦ Generating… ${formatElapsed(genElapsedMs)} · ~${remaining}s left`;
+                  }
+                  return `✦ Generating… ${formatElapsed(genElapsedMs)} · still working`;
+                })()
+              : '✦ Generate Coil + Base Concepts'}
           </button>
+          {generating && (
+            <div className="w-full h-1 bg-background rounded-full overflow-hidden mt-1">
+              <div
+                className="h-full bg-accent transition-all"
+                style={{
+                  width: `${Math.min(100, (genElapsedMs / 1000 / (ESTIMATED_GEN_SECONDS[aiModel] ?? 25)) * 100)}%`,
+                }}
+              />
+            </div>
+          )}
 
           {/* Draft persistence strip — surfaces the auto-save behavior so
               the team knows their work won't vanish on refresh, plus a
