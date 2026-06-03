@@ -47,7 +47,10 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [density, setDensity] = useState('medium');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>('circle');
-  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai');
+  // Default to ChatGPT Image 2.0 — graceful fallback to 1.0 already
+  // wired up server-side if v2 hiccups, so the user-facing experience
+  // is "2.0 unless it can't" without exposing the fallback mechanics.
+  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai_v2');
   const [coilOnly, setCoilOnly] = useState(false);
   // For inline editing of the generated images BEFORE saving as a concept
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
@@ -342,6 +345,93 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           'ChatGPT Image 2.0 didn’t process — generated with ChatGPT Image (1.0) instead.',
           'info',
         );
+      }
+
+      // AUTO-SAVE: persist every successful generation to a real concept
+      // so a refresh/navigation never loses work (the team complained about
+      // "aliens playing music" vanishing). If the user has a target concept
+      // selected, append to it; otherwise auto-create a draft in Ideation
+      // and pin it as the target so subsequent iterations stack onto the
+      // same card. Fire-and-forget so a slow Supabase write doesn't block
+      // the preview render.
+      try {
+        const coilUrl = (coilData.imageUrl as string) || '';
+        const baseUrl = baseRes
+          ? ((await safeJsonResponse(baseRes.clone())).imageUrl as string) || ''
+          : '';
+        const resolvedModel = lastModel ?? modelLabel;
+        const resolvedProvider = lastProvider ?? providerLabel;
+
+        if (targetConceptId) {
+          addAIGeneration(targetConceptId, {
+            prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
+            coilPrompt,
+            basePrompt,
+            mode,
+            coilImageUrl: coilUrl,
+            baseImageUrl: baseUrl,
+            model: resolvedModel,
+            provider: resolvedProvider,
+          });
+          addVersion(targetConceptId, {
+            coilImageUrl: coilUrl,
+            baseImageUrl: baseUrl,
+            prompt: coilPrompt,
+            notes: 'Auto-saved generation from AI Generate page',
+          });
+        } else {
+          // First generation in this session → create a draft concept so
+          // the work is durable, and lock the target so future generations
+          // append rather than spawning new drafts.
+          const concept = await addConcept({
+            name: title || 'Untitled AI Generation',
+            description: `AI Generated: ${stylePrompt || '—'} / ${themePrompt || '—'}`,
+            tags: [mode, relationship, 'auto-saved'].filter(Boolean) as string[],
+            coilImageUrl: coilUrl,
+            baseImageUrl: baseUrl,
+            coilOnly,
+            specs: {
+              designStyleName: stylePrompt,
+              designTheme: themePrompt,
+              patternDensity: density as 'low' | 'medium' | 'high' | 'very_high',
+              laserComplexity: complexityLevel as 1 | 2 | 3 | 4 | 5,
+              estimatedEtchingTime: '',
+              surfaceCoverage: 50,
+              lineThickness: '',
+              bwContrastGuidance: contrast,
+              symmetryRequirement: 'none',
+              coordinationMode: relationship,
+              productionFeasibility: 3,
+              riskNotes: '',
+            },
+          });
+          addAIGeneration(concept.id, {
+            prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
+            coilPrompt,
+            basePrompt,
+            mode,
+            coilImageUrl: coilUrl,
+            baseImageUrl: baseUrl,
+            model: resolvedModel,
+            provider: resolvedProvider,
+          });
+          addVersion(concept.id, {
+            coilImageUrl: coilUrl,
+            baseImageUrl: baseUrl,
+            prompt: coilPrompt,
+            notes: 'Auto-saved initial generation from AI Generate page',
+          });
+          // Lock onto this concept so subsequent generations stack onto
+          // the same card instead of creating duplicate drafts.
+          setTargetConceptId(concept.id);
+          toast(`Auto-saved as "${concept.name}" in Ideation — keep generating to stack iterations`, 'success');
+        }
+      } catch (saveErr) {
+        // Auto-save failed — surface but don't block. The user can still
+        // click "Save as New Concept" manually if they want to retry.
+        // eslint-disable-next-line no-console
+        console.error('Auto-save concept failed:', saveErr);
+        toast('Generated, but auto-save failed — use the Save buttons below to keep your work.', 'info');
       }
 
     } catch (err: unknown) {

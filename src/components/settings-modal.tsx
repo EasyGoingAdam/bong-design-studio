@@ -303,6 +303,74 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               {emailError && (
                 <p className="text-xs text-red-600">{emailError}</p>
               )}
+              {/* Trigger-fix helper. When the invite fails because the
+                  profiles trigger is mis-configured, surface a 1-click
+                  flow: copy the fix SQL to clipboard + open Supabase SQL
+                  editor in a new tab. The team doesn't need to know what
+                  a migration is, they just paste & click Run. */}
+              {emailError && emailError.toLowerCase().includes('trigger is mis-configured') && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-2 text-xs">
+                  <div className="text-amber-900 font-semibold">One-time fix needed in Supabase</div>
+                  <ol className="list-decimal pl-4 space-y-1 text-amber-900">
+                    <li>Click <strong>Copy fix SQL</strong></li>
+                    <li>Click <strong>Open Supabase SQL editor</strong> (opens in a new tab)</li>
+                    <li>Paste (⌘V), click <strong>Run</strong></li>
+                    <li>Come back here and click <strong>Invite</strong> again — works</li>
+                  </ol>
+                  <div className="flex gap-2 pt-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sql = `-- Fix the profiles auth trigger so invites work
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, role, avatar, created_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'designer'),
+    UPPER(LEFT(COALESCE(NEW.raw_user_meta_data->>'name', NEW.email), 1)),
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();`;
+                        navigator.clipboard.writeText(sql).then(
+                          () => alert('SQL copied to clipboard. Now click "Open Supabase SQL editor", paste (⌘V), and click Run.'),
+                          () => {
+                            // Fallback if clipboard API is blocked — drop the SQL into
+                            // a textarea the user can manually copy from.
+                            const w = window.open('', '_blank');
+                            if (w) {
+                              w.document.write('<!doctype html><title>Copy this SQL</title><pre style="font-family:monospace;font-size:13px;padding:20px;white-space:pre-wrap;">' + sql.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>');
+                            }
+                          }
+                        );
+                      }}
+                      className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-medium"
+                    >
+                      📋 Copy fix SQL
+                    </button>
+                    <a
+                      href="https://supabase.com/dashboard/project/jlatxzeiuwabgxjjhuic/sql/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 rounded-lg text-xs font-medium inline-flex items-center gap-1"
+                    >
+                      ↗ Open Supabase SQL editor
+                    </a>
+                  </div>
+                </div>
+              )}
               {!emailError && (
                 <p className="text-xs text-muted">They'll receive an email to set their password and access the app.</p>
               )}
