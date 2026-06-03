@@ -23,6 +23,15 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_BUILD_SHA: buildSha,
     NEXT_PUBLIC_BUILD_TIME: buildTime,
   },
+  // Force the marketing-graphic route's font TTFs into the production
+  // file trace. Next.js's static analysis can't see readFileSync() with
+  // a dynamic process.cwd() path, so without this the TTFs are stripped
+  // from the standalone build and we fall right back to missing-glyph
+  // rectangles in the rendered marketing graphic. Pinning the glob here
+  // is the documented escape hatch.
+  outputFileTracingIncludes: {
+    "/api/marketing-graphic": ["./src/assets/fonts/*.ttf"],
+  },
   // Prevent aggressive browser caching of the HTML shell so users always
   // get the latest deployed JS bundle. Static chunks keep their own
   // content-hashed filenames so they cache safely.

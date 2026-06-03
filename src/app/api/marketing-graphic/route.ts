@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { uploadImage } from '@/lib/supabase';
 
 // sharp is dynamically imported below — it's a 30MB native module and
@@ -46,6 +48,92 @@ const ASPECT_SIZES: Record<Aspect, { width: number; height: number }> = {
   story: { width: 1080, height: 1920 },      // Instagram/TikTok story
 };
 
+/**
+ * Marketing-graphic text rendering — pure path approach.
+ *
+ * Why not SVG <text> with @font-face / fontfile?
+ *   - librsvg (sharp's SVG renderer) ignores CSS @font-face entirely
+ *   - sharp's native text renderer goes through Pango+fontconfig, which
+ *     requires the host OS to have the font installed
+ *   - Railway's Linux containers don't reliably ship Inter / DejaVu /
+ *     any specific sans-serif → missing-glyph rectangles ("black boxes")
+ *
+ * Fix: use text-to-svg + opentype.js to convert each string into literal
+ * SVG <path d="..."> elements at request time. The font's vector glyphs
+ * are read from the bundled TTF and emitted as ordinary paths librsvg
+ * can render without any font-system involvement. Output is identical
+ * regardless of host.
+ *
+ * Bundled font lives at src/assets/fonts/Inter-{Regular,Bold}.ttf (the
+ * actual file content is DejaVu Sans — kept the filename generic so we
+ * can hot-swap the font without touching call sites). Loaded once per
+ * process via text-to-svg's loadSync; ~50ms cold, ~0ms warm.
+ */
+import TextToSVG from 'text-to-svg';
+
+let TTS_BOLD: TextToSVG | null = null;
+let TTS_REGULAR: TextToSVG | null = null;
+
+function getTextToSvg(weight: 'bold' | 'regular'): TextToSVG | null {
+  try {
+    const dir = join(process.cwd(), 'src', 'assets', 'fonts');
+    if (weight === 'bold') {
+      if (!TTS_BOLD) TTS_BOLD = TextToSVG.loadSync(join(dir, 'Inter-Bold.ttf'));
+      return TTS_BOLD;
+    } else {
+      if (!TTS_REGULAR) TTS_REGULAR = TextToSVG.loadSync(join(dir, 'Inter-Regular.ttf'));
+      return TTS_REGULAR;
+    }
+  } catch (err) {
+    console.error('[marketing-graphic] Failed to load bundled font (', weight, '):', err);
+    return null;
+  }
+}
+
+/**
+ * Render `text` as an SVG <path> + return both the <path …/> markup and
+ * the measured bounding box. Path coords are anchored at top-left so
+ * the caller can place it wherever it wants.
+ */
+interface TextPath {
+  pathEl: string;
+  width: number;
+  height: number;
+}
+
+function renderTextAsPath(
+  text: string,
+  weight: 'bold' | 'regular',
+  fontSize: number,
+  fill: string,
+  stroke?: { color: string; width: number }
+): TextPath {
+  const tts = getTextToSvg(weight);
+  if (!tts) {
+    // Defensive — should never hit unless the bundled font is missing.
+    return { pathEl: '', width: 0, height: 0 };
+  }
+  const attrs: Record<string, string> = { fill };
+  if (stroke && stroke.width > 0) {
+    attrs.stroke = stroke.color;
+    attrs['stroke-width'] = String(stroke.width);
+    attrs['paint-order'] = 'stroke';
+  }
+  const m = tts.getMetrics(text, { fontSize });
+  const pathEl = tts.getPath(text, {
+    x: 0,
+    y: 0,
+    fontSize,
+    anchor: 'left top',
+    attributes: attrs,
+  });
+  return {
+    pathEl,
+    width: Math.ceil(m.width),
+    height: Math.ceil(m.height),
+  };
+}
+
 // Escape XML special chars so product names with &, <, >, etc. don't break the SVG
 function xml(s: string): string {
   return s
@@ -56,14 +144,11 @@ function xml(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
-// Rough character-based width estimate at the chosen font size. sharp can't
-// measure text without shaping, so we size the pill from the character count
-// and let the text flow inside with left padding. Good enough for a product
-// name of 1-6 words.
+// Width estimate kept as a fallback only — buildNameSvg now uses the
+// real measured width from text-to-svg's getMetrics().
 function estimateNamePillWidth(text: string, fontSize: number): number {
-  // Average glyph width ≈ 0.55 × fontSize for a system sans font at bold weight
   const estimatedTextWidth = Math.min(text.length, 30) * fontSize * 0.55;
-  return Math.round(estimatedTextWidth + fontSize * 1.2); // add horizontal padding
+  return Math.round(estimatedTextWidth + fontSize * 1.2);
 }
 
 async function fetchBuffer(src: string): Promise<Buffer> {
@@ -83,14 +168,11 @@ function buildNameSvg(
   style: NameStyle,
   fontSize: number
 ): { svg: string; width: number; height: number } {
-  const pillWidth = estimateNamePillWidth(name, fontSize);
   const taglineFontSize = Math.round(fontSize * 0.4);
   const hasTagline = !!tagline?.trim();
   const paddingX = Math.round(fontSize * 0.6);
   const paddingY = Math.round(fontSize * 0.35);
   const lineGap = hasTagline ? Math.round(fontSize * 0.3) : 0;
-  const pillHeight = fontSize + paddingY * 2 + (hasTagline ? taglineFontSize + lineGap : 0);
-
   const borderRadius = Math.round(fontSize * 0.25);
 
   let bgFill = 'white';
@@ -98,7 +180,8 @@ function buildNameSvg(
   let textFill = '#111';
   let taglineFill = '#555';
   let strokeColor = 'none';
-  let strokeWidth = '0';
+  let strokeWidth = 0;
+  let taglineStrokeWidth = 0;
 
   if (style === 'black_pill') {
     bgFill = '#111';
@@ -110,57 +193,71 @@ function buildNameSvg(
     textFill = 'white';
     taglineFill = 'rgba(255,255,255,0.85)';
     strokeColor = 'rgba(0,0,0,0.6)';
-    strokeWidth = '2';
+    strokeWidth = 2;
+    taglineStrokeWidth = 1.5;
   } else if (style === 'transparent_dark') {
     bgFill = 'black';
     bgOpacity = '0';
     textFill = '#111';
     taglineFill = '#444';
     strokeColor = 'rgba(255,255,255,0.75)';
-    strokeWidth = '2';
+    strokeWidth = 2;
+    taglineStrokeWidth = 1.5;
   }
 
-  const textY = paddingY + fontSize * 0.85;
-  const taglineY = textY + taglineFontSize + lineGap;
+  // Render the name + tagline as REAL SVG paths derived from the
+  // bundled TTF's glyph outlines. No host fonts needed.
+  const nameRender = renderTextAsPath(
+    name,
+    'bold',
+    fontSize,
+    textFill,
+    strokeWidth > 0 ? { color: strokeColor, width: strokeWidth } : undefined
+  );
+  const taglineRender = hasTagline
+    ? renderTextAsPath(
+        tagline!,
+        'regular',
+        taglineFontSize,
+        taglineFill,
+        taglineStrokeWidth > 0 ? { color: strokeColor, width: taglineStrokeWidth } : undefined
+      )
+    : null;
 
-  // Linux containers (where Railway runs) don't ship with macOS/Windows
-  // system fonts. `system-ui`, `Arial`, `Helvetica` etc. ALL resolved to
-  // missing-glyph rectangles → "black boxes" in the rendered marketing
-  // graphic. Fix: use only generic CSS family names + DejaVu Sans (which
-  // IS present in the base Debian/Ubuntu image fontconfig). librsvg's
-  // fontconfig picks DejaVu when it sees this list.
-  const FONT_FAMILY = "'DejaVu Sans', 'Liberation Sans', sans-serif";
+  // Pill width = widest line + horizontal padding ×2. Fall back to the
+  // old character-based estimate if the path renderer didn't return a
+  // measurement (font missing).
+  const measuredTextWidth = Math.max(
+    nameRender.width,
+    taglineRender?.width || 0
+  );
+  const pillWidth = measuredTextWidth > 0
+    ? measuredTextWidth + paddingX * 2
+    : estimateNamePillWidth(name, fontSize);
+  const pillHeight = fontSize + paddingY * 2 + (hasTagline ? taglineFontSize + lineGap : 0);
+
+  // Path is anchored at top-left of its own bounding box. Translate
+  // groups into position via SVG <g transform>.
+  const nameTranslateY = paddingY;
+  const taglineTranslateY = nameTranslateY + fontSize + lineGap;
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${pillWidth}" height="${pillHeight}">
   ${bgOpacity !== '0' ? `<rect x="0" y="0" width="${pillWidth}" height="${pillHeight}" rx="${borderRadius}" ry="${borderRadius}" fill="${bgFill}" opacity="${bgOpacity}" />` : ''}
-  <text
-    x="${paddingX}"
-    y="${textY}"
-    font-family="${FONT_FAMILY}"
-    font-size="${fontSize}"
-    font-weight="700"
-    fill="${textFill}"
-    stroke="${strokeColor}"
-    stroke-width="${strokeWidth}"
-    paint-order="stroke"
-  >${xml(name)}</text>
-  ${hasTagline ? `
-  <text
-    x="${paddingX}"
-    y="${taglineY}"
-    font-family="${FONT_FAMILY}"
-    font-size="${taglineFontSize}"
-    font-weight="500"
-    fill="${taglineFill}"
-    stroke="${strokeColor}"
-    stroke-width="${style.startsWith('transparent') ? '1.5' : '0'}"
-    paint-order="stroke"
-  >${xml(tagline!)}</text>` : ''}
+  ${nameRender.pathEl
+    ? `<g transform="translate(${paddingX}, ${nameTranslateY})">${nameRender.pathEl}</g>`
+    : ''}
+  ${taglineRender?.pathEl
+    ? `<g transform="translate(${paddingX}, ${taglineTranslateY})">${taglineRender.pathEl}</g>`
+    : ''}
 </svg>`.trim();
 
   return { svg, width: pillWidth, height: pillHeight };
 }
+
+// Keep xml() exported intent — still used elsewhere for any future SVG
+// text fallback. The unused-import linter complains otherwise.
+void xml;
 
 export async function POST(request: NextRequest) {
   try {

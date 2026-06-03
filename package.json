@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.102.1",
     "date-fns": "^4.1.0",
@@ -17,6 +18,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sharp": "^0.34.5",
+    "text-to-svg": "^3.1.5",
     "uuid": "^13.0.0",
     "zustand": "^5.0.12"
   },
