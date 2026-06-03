@@ -14,6 +14,15 @@ function friendlyError(rawMsg: string): string {
   if (m.includes('invalid') && m.includes('email')) {
     return 'Invalid email address.';
   }
+  // "Database error saving new user" is what Supabase returns when the
+  // auth.users → public.profiles trigger fails (typically a column-name
+  // mismatch between the trigger and the profiles schema). The fix is
+  // SQL-side — run supabase-migration-fix-invite-trigger.sql — but
+  // surface a CLEAR message so whoever's testing knows what to do
+  // instead of staring at the generic 500.
+  if (m.includes('database error saving new user') || m.includes('error saving new user')) {
+    return 'Cannot invite — the profiles table trigger is mis-configured. Run supabase-migration-fix-invite-trigger.sql in the Supabase SQL editor, then try again.';
+  }
   return rawMsg;
 }
 

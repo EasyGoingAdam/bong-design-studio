@@ -64,9 +64,17 @@ export function WorkflowBoard({
   // filter — we show only matched concepts, ordered by AI relevance score.
   const [aiMatches, setAiMatches] = useState<{ id: string; score: number; reason: string }[] | null>(null);
   const [aiSearching, setAiSearching] = useState(false);
-  // Per-column search (only for Manufactured and Archived since those grow unbounded)
-  const [mfgSearch, setMfgSearch] = useState('');
-  const [archiveSearch, setArchiveSearch] = useState('');
+  // Per-column search — every column gets its own input. Stored as a
+  // Record keyed by status id so we don't need 6 separate useState calls
+  // (previously only Manufactured/Archived had this).
+  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
+  const mfgSearch = columnSearch['manufactured'] || '';
+  const archiveSearch = columnSearch['archived'] || '';
+  // Helper so the JSX can set individual column searches cleanly.
+  const setColumnSearchFor = (col: string, value: string) =>
+    setColumnSearch((prev) => ({ ...prev, [col]: value }));
+  const setMfgSearch = (v: string) => setColumnSearchFor('manufactured', v);
+  const setArchiveSearch = (v: string) => setColumnSearchFor('archived', v);
   // Sort order applied within each column. Persisted to localStorage so the
   // designer doesn't have to re-pick on every visit. Default is 'newest'
   // so freshly-created ideation cards float to the top.
@@ -142,16 +150,16 @@ export function WorkflowBoard({
         }
       }
 
-      if (col === 'manufactured' && mfgQ) {
-        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', mfgQ));
-      }
-      if (col === 'archived' && archiveQ) {
-        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', archiveQ));
+      // Per-column search — applies on TOP of the global search so the
+      // user can narrow within a single column. Empty string = no filter.
+      const perColQ = (columnSearch[col] || '').trim();
+      if (perColQ) {
+        items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', perColQ));
       }
       map[col] = items;
     }
     return map;
-  }, [concepts, haystacks, globalSearch, mfgSearch, archiveSearch, aiMatches, sortMode]);
+  }, [concepts, haystacks, globalSearch, columnSearch, aiMatches, sortMode]);
 
   const runAISearch = async () => {
     const q = globalSearch.trim();
@@ -471,9 +479,12 @@ export function WorkflowBoard({
           {KANBAN_COLUMNS.map((col) => {
             const colConcepts = columns[col] || [];
             const allSelected = colConcepts.length > 0 && colConcepts.every((c) => selectedIds.has(c.id));
-            const isSearchable = col === 'manufactured' || col === 'archived';
-            const searchValue = col === 'manufactured' ? mfgSearch : col === 'archived' ? archiveSearch : '';
-            const setSearchValue = col === 'manufactured' ? setMfgSearch : col === 'archived' ? setArchiveSearch : undefined;
+            // Every column now exposes its own search input — previously
+            // only Manufactured + Archived had this. Helps when a column
+            // (Ideation, In Review) accumulates dozens of cards.
+            const isSearchable = true;
+            const searchValue = columnSearch[col] || '';
+            const setSearchValue = (v: string) => setColumnSearchFor(col, v);
             const hasActiveSearch = !!searchValue || !!globalSearch.trim();
             const total = totalByStatus[col] || 0;
 

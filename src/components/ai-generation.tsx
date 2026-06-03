@@ -61,6 +61,96 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
 
+  /* ───────── Upload-to-engraving flow ─────────
+   * Lets a designer drop in any photo (their dog, a logo sketch, a
+   * pinterest-saved tattoo idea) and have AI redraw it as a laser-
+   * engraving-ready design. Reuses the existing /api/edit-image
+   * endpoint with a strict B&W engraving prompt — the same path
+   * concept-detail uses for image edits, just kicked off from a
+   * fresh upload instead of an existing concept image. */
+  const [uploadedImage, setUploadedImage] = useState<string>('');
+  const [uploadedFilename, setUploadedFilename] = useState<string>('');
+  const [convertingUpload, setConvertingUpload] = useState(false);
+  const [convertTarget, setConvertTarget] = useState<'coil' | 'base'>('coil');
+  const [convertFidelity, setConvertFidelity] = useState<'subtle' | 'medium' | 'aggressive'>('subtle');
+
+  const onUploadFileSelected = (file: File) => {
+    setUploadedFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setUploadedImage(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const handleConvertUpload = async () => {
+    if (!uploadedImage) { setError('Choose an image first.'); return; }
+    if (!openAIKey) { setError('Set your OpenAI API key in Settings first.'); return; }
+    setConvertingUpload(true);
+    setError('');
+    try {
+      // Strict engraving conversion prompt. Tuned to preserve the
+      // subject's identity but reformat it for laser output: pure B&W,
+      // bold line work, no gradients, no fine detail that breaks under
+      // 0.4mm. Fidelity slider biases between "near photo" and
+      // "stylized engraving sketch".
+      const fidelityHint =
+        convertFidelity === 'aggressive'
+          ? 'Reinterpret the subject as a stylized laser-engraving design — strong artistic interpretation, treat the original as inspiration not a literal source.'
+          : convertFidelity === 'medium'
+            ? 'Faithfully preserve the subject\'s recognizable features and pose, but redraw with the bold engraving aesthetic.'
+            : 'Stay as close to the original subject as the laser-engraving constraints allow — same pose, same identifying features, same composition.';
+
+      const editPrompt =
+        `Convert this image into a black-and-white laser-engraving design suitable for direct laser engraving on glass. ` +
+        `${fidelityHint} ` +
+        `Output requirements: pure black on pure white, no gray, no shading, no gradients, no half-tones. ` +
+        `Bold confident line work. No line thinner than ~0.4mm equivalent at print scale. ` +
+        `No fine detail that would not survive the laser. Strong silhouette readability. ` +
+        `Background must be solid white — no scenery, no environmental detail, just the subject.`;
+
+      const targetSize = convertTarget === 'coil' && coilShape === 'rectangle'
+        ? '1536x1024'
+        : '1024x1024';
+
+      const res = await fetch('/api/edit-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: uploadedImage,
+          editPrompt,
+          apiKey: openAIKey,
+          size: targetSize,
+          strength: convertFidelity,
+          preserveComposition: convertFidelity === 'subtle',
+          preserveSubject: true,
+          folder: 'upload-conversions',
+          filename: `${(title || 'upload').replace(/[^a-z0-9-]/gi, '-').slice(0,30)}-${Date.now()}`,
+        }),
+      });
+      const data = await safeJsonResponse(res);
+      if (!res.ok || !data.url) {
+        throw new Error((data.error as string) || 'Conversion failed');
+      }
+      const url = data.url as string;
+      if (convertTarget === 'coil') {
+        setGeneratedCoilUrl(url);
+        addCoilToHistory(url, 'generated');
+      } else {
+        setGeneratedBaseUrl(url);
+        addBaseToHistory(url, 'generated');
+      }
+      toast(`Converted upload to engraving — see ${convertTarget} preview`, 'success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversion failed');
+    } finally {
+      setConvertingUpload(false);
+    }
+  };
+
+  const clearUpload = () => {
+    setUploadedImage('');
+    setUploadedFilename('');
+  };
+
   /**
    * Per-session version history. Every generate / edit ADDS an entry
    * (newest first). The active*Url is what's shown in the preview and
@@ -364,6 +454,105 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Form */}
         <div className="space-y-4">
+          {/* ───── Upload-to-Engraving — alternative to the prompt form ─────
+              Drop in a reference photo (a dog, a logo sketch, a tattoo
+              pinterest save) and have AI redraw it as a laser-
+              engraving-ready B&W design. Lives at the TOP of the form
+              so it reads as a peer to the prompt-based generation, not
+              a hidden alternative. */}
+          <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold">Or upload a reference image</h3>
+              <span className="text-[10px] text-muted">AI redraws it for the laser</span>
+            </div>
+
+            {uploadedImage ? (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={uploadedImage}
+                  alt={uploadedFilename}
+                  className="w-full rounded-lg border border-border object-contain bg-background"
+                  style={{ maxHeight: 180 }}
+                />
+                <button
+                  type="button"
+                  onClick={clearUpload}
+                  disabled={convertingUpload}
+                  className="absolute top-2 right-2 text-[10px] bg-background/90 border border-border rounded px-2 py-1 hover:bg-background disabled:opacity-50"
+                >
+                  Remove
+                </button>
+                <div className="text-[10px] text-muted mt-1 mono truncate">{uploadedFilename}</div>
+              </div>
+            ) : (
+              <label className="block border-2 border-dashed border-border rounded-lg p-5 text-center cursor-pointer hover:border-accent hover:bg-accent/5 transition-colors">
+                <div className="text-xs text-muted">Drop or click to upload a photo / sketch / logo</div>
+                <div className="text-[10px] text-muted mt-1">JPG / PNG, the original isn&apos;t kept — only the engraving version</div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files?.[0]) onUploadFileSelected(e.target.files[0]); }}
+                />
+              </label>
+            )}
+
+            {uploadedImage && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-muted mb-1">
+                      Save as
+                    </label>
+                    <div className="inline-flex rounded-lg border border-border overflow-hidden w-full">
+                      <button
+                        type="button"
+                        onClick={() => setConvertTarget('coil')}
+                        className={`flex-1 text-xs py-1.5 ${convertTarget === 'coil' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover'}`}
+                      >
+                        Coil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConvertTarget('base')}
+                        className={`flex-1 text-xs py-1.5 border-l border-border ${convertTarget === 'base' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover'}`}
+                      >
+                        Base
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-muted mb-1">
+                      Fidelity
+                    </label>
+                    <select
+                      value={convertFidelity}
+                      onChange={(e) => setConvertFidelity(e.target.value as typeof convertFidelity)}
+                      className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-accent"
+                      title="How closely the AI should stick to the original"
+                    >
+                      <option value="subtle">Faithful — close to original</option>
+                      <option value="medium">Balanced</option>
+                      <option value="aggressive">Loose — stylized interpretation</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConvertUpload}
+                  disabled={convertingUpload || !openAIKey}
+                  className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {convertingUpload ? '✦ Converting to engraving…' : '✦ Convert to laser engraving'}
+                </button>
+                <div className="text-[10px] text-muted">
+                  Uses your OpenAI key. Result replaces the {convertTarget} preview on the right and joins this session's history strip.
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
             <h3 className="text-sm font-semibold">Design Parameters</h3>
 
