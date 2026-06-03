@@ -99,6 +99,7 @@ export async function PATCH(
       productMockupUrl: 'product_mockup_url',
       productMockupAngles: 'product_mockup_angles',
       coilOnly: 'coil_only',
+      highlighted: 'highlighted',
       source: 'source',
       externalId: 'external_id',
       externalUrl: 'external_url',

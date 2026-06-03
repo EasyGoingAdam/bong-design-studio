@@ -88,14 +88,47 @@ export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept
   );
 }
 
-export function ConceptCardMini({ concept, onClick }: { concept: Concept; onClick: () => void }) {
+export function ConceptCardMini({
+  concept,
+  onClick,
+  onToggleHighlight,
+}: {
+  concept: Concept;
+  onClick: () => void;
+  /** Optional — when provided, the star button toggles concept.highlighted.
+   *  Omitted on non-workflow surfaces that shouldn't allow the toggle. */
+  onToggleHighlight?: () => void;
+}) {
+  const isHighlighted = !!concept.highlighted;
   return (
     <div
       onClick={onClick}
-      className="kanban-card bg-surface border border-border rounded-lg p-3 cursor-pointer hover:border-border-light transition-all"
+      className={`kanban-card bg-surface border rounded-lg p-3 cursor-pointer transition-all relative ${
+        isHighlighted
+          ? 'border-amber-400 ring-1 ring-amber-200'
+          : 'border-border hover:border-border-light'
+      }`}
     >
+      {/* Star/highlight toggle — top-right corner so it's reachable without
+          opening the concept. Sits OUTSIDE the click target via
+          stopPropagation so clicking the star doesn't also open detail. */}
+      {onToggleHighlight && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleHighlight(); }}
+          className={`absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full text-sm transition-colors ${
+            isHighlighted
+              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+              : 'text-muted/40 hover:text-amber-500 hover:bg-amber-50'
+          }`}
+          aria-label={isHighlighted ? 'Unstar (un-highlight)' : 'Star (highlight — design soonest)'}
+          title={isHighlighted ? 'Highlighted — click to unstar' : 'Star for "design soonest"'}
+        >
+          {isHighlighted ? '★' : '☆'}
+        </button>
+      )}
       {/* Thumbnail row */}
-      <div className="flex gap-1.5 mb-2">
+      <div className="flex gap-1.5 mb-2 pr-7">
         <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border flex items-center justify-center shrink-0">
           {concept.coilImageUrl ? (
             <img src={concept.coilImageUrl} alt="" className="w-full h-full object-cover rounded" />

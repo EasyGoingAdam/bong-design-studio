@@ -175,6 +175,10 @@ export interface Concept {
   coilSpecs: CoilSpecs;
   baseSpecs: BaseSpecs;
   priority: PriorityLevel;
+  /** "Star / highlight" flag — independent of priority. Lets a production
+   *  lead flag specific concepts as "design this soonest" without
+   *  touching the priority semantic. Toggleable from the workflow card. */
+  highlighted: boolean;
   lifecycleType: LifecycleType;
   versions: ConceptVersion[];
   comments: Comment[];

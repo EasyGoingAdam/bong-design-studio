@@ -75,6 +75,18 @@ export function WorkflowBoard({
     setColumnSearch((prev) => ({ ...prev, [col]: value }));
   const setMfgSearch = (v: string) => setColumnSearchFor('manufactured', v);
   const setArchiveSearch = (v: string) => setColumnSearchFor('archived', v);
+  // "Starred only" filter — when on, every column hides non-highlighted
+  // concepts. Persisted to localStorage so the toggle survives reloads.
+  const [starredOnly, setStarredOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try { return window.localStorage.getItem('workflow-starred-only-v1') === '1'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem('workflow-starred-only-v1', starredOnly ? '1' : '0'); } catch {}
+  }, [starredOnly]);
+
   // Sort order applied within each column. Persisted to localStorage so the
   // designer doesn't have to re-pick on every visit. Default is 'newest'
   // so freshly-created ideation cards float to the top.
@@ -118,6 +130,11 @@ export function WorkflowBoard({
 
     for (const col of KANBAN_COLUMNS) {
       let items = concepts.filter((c) => c.status === col);
+      // "Starred only" filter — applied first so it short-circuits the
+      // search + sort work below.
+      if (starredOnly) {
+        items = items.filter((c) => !!c.highlighted);
+      }
 
       if (aiMatchMap) {
         // AI mode: keep only matched concepts, sorted by AI relevance
@@ -156,10 +173,21 @@ export function WorkflowBoard({
       if (perColQ) {
         items = items.filter((c) => matchesHaystack(haystacks.get(c.id) || '', perColQ));
       }
+
+      // Highlighted/starred concepts ALWAYS float to the top of their
+      // column, on top of whatever sort the user picked. Stable sort: the
+      // user's chosen sort order is preserved among the starred subset
+      // and among the unstarred subset; we just promote stars above all.
+      items = [...items].sort((a, b) => {
+        const aH = a.highlighted ? 1 : 0;
+        const bH = b.highlighted ? 1 : 0;
+        if (aH !== bH) return bH - aH;
+        return 0; // preserve previous order (sort is stable in modern JS engines)
+      });
       map[col] = items;
     }
     return map;
-  }, [concepts, haystacks, globalSearch, columnSearch, aiMatches, sortMode]);
+  }, [concepts, haystacks, globalSearch, columnSearch, aiMatches, sortMode, starredOnly]);
 
   const runAISearch = async () => {
     const q = globalSearch.trim();
@@ -388,6 +416,22 @@ export function WorkflowBoard({
             <option value="priority">By priority</option>
             <option value="default">Default order</option>
           </select>
+          {/* Starred-only toggle — when on, hides every non-highlighted
+              concept across all columns. Star icon flips between filled
+              (active) and outline (inactive). Persisted in localStorage. */}
+          <button
+            type="button"
+            onClick={() => setStarredOnly(!starredOnly)}
+            className={`text-sm px-3 py-2 rounded-lg font-medium border whitespace-nowrap transition-colors ${
+              starredOnly
+                ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                : 'bg-surface text-muted border-border hover:border-border-light'
+            }`}
+            title={starredOnly ? 'Showing starred only — click to show all' : 'Show only starred concepts'}
+            aria-pressed={starredOnly}
+          >
+            {starredOnly ? '★ Starred only' : '☆ Starred only'}
+          </button>
         </div>
       </div>
 
@@ -566,6 +610,15 @@ export function WorkflowBoard({
                                 <ConceptCardMini
                                   concept={concept}
                                   onClick={() => onOpenConcept(concept.id)}
+                                  onToggleHighlight={() => {
+                                    updateConcept(concept.id, { highlighted: !concept.highlighted });
+                                    toast(
+                                      concept.highlighted
+                                        ? `Unstarred "${concept.name}"`
+                                        : `Starred "${concept.name}" — design soonest`,
+                                      'success'
+                                    );
+                                  }}
                                 />
                                 {aiMatches && (() => {
                                   const match = aiMatches.find((m) => m.id === concept.id);
