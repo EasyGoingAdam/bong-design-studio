@@ -501,14 +501,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         ✦ Regenerate
                       </button>
                     </div>
-                    <button
-                      onClick={() => handleMakeXL('base')}
-                      disabled={makingXL === 'base'}
-                      className="mt-1.5 w-full text-xs px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors disabled:opacity-60"
-                      title="Generate the same design recomposed for an XL (taller) base. Both versions are saved."
-                    >
-                      {makingXL === 'base' ? 'Generating XL…' : '▦ Make for XL Piece'}
-                    </button>
+                    {/* XL Piece is intentionally NOT offered on the base
+                        image — the XL variant only makes sense for the
+                        coil wrap (different glass size). Bases are flat
+                        round/oval pieces that don't have a separate XL
+                        version. Coil-only XL button still lives above. */}
                     <div className="mt-1.5">
                       <EtchingScoreBadge imageUrl={concept.baseImageUrl} label="base" />
                     </div>
