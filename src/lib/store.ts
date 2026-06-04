@@ -212,6 +212,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       productMockupAngles: partial.productMockupAngles || [],
       coilOnly: partial.coilOnly ?? false,
       highlighted: partial.highlighted ?? false,
+      designType: partial.designType ?? 'standard',
+      stamps: partial.stamps ?? [],
       source: partial.source ?? '',
       externalId: partial.externalId ?? '',
       externalUrl: partial.externalUrl ?? '',

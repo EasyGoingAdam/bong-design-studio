@@ -64,6 +64,35 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const [generatedCoilUrl, setGeneratedCoilUrl] = useState('');
   const [generatedBaseUrl, setGeneratedBaseUrl] = useState('');
 
+  /* ───────── Stamps mode state ─────────
+   * Stamps are 1-5 thematically-related small graphics instead of one
+   * big coil. The form swaps shape: a single "theme" text input + a
+   * stamp-count picker, and the output panel shows a grid the team
+   * can regenerate individually or all together.
+   *
+   * designType = 'standard' keeps every existing knob; 'stamps' hides
+   * the coil/base-specific UI in favor of the stamps grid. Persisted
+   * to localStorage via the same draft key as the rest of the form.
+   */
+  const [designType, setDesignType] = useState<'standard' | 'stamps'>('standard');
+  const [stampCount, setStampCount] = useState<number>(3);
+  const [stampTheme, setStampTheme] = useState<string>('');
+  type DraftStamp = {
+    id: string;
+    subject: string;
+    imageUrl: string;
+    prompt: string;
+    createdAt: string;
+    model?: string;
+    error?: string;
+    /** True while THIS specific stamp is being regenerated — so the UI
+     *  can show per-card spinners without disabling the whole panel. */
+    busy?: boolean;
+  };
+  const [stamps, setStamps] = useState<DraftStamp[]>([]);
+  const [stampsBusy, setStampsBusy] = useState<boolean>(false);
+  const [stampSubjects, setStampSubjects] = useState<string[]>([]);
+
   /* ───────── Generation countdown timer ─────────
    * Track when a generation started so the UI can show an elapsed
    * counter + an estimated time remaining. The estimate is per-model
@@ -269,6 +298,13 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       if (typeof d.generatedBaseUrl === 'string') setGeneratedBaseUrl(d.generatedBaseUrl);
       if (Array.isArray(d.coilHistory)) setCoilHistory(d.coilHistory);
       if (Array.isArray(d.baseHistory)) setBaseHistory(d.baseHistory);
+      // Stamps draft restoration — only restores if the user was in
+      // stamps mode last session. Avoids surprising users who land on
+      // AI Generate after a totally unrelated session.
+      if (d.designType === 'stamps') setDesignType('stamps');
+      if (typeof d.stampCount === 'number') setStampCount(d.stampCount);
+      if (typeof d.stampTheme === 'string') setStampTheme(d.stampTheme);
+      if (Array.isArray(d.stamps)) setStamps(d.stamps);
       setDraftRestored(true);
     } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -286,6 +322,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
         contrast, density, coilOnly,
         generatedCoilUrl, generatedBaseUrl,
         coilHistory, baseHistory,
+        designType, stampCount, stampTheme, stamps,
         savedAt: Date.now(),
       }));
     } catch { /* quota / private mode */ }
@@ -295,7 +332,131 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     contrast, density, coilOnly,
     generatedCoilUrl, generatedBaseUrl,
     coilHistory, baseHistory,
+    designType, stampCount, stampTheme, stamps,
   ]);
+
+  /* ───────── Stamps generation handlers ───────── */
+
+  /** Generate (or regenerate) all stamps for the current theme. Calls
+   *  /api/generate-stamps which handles brainstorming + parallel image
+   *  generation in one round-trip. */
+  const handleGenerateStamps = async () => {
+    if (stampsBusy) return;
+    if (!stampTheme.trim()) { setError('Enter a theme (e.g. "baseball", "ocean", "halloween").'); return; }
+    if (!openAIKey) { setError('Set your OpenAI API key in Settings first.'); return; }
+    setStampsBusy(true);
+    setError('');
+    const t0 = Date.now();
+    setGenStartedAt(t0);
+    try {
+      const res = await fetch('/api/generate-stamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme: stampTheme.trim(),
+          count: stampCount,
+          apiKey: openAIKey,
+          geminiKey,
+          model: aiModel,
+          complexityLevel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Stamps generation failed'); return; }
+      const incoming = Array.isArray(data.stamps) ? data.stamps : [];
+      setStamps(incoming);
+      setStampSubjects(incoming.map((s: { subject: string }) => s.subject));
+      const failed = incoming.filter((s: { error?: string }) => s.error).length;
+      toast(
+        failed === 0
+          ? `Generated ${incoming.length} stamps for "${stampTheme.trim()}"`
+          : `${incoming.length - failed} of ${incoming.length} stamps generated — ${failed} failed`,
+        failed === 0 ? 'success' : 'info'
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Stamps generation failed');
+    } finally {
+      setStampsBusy(false);
+      setGenStartedAt(null);
+    }
+  };
+
+  /** Regenerate one specific stamp — reuses the same subject so the
+   *  set stays thematically aligned, just gives the team a different
+   *  visual interpretation of that one element. */
+  const handleRegenerateStamp = async (stampId: string) => {
+    if (!openAIKey) { setError('Set your OpenAI API key in Settings first.'); return; }
+    const current = stamps.find((s) => s.id === stampId);
+    if (!current) return;
+    setStamps((prev) => prev.map((s) => s.id === stampId ? { ...s, busy: true, error: undefined } : s));
+    try {
+      const res = await fetch('/api/generate-stamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme: stampTheme.trim() || current.subject,
+          count: 1,
+          subjects: [current.subject],
+          apiKey: openAIKey,
+          geminiKey,
+          model: aiModel,
+          complexityLevel,
+        }),
+      });
+      const data = await res.json();
+      const fresh = Array.isArray(data.stamps) && data.stamps[0];
+      if (!res.ok || !fresh || !fresh.imageUrl) {
+        setStamps((prev) => prev.map((s) => s.id === stampId
+          ? { ...s, busy: false, error: (data.error || fresh?.error || 'Regenerate failed') }
+          : s
+        ));
+        return;
+      }
+      // Keep the same id so the UI doesn't reorder the grid.
+      setStamps((prev) => prev.map((s) => s.id === stampId
+        ? { ...s, ...fresh, id: s.id, busy: false, error: undefined }
+        : s
+      ));
+      toast(`Regenerated "${current.subject}" stamp`, 'success');
+    } catch (err) {
+      setStamps((prev) => prev.map((s) => s.id === stampId
+        ? { ...s, busy: false, error: err instanceof Error ? err.message : 'Regenerate failed' }
+        : s
+      ));
+    }
+  };
+
+  /** Save the current stamps set as a new Concept (or attach to an
+   *  existing one). Mirrors handleSaveAsNewConcept but writes the
+   *  `stamps` + `designType:'stamps'` fields instead of coil/base. */
+  const handleSaveStampsAsConcept = async () => {
+    if (stamps.length === 0) { setError('Generate stamps first.'); return; }
+    const themeNice = stampTheme.trim() || 'Stamps';
+    try {
+      const concept = await addConcept({
+        name: title.trim() || `${themeNice} stamps`,
+        description: `Stamps set — theme: ${themeNice}`,
+        tags: [themeNice.toLowerCase(), 'stamps', `${stamps.length}-pack`],
+        designType: 'stamps',
+        stamps: stamps.map((s) => ({
+          id: s.id,
+          subject: s.subject,
+          imageUrl: s.imageUrl,
+          prompt: s.prompt,
+          createdAt: s.createdAt,
+          model: s.model,
+        })),
+        // Stamps concepts skip the standard coil/base flow.
+        coilOnly: false,
+        coilImageUrl: '',
+        baseImageUrl: '',
+      });
+      toast(`Saved as "${concept.name}" — opening`, 'success');
+      onOpenConcept(concept.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    }
+  };
 
   const clearDraft = () => {
     setTitle(''); setStylePrompt(''); setThemePrompt(''); setReferences('');
@@ -708,7 +869,144 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Design Parameters</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Design Parameters</h3>
+              {/* Design-type toggle. Standard = one big coil + base (the
+                  existing flow). Stamps = 1-5 mini graphics tied to a
+                  shared theme. Each option shows a different form
+                  section below. */}
+              <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setDesignType('standard')}
+                  className={`px-2.5 py-1 ${designType === 'standard' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover text-muted'}`}
+                  title="One big design (coil + optional base)"
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignType('stamps')}
+                  className={`px-2.5 py-1 border-l border-border ${designType === 'stamps' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover text-muted'}`}
+                  title="1-5 thematically-related mini graphics"
+                >
+                  Stamps
+                </button>
+              </div>
+            </div>
+
+            {designType === 'stamps' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+                <p className="text-[11px] text-amber-900 leading-snug">
+                  Stamps mode: pick a theme + how many. AI brainstorms distinct subjects and engraves each one independently.
+                </p>
+                <div>
+                  <label className="block text-xs text-muted mb-1">Theme *</label>
+                  <Input
+                    value={stampTheme}
+                    onChange={setStampTheme}
+                    placeholder='e.g. "baseball", "ocean", "halloween", "fishing"'
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted mb-1.5">
+                    Number of stamps: <span className="font-medium text-foreground">{stampCount}</span>
+                  </label>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setStampCount(n)}
+                        className={`py-1.5 text-xs rounded border font-medium ${
+                          stampCount === n
+                            ? 'bg-accent text-white border-accent'
+                            : 'bg-surface border-border text-muted hover:text-foreground'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerateStamps}
+                  disabled={stampsBusy || !stampTheme.trim()}
+                  className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {stampsBusy
+                    ? (() => {
+                        const elapsedSec = Math.floor(genElapsedMs / 1000);
+                        // Stamps run in parallel but each call hits the same
+                        // model — scale ETA by ~1.3 to account for slight
+                        // serialization in the brainstorm + retries.
+                        const perStamp = ESTIMATED_GEN_SECONDS[aiModel] ?? 25;
+                        const etaSec = Math.round(perStamp * 1.3);
+                        const remaining = etaSec - elapsedSec;
+                        return remaining > 0
+                          ? `✦ Generating ${stampCount} stamps… ${formatElapsed(genElapsedMs)} · ~${remaining}s left`
+                          : `✦ Generating ${stampCount} stamps… ${formatElapsed(genElapsedMs)} · still working`;
+                      })()
+                    : stamps.length > 0
+                      ? `✦ Regenerate all ${stampCount} stamps`
+                      : `✦ Generate ${stampCount} stamps`}
+                </button>
+                {stamps.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSaveStampsAsConcept}
+                    className="w-full py-2 bg-foreground text-surface rounded-lg text-sm font-medium hover:opacity-90"
+                  >
+                    + Save these {stamps.length} stamps as a new Concept
+                  </button>
+                )}
+                {stamps.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {stamps.map((s) => (
+                      <div key={s.id} className="bg-surface border border-border rounded overflow-hidden">
+                        <div className="aspect-square bg-background placeholder-pattern relative">
+                          {s.imageUrl && !s.busy && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-cover" />
+                          )}
+                          {s.busy && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                          {s.error && !s.busy && (
+                            <div className="absolute inset-0 flex items-center justify-center text-[10px] text-red-700 p-2 text-center">
+                              {s.error}
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-1.5 text-[10px] flex items-center justify-between gap-1">
+                          <span className="font-medium truncate" title={s.subject}>{s.subject}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerateStamp(s.id)}
+                            disabled={s.busy || stampsBusy}
+                            className="text-[10px] px-1.5 py-0.5 bg-background border border-border rounded hover:border-foreground disabled:opacity-50"
+                            title="Regenerate just this stamp"
+                          >
+                            ↻
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {stampSubjects.length > 0 && (
+                  <details className="text-[10px] text-muted">
+                    <summary className="cursor-pointer">Subjects generated</summary>
+                    <ul className="mt-1 pl-3 list-disc">
+                      {stampSubjects.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-xs text-muted mb-1">Design Title *</label>
@@ -1025,7 +1323,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
 
           <button
             onClick={handleGenerate}
-            disabled={generating || !title.trim()}
+            disabled={generating || !title.trim() || designType === 'stamps'}
             className="w-full py-3 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {generating

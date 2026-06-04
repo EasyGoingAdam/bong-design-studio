@@ -127,25 +127,60 @@ export function ConceptCardMini({
           {isHighlighted ? '★' : '☆'}
         </button>
       )}
-      {/* Thumbnail row */}
+      {/* Thumbnail row — switches layout based on designType.
+          Stamps concepts: tile up to 4 stamp thumbs in a 2x2 grid where
+          the coil+base thumbnails would normally live, with a "+N" pill
+          if there are more than 4. Keeps the workflow card the same
+          visual height regardless of mode. */}
       <div className="flex gap-1.5 mb-2 pr-7">
-        <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border flex items-center justify-center shrink-0">
-          {concept.coilImageUrl ? (
-            <img src={concept.coilImageUrl} alt="" className="w-full h-full object-cover rounded" />
-          ) : (
-            <span className="text-[8px] text-muted">C</span>
-          )}
-        </div>
-        <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border flex items-center justify-center shrink-0">
-          {concept.baseImageUrl ? (
-            <img src={concept.baseImageUrl} alt="" className="w-full h-full object-cover rounded" />
-          ) : (
-            <span className="text-[8px] text-muted">B</span>
-          )}
-        </div>
+        {concept.designType === 'stamps' && (concept.stamps?.length || 0) > 0 ? (
+          <div className="w-[88px] h-[88px] grid grid-cols-2 grid-rows-2 gap-0.5 shrink-0">
+            {(concept.stamps || []).slice(0, 4).map((s) => (
+              <div
+                key={s.id}
+                className="bg-background placeholder-pattern border border-border rounded-sm overflow-hidden"
+                title={s.subject}
+              >
+                {s.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="block text-[7px] text-muted px-0.5">{s.subject.slice(0, 4)}</span>
+                )}
+              </div>
+            ))}
+            {/* Fill empty grid slots with placeholders so the 2x2 stays
+                visually balanced even with <4 stamps. */}
+            {Array.from({ length: Math.max(0, 4 - (concept.stamps?.length || 0)) }).map((_, i) => (
+              <div key={`empty-${i}`} className="bg-background border border-border/40 rounded-sm" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border flex items-center justify-center shrink-0">
+              {concept.coilImageUrl ? (
+                <img src={concept.coilImageUrl} alt="" className="w-full h-full object-cover rounded" />
+              ) : (
+                <span className="text-[8px] text-muted">C</span>
+              )}
+            </div>
+            <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border flex items-center justify-center shrink-0">
+              {concept.baseImageUrl ? (
+                <img src={concept.baseImageUrl} alt="" className="w-full h-full object-cover rounded" />
+              ) : (
+                <span className="text-[8px] text-muted">B</span>
+              )}
+            </div>
+          </>
+        )}
         <div className="flex-1 min-w-0 ml-1">
           <h4 className="text-sm font-medium truncate">{concept.name}</h4>
           <p className="text-xs text-muted truncate">{concept.designer}</p>
+          {concept.designType === 'stamps' && (concept.stamps?.length || 0) > 0 && (
+            <span className="inline-block mt-0.5 text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-medium">
+              ⊞ {concept.stamps?.length} stamp{(concept.stamps?.length || 0) === 1 ? '' : 's'}
+            </span>
+          )}
           {concept.source && (
             <span
               className="inline-block mt-0.5 text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-full font-medium truncate max-w-full"

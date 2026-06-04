@@ -179,6 +179,16 @@ export interface Concept {
    *  lead flag specific concepts as "design this soonest" without
    *  touching the priority semantic. Toggleable from the workflow card. */
   highlighted: boolean;
+  /** Design format. Default 'standard' = one big coil + optional base.
+   *  'stamps' = a small set of independent mini-graphics related to a
+   *  shared theme (e.g. "baseball" → baseball, bat, player, glove, cap).
+   *  When 'stamps', `stamps[]` carries the imagery and coil/base are
+   *  typically empty. Existing concepts default to 'standard'. */
+  designType: 'standard' | 'stamps';
+  /** Stamp images for stamps-mode concepts. Each stamp is an
+   *  independent engraving-ready graphic the team can edit or
+   *  regenerate individually. Empty array for standard concepts. */
+  stamps: Stamp[];
   lifecycleType: LifecycleType;
   versions: ConceptVersion[];
   comments: Comment[];
@@ -195,6 +205,22 @@ export interface SpecTemplate {
   specs: Partial<ConceptSpecs>;
   coilSpecs: Partial<CoilSpecs>;
   baseSpecs: Partial<BaseSpecs>;
+}
+
+/**
+ * One stamp = one independent engraving-ready mini graphic. A stamps-mode
+ * Concept has 1-5 of these; each can be edited or regenerated on its own.
+ * `id` is stable across regenerations so the UI can hold its place when
+ * one stamp is swapped out.
+ */
+export interface Stamp {
+  id: string;
+  subject: string;     // e.g. "baseball bat" — what the stamp depicts
+  imageUrl: string;
+  prompt: string;      // the engraving prompt that produced this image
+  createdAt: string;
+  /** Identifier of the model that produced this stamp (gpt-image-1 etc.) */
+  model?: string;
 }
 
 export interface User {

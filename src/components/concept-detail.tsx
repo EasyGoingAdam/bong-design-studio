@@ -15,6 +15,7 @@ import { AutoPilotModal } from './auto-pilot-modal';
 import { CostCalculatorModal } from './cost-calculator-modal';
 import { BulkVariantsModal } from './bulk-variants-modal';
 import { ConceptAuditTimeline } from './concept-audit-timeline';
+import { StampsPanel } from './stamps-panel';
 import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
@@ -704,6 +705,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               concept={concept}
               onTabChange={(tab) => setActiveSection(tab)}
             />
+
+            {/* Stamps panel — only renders for stamps-mode concepts.
+                Replaces the coil/base review surface since stamps
+                concepts don't have those. */}
+            {concept.designType === 'stamps' && (
+              <StampsPanel concept={concept} />
+            )}
 
             {(concept.coilImageUrl || concept.baseImageUrl) && (
               <DesignReviewer
