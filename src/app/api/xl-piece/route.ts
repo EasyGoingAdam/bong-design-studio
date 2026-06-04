@@ -108,22 +108,12 @@ export const POST = withLog('xl_piece.extend', async (req: NextRequest) => {
   const tCompose = timer();
   let composed: Buffer;
   try {
+    // BUG FIX: was running .resize→.extend(zeros)→.resize. The middle
+    // .extend with all zero edges was dead code (sharp ignored it). A
+    // single .resize(fit:'contain') already produces exact target
+    // dims, padding with the background color — that's the canonical
+    // "extend canvas" operation.
     composed = await sharp(sourceBuf)
-      .resize(targetWidth, targetHeight, {
-        fit: 'inside',
-        withoutEnlargement: false,
-        background: { r: bgR, g: bgG, b: bgB, alpha: 1 },
-      })
-      .extend({
-        // Calculated by sharp from the resized dimensions vs target — we let
-        // .resize do the proportional sizing and rely on it producing
-        // exact target dims when combined with the next .extend... but
-        // safer: ask sharp to top-up to exact dims via a second pass.
-        top: 0, bottom: 0, left: 0, right: 0,
-        background: { r: bgR, g: bgG, b: bgB, alpha: 1 },
-      })
-      // Final force to exact dims in case the resize-inside left mismatched
-      // odd pixel counts. cover with background fills any remaining gap.
       .resize(targetWidth, targetHeight, {
         fit: 'contain',
         background: { r: bgR, g: bgG, b: bgB, alpha: 1 },

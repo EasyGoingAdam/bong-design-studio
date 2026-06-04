@@ -308,7 +308,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   flow: copy the fix SQL to clipboard + open Supabase SQL
                   editor in a new tab. The team doesn't need to know what
                   a migration is, they just paste & click Run. */}
-              {emailError && emailError.toLowerCase().includes('trigger is mis-configured') && (
+              {/* BUG FIX: match on multiple stable substrings (the server's
+                  hyphenation could drift between releases). Any of these
+                  patterns from the underlying Supabase error reliably
+                  signals the same trigger problem. */}
+              {emailError && (
+                emailError.toLowerCase().includes('trigger')
+                || emailError.toLowerCase().includes('mis-configured')
+                || emailError.toLowerCase().includes('misconfigured')
+                || emailError.toLowerCase().includes('handle_new_user')
+                || emailError.toLowerCase().includes('database error saving new user')
+              ) && (
                 <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 space-y-2 text-xs">
                   <div className="text-amber-900 font-semibold">One-time fix needed in Supabase</div>
                   <ol className="list-decimal pl-4 space-y-1 text-amber-900">

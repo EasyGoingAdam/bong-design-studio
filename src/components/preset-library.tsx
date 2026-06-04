@@ -51,6 +51,34 @@ export function PresetLibrary({ onOpenConcept }: Props) {
   const [uploadCategory, setUploadCategory] = useState<DesignPreset['category']>('custom');
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadPreview, setUploadPreview] = useState<string>('');
+
+  // BUG FIX: cap upload size BEFORE FileReader serializes the whole file
+  // to base64 in memory. The /api/upload-image route enforces 10 MB
+  // server-side, but enforcing on the client first prevents tab freezes
+  // on huge images + gives a friendly toast instead of a 413.
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+  const handleUploadFile = (f: File) => {
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast(`Image is too big — max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`, 'error');
+      return;
+    }
+    setUploadFile(f);
+    const r = new FileReader();
+    r.onload = () => setUploadPreview(String(r.result || ''));
+    r.onerror = () => toast('Could not read that file.', 'error');
+    r.readAsDataURL(f);
+  };
+
+  // Reset every upload-modal state field. Used by Cancel + after a
+  // successful save so reopening the modal doesn't show stale data.
+  const resetUploadModal = () => {
+    setShowUpload(false);
+    setUploadFile(null);
+    setUploadName('');
+    setUploadStyle('');
+    setUploadCategory('custom');
+    setUploadPreview('');
+  };
   const [showArchived, setShowArchived] = useState(false);
   const [curatedLastUsed, setCuratedLastUsed] = useState<Record<string, string>>({});
 
@@ -393,7 +421,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
           role="dialog"
           aria-modal="true"
           aria-label="Upload Design as Preset"
-          onClick={() => !uploadBusy && setShowUpload(false)}
+          onClick={() => !uploadBusy && resetUploadModal()}
         >
           <div
             className="bg-surface border border-border rounded-xl w-full max-w-md max-h-[92vh] overflow-y-auto"
@@ -402,7 +430,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
             <div className="sticky top-0 bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
               <h3 className="font-semibold">Upload Design</h3>
               <button
-                onClick={() => !uploadBusy && setShowUpload(false)}
+                onClick={() => !uploadBusy && resetUploadModal()}
                 className="text-muted hover:text-foreground text-xl leading-none"
                 aria-label="Close"
               >
@@ -466,10 +494,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
-                          setUploadFile(f);
-                          const r = new FileReader();
-                          r.onload = () => setUploadPreview(String(r.result || ''));
-                          r.readAsDataURL(f);
+                          handleUploadFile(f);
                         }}
                       />
                     </label>
@@ -484,10 +509,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        setUploadFile(f);
-                        const r = new FileReader();
-                        r.onload = () => setUploadPreview(String(r.result || ''));
-                        r.readAsDataURL(f);
+                        handleUploadFile(f);
                       }}
                     />
                   </label>
@@ -496,7 +518,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => !uploadBusy && setShowUpload(false)}
+                  onClick={() => !uploadBusy && resetUploadModal()}
                   className="flex-1 text-sm px-3 py-2 border border-border rounded-lg hover:bg-background"
                 >
                   Cancel
@@ -547,12 +569,7 @@ export function PresetLibrary({ onOpenConcept }: Props) {
                       });
                       refreshUserPresets();
                       toast(`"${uploadName.trim()}" added to presets`, 'success');
-                      setShowUpload(false);
-                      setUploadFile(null);
-                      setUploadName('');
-                      setUploadStyle('');
-                      setUploadCategory('custom');
-                      setUploadPreview('');
+                      resetUploadModal();
                       log.info('client.preset.upload.ok', { name: uploadName.trim() });
                     } catch (err) {
                       log.error('client.preset.upload.exception', { err });

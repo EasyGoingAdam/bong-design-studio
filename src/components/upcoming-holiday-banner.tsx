@@ -58,22 +58,33 @@ export function UpcomingHolidayBanner() {
   // rolls forward when the clock crosses midnight or an event passes.
   useEffect(() => {
     const resolve = () => {
-      const upcoming = upcomingEvents(LOOKAHEAD_DAYS);
-      const next = upcoming[0] ?? null;
-      if (!next) {
+      // BUG FIX: wrap in try/catch — without this, a malformed entry
+      // anywhere in HOLIDAY_EVENTS (bad floating-date lookup, etc.)
+      // would throw out of this effect and tear the whole AppShell
+      // down with it. Banner should fail closed (hide), not crash.
+      try {
+        const upcoming = upcomingEvents(LOOKAHEAD_DAYS);
+        const next = upcoming[0] ?? null;
+        if (!next) {
+          setEvent(null);
+          setHidden(true);
+          return;
+        }
+        setEvent(next);
+
+        const dismiss = loadDismissed();
+        const today = todayIso();
+        // Hide if this specific event was dismissed TODAY. Different
+        // event or different day → still show.
+        const shouldHide =
+          dismiss?.eventId === next.id && dismiss?.dismissedDate === today;
+        setHidden(shouldHide);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[upcoming-holiday-banner] resolve failed:', err);
         setEvent(null);
         setHidden(true);
-        return;
       }
-      setEvent(next);
-
-      const dismiss = loadDismissed();
-      const today = todayIso();
-      // Hide if this specific event was dismissed TODAY. Different event
-      // or different day → still show.
-      const shouldHide =
-        dismiss?.eventId === next.id && dismiss?.dismissedDate === today;
-      setHidden(shouldHide);
     };
     resolve();
     const id = setInterval(resolve, 60_000);

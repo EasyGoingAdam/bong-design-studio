@@ -24,11 +24,17 @@ export const POST = withLog('auto_archive_stale', async (req: NextRequest) => {
   let body: { stalenessDays?: number; dryRun?: boolean } = {};
   try { body = await req.json(); } catch { /* no body is fine */ }
 
+  // BUG FIX: `Number(null)` evaluates to 0 (NOT null), so `?? 30` never
+  // fires. Result: omitting both body + query yielded stalenessDays=1,
+  // sweeping concepts barely a day old. Explicit null-check on the
+  // query param + numeric validity gate so only real values override
+  // the 30-day default.
+  const queryRaw = url.searchParams.get('stalenessDays');
+  const queryNum = queryRaw !== null ? Number(queryRaw) : NaN;
   const stalenessDays = Math.max(
     1,
     body.stalenessDays
-      ?? Number(url.searchParams.get('stalenessDays'))
-      ?? 30
+      ?? (Number.isFinite(queryNum) && queryNum > 0 ? queryNum : 30)
   );
   const dryRun =
     body.dryRun === true

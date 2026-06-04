@@ -101,6 +101,23 @@ interface TextPath {
   height: number;
 }
 
+/**
+ * Tracks whether the bundled fonts loaded successfully on this process.
+ * `null` = not attempted yet, `true` = at least one weight loaded,
+ * `false` = both weights failed. Used by the route POST handler to
+ * fail loudly (with a clear error message) rather than silently rendering
+ * a marketing graphic with no text — which was the silent bug the audit
+ * surfaced.
+ */
+let FONT_LOAD_OK: boolean | null = null;
+function ensureFontsLoaded(): boolean {
+  if (FONT_LOAD_OK !== null) return FONT_LOAD_OK;
+  const bold = getTextToSvg('bold');
+  const reg = getTextToSvg('regular');
+  FONT_LOAD_OK = !!(bold && reg);
+  return FONT_LOAD_OK;
+}
+
 function renderTextAsPath(
   text: string,
   weight: 'bold' | 'regular',
@@ -266,6 +283,17 @@ export async function POST(request: NextRequest) {
     if (!body.productPhoto) return NextResponse.json({ error: 'productPhoto required' }, { status: 400 });
     if (!body.productName?.trim()) return NextResponse.json({ error: 'productName required' }, { status: 400 });
     if (!body.coilImageUrl) return NextResponse.json({ error: 'coilImageUrl required' }, { status: 400 });
+
+    // BUG FIX: fail loudly if the bundled TTFs didn't load. Without this
+    // we'd render a marketing graphic with an empty pill (no name text)
+    // and the user would never know why. Better to 500 with a clear
+    // error so the UI can surface "fonts unavailable, retry".
+    if (!ensureFontsLoaded()) {
+      return NextResponse.json(
+        { error: 'Marketing fonts failed to load on the server — try again, or contact ops if it persists.' },
+        { status: 500 }
+      );
+    }
 
     const aspect: Aspect = body.aspect || 'square';
     const { width, height } = ASPECT_SIZES[aspect];

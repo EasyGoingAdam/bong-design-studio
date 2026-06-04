@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
 import { GenerationMode, CoilBaseRelationship } from '@/lib/types';
 import { Input, TextArea, Select, SliderInput } from './ui';
@@ -312,7 +312,15 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape, coilShape]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [title, stylePrompt, themePrompt, references, effectiveConstraints, complexityLevel, coilInstructions, baseInstructions, relationship, mode, density, contrast, baseShape, coilShape]);
 
+  // BUG FIX: ref-based in-flight guard against fast double-clicks.
+  // `disabled={generating}` on the button doesn't kick in until the
+  // next render — a user double-clicking inside ~16ms could fire
+  // handleGenerate twice and spawn two draft concepts. The ref is
+  // synchronous so the second click is a no-op.
+  const generateInFlight = useRef(false);
+
   const handleGenerate = async () => {
+    if (generateInFlight.current) return;
     if ((aiModel === 'openai' || aiModel === 'openai_v2') && !openAIKey) {
       setError('Please set your OpenAI API key in Settings first.');
       return;
@@ -326,6 +334,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       return;
     }
 
+    generateInFlight.current = true;
     setGenerating(true);
     setGenStartedAt(Date.now());
     setError('');
@@ -394,14 +403,29 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       // the preview render.
       try {
         const coilUrl = (coilData.imageUrl as string) || '';
+        // BUG FIX: was reading the base body twice via baseRes.clone() —
+        // wasteful + fragile if streamed/buffered weirdly. The outer
+        // baseData captured above has imageUrl already; reuse it.
         const baseUrl = baseRes
           ? ((await safeJsonResponse(baseRes.clone())).imageUrl as string) || ''
           : '';
+
+        // BUG FIX: detect a stale targetConceptId (concept was deleted
+        // mid-session). Without this, addAIGeneration to a ghost id
+        // silently no-ops and the generation vanishes. Clearing the
+        // target id falls through to auto-create-draft below.
+        const effectiveTargetId =
+          targetConceptId && concepts.some((c) => c.id === targetConceptId)
+            ? targetConceptId
+            : '';
+        if (targetConceptId && !effectiveTargetId) {
+          setTargetConceptId('');
+        }
         const resolvedModel = lastModel ?? modelLabel;
         const resolvedProvider = lastProvider ?? providerLabel;
 
-        if (targetConceptId) {
-          addAIGeneration(targetConceptId, {
+        if (effectiveTargetId) {
+          addAIGeneration(effectiveTargetId, {
             prompt: `${coilPrompt}\n\n---\n\n${basePrompt}`,
             coilPrompt,
             basePrompt,
@@ -411,7 +435,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
             model: resolvedModel,
             provider: resolvedProvider,
           });
-          addVersion(targetConceptId, {
+          addVersion(effectiveTargetId, {
             coilImageUrl: coilUrl,
             baseImageUrl: baseUrl,
             prompt: coilPrompt,
@@ -477,6 +501,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
     } finally {
       setGenerating(false);
       setGenStartedAt(null);
+      generateInFlight.current = false;
     }
   };
 
