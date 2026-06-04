@@ -229,6 +229,44 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         provider: lastUsedProvider,
       });
 
+      // AUTO-PROMOTE TO MAIN: the user explicitly asked for the new
+      // images to become the concept's main coil/base IMMEDIATELY, no
+      // "Save" click needed. We snapshot the prior images as a Version
+      // FIRST so the rollback path is intact ("Versions" tab on the
+      // concept detail), then update the concept in place.
+      //
+      // The old "Save" button is now redundant — the modal stays open
+      // so the user can iterate (regenerate, edit), but every result
+      // is already live on the kanban card.
+      const newCoil = coilData.imageUrl as string;
+      const newBase = baseImageUrl;
+      if (hasExistingImages) {
+        // Snapshot the soon-to-be-replaced images so the user can revert
+        // via Versions tab. Skip when there were no prior images (no
+        // point in archiving "blank").
+        addVersion(concept.id, {
+          coilImageUrl: concept.coilImageUrl,
+          baseImageUrl: concept.baseImageUrl,
+          prompt: '(previous main image — auto-archived on regenerate)',
+          notes: 'Previous main image, auto-archived before promotion',
+        });
+      }
+      updateConcept(concept.id, {
+        coilImageUrl: newCoil,
+        baseImageUrl: coilOnly ? '' : newBase,
+        coilOnly,
+      });
+      // Also snapshot the NEW images as a version so the Versions tab
+      // has a row for each iteration. (Without this, only the first
+      // generation gets a snapshot, defeating the iteration history.)
+      addVersion(concept.id, {
+        coilImageUrl: newCoil,
+        baseImageUrl: newBase,
+        prompt: coilPrompt,
+        notes: hasExistingImages ? 'AI regenerated — now active' : 'AI generated initial — now active',
+      });
+      setSaved(true); // legacy flag — keeps the unsaved-close-confirm from firing
+
       // Stash for the save handler so the persisted AIGenerationRecord
       // reflects the actual model that produced the images.
       setLastModelUsed(lastUsedModel);
@@ -283,11 +321,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
   return (
     <div className="fixed inset-0 bg-black/60 modal-backdrop z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => {
-      if ((generatedCoilUrl || generatedBaseUrl) && !saved) {
-        if (window.confirm('You have unsaved generated images. Close anyway?')) onClose();
-      } else {
-        onClose();
-      }
+      // Auto-promote means there's never an unsaved-loss path anymore —
+      // every generation has already become the active main image and
+      // every prior state is in Versions for rollback. Close is safe.
+      onClose();
     }}>
       <div
         className="bg-surface border border-border rounded-xl w-full max-w-3xl max-h-[96vh] sm:max-h-[90vh] overflow-y-auto"
@@ -685,38 +722,47 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                {!saved ? (
-                  <>
-                    <button
-                      onClick={handleSave}
-                      className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-medium transition-colors"
-                    >
-                      Save as New Version
-                    </button>
+              {/* Auto-promote behavior: every successful generation now
+                  becomes the concept's MAIN coil/base image immediately.
+                  The button below only resurfaces when the user clicks a
+                  history thumb that DIFFERS from the current concept
+                  images — i.e. they want to revert to an older take. */}
+              {(() => {
+                const previewMatchesMain =
+                  generatedCoilUrl === concept.coilImageUrl
+                  && (coilOnly || generatedBaseUrl === concept.baseImageUrl);
+                return (
+                  <div className="flex gap-2">
+                    {previewMatchesMain ? (
+                      <div className="flex-1 py-2.5 bg-green-50 text-green-700 text-sm rounded-lg font-medium text-center border border-green-200">
+                        ✓ Now the active main image
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleSave}
+                        className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-medium transition-colors"
+                        title="The current preview is different from the concept's main images — click to promote this one"
+                      >
+                        Set this version as main
+                      </button>
+                    )}
                     <button
                       onClick={handleGenerate}
                       disabled={generating}
-                      className="flex-1 py-2.5 bg-background border border-border text-foreground text-sm rounded-lg hover:bg-surface-hover transition-colors"
+                      className="flex-1 py-2.5 bg-background border border-border text-foreground text-sm rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50"
                     >
-                      Regenerate
+                      {generating ? 'Generating…' : 'Regenerate'}
                     </button>
-                  </>
-                ) : (
-                  <div className="flex-1 py-2.5 bg-green-50 text-green-700 text-sm rounded-lg font-medium text-center border border-green-200">
-                    Saved as Version {concept.versions.length}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
-              {saved && (
-                <button
-                  onClick={handleSaveAndClose}
-                  className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
-                >
-                  Done
-                </button>
-              )}
+              <button
+                onClick={handleSaveAndClose}
+                className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors"
+              >
+                Done
+              </button>
             </div>
           )}
         </div>

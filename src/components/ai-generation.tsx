@@ -869,28 +869,53 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Design Parameters</h3>
-              {/* Design-type toggle. Standard = one big coil + base (the
-                  existing flow). Stamps = 1-5 mini graphics tied to a
-                  shared theme. Each option shows a different form
-                  section below. */}
-              <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px]">
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Design Parameters</h3>
+              {/* Three-way design-format picker:
+                    Wide   → standard + rectangular coil (1536×1024)
+                    Square → standard + square coil       (1024×1024)
+                    Stamps → multi-graphic mode (1-5 mini engravings)
+                  Sets BOTH designType + coilShape in one click so the
+                  user doesn't have to coordinate two separate fields. */}
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setDesignType('standard')}
-                  className={`px-2.5 py-1 ${designType === 'standard' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover text-muted'}`}
-                  title="One big design (coil + optional base)"
+                  onClick={() => { setDesignType('standard'); setCoilShape('rectangle'); }}
+                  className={`py-3 px-2 rounded-lg border-2 transition-colors text-sm font-medium ${
+                    designType === 'standard' && coilShape === 'rectangle'
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                  title="Wide rectangular coil (1536×1024) — best for wraparound designs"
                 >
-                  Standard
+                  <div>▭ Wide</div>
+                  <div className="text-[9px] font-normal opacity-70 mt-0.5">1536×1024</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setDesignType('standard'); setCoilShape('square'); }}
+                  className={`py-3 px-2 rounded-lg border-2 transition-colors text-sm font-medium ${
+                    designType === 'standard' && coilShape === 'square'
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
+                  title="Square coil (1024×1024) — equal proportions"
+                >
+                  <div>◻ Square</div>
+                  <div className="text-[9px] font-normal opacity-70 mt-0.5">1024×1024</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => setDesignType('stamps')}
-                  className={`px-2.5 py-1 border-l border-border ${designType === 'stamps' ? 'bg-foreground text-surface' : 'bg-surface hover:bg-surface-hover text-muted'}`}
+                  className={`py-3 px-2 rounded-lg border-2 transition-colors text-sm font-medium ${
+                    designType === 'stamps'
+                      ? 'bg-accent/10 border-accent text-accent'
+                      : 'bg-background border-border text-muted hover:text-foreground'
+                  }`}
                   title="1-5 thematically-related mini graphics"
                 >
-                  Stamps
+                  <div>⊞ Stamps</div>
+                  <div className="text-[9px] font-normal opacity-70 mt-0.5">1-5 mini</div>
                 </button>
               </div>
             </div>
@@ -1143,38 +1168,12 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Coil shape was promoted to the 3-way picker at the top of
+                this card. In standard mode we show the complexity slider
+                full-width here; in stamps mode coilShape is irrelevant
+                so the slider goes full-width too. */}
+            <div className="grid grid-cols-1 gap-3">
               <SliderInput value={complexityLevel} onChange={setComplexityLevel} label="Complexity Level" />
-              <div>
-                <label className="block text-xs text-muted mb-1">Coil Image Shape</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCoilShape('rectangle')}
-                    className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
-                      coilShape === 'rectangle'
-                        ? 'bg-accent/20 border-accent text-accent'
-                        : 'bg-background border-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="w-10 h-6 border border-current rounded-sm" />
-                    Rectangle
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCoilShape('square')}
-                    className={`flex-1 py-2 text-xs rounded-lg border transition-colors flex flex-col items-center gap-1 ${
-                      coilShape === 'square'
-                        ? 'bg-accent/20 border-accent text-accent'
-                        : 'bg-background border-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="w-6 h-6 border border-current rounded-sm" />
-                    Square
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted mt-1">{coilShape === 'rectangle' ? 'Wider format — better for wraparound coil designs' : 'Square format — equal proportions'}</p>
-              </div>
             </div>
 
             <div>
