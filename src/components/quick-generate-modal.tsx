@@ -39,6 +39,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [complexity, setComplexity] = useState<number>(concept.specs.laserComplexity || 3);
   const [contrast, setContrast] = useState('high');
   const [coilShape, setCoilShape] = useState<'square' | 'rectangle'>('rectangle');
+  /** Design format. 'standard' = normal coil/base flow. 'stamps' switches
+   *  to 1-5 mini-graphics tied to a theme — matches the AI Generate page. */
+  const [designType, setDesignType] = useState<'standard' | 'stamps'>(concept.designType === 'stamps' ? 'stamps' : 'standard');
+  const [stampCount, setStampCount] = useState<number>(Math.max(1, Math.min(5, concept.stamps?.length || 3)));
+  const [stampsBusy, setStampsBusy] = useState(false);
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
   const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
@@ -101,6 +106,85 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [saved, setSaved] = useState(false);
 
   const hasExistingImages = !!(concept.coilImageUrl || concept.baseImageUrl);
+
+  /**
+   * Generate stamps for this concept and promote them to main IMMEDIATELY
+   * (same auto-promote behavior as the standard coil/base flow). The
+   * theme comes from the concept's name + first non-meta tag so we
+   * don't need yet another input field. Existing stamps (if any) are
+   * archived as a version before being replaced.
+   */
+  const handleGenerateStamps = async () => {
+    if (!openAIKey) { setError('Please set your OpenAI API key in Settings first.'); return; }
+    setStampsBusy(true);
+    setError('');
+    try {
+      // Pull a clean theme from the concept. Try first non-meta tag, then
+      // strip "stamps" / "stamp" off the concept name as a fallback.
+      const themeFromTag = (concept.tags || []).find(
+        (t) => !['stamps', 'auto-saved', `${stampCount}-pack`].includes(t.toLowerCase())
+      );
+      const themeFromName = concept.name.replace(/\bstamps?\b/gi, '').trim();
+      const theme = (themeFromTag || themeFromName || concept.name).trim();
+
+      const res = await fetch('/api/generate-stamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme,
+          count: stampCount,
+          apiKey: openAIKey,
+          geminiKey,
+          model: aiModel,
+          complexityLevel: complexity,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.stamps)) {
+        setError(data.error || 'Stamps generation failed');
+        return;
+      }
+      const successful = (data.stamps as Array<{ imageUrl: string }>).filter((s) => s.imageUrl);
+
+      // AUTO-PROMOTE: snapshot prior state, then write the new stamps
+      // + flip designType to 'stamps'. Mirrors the coil/base flow.
+      if ((concept.stamps?.length || 0) > 0 || hasExistingImages) {
+        addVersion(concept.id, {
+          coilImageUrl: concept.coilImageUrl,
+          baseImageUrl: concept.baseImageUrl,
+          prompt: '(previous state — auto-archived before stamps regenerate)',
+          notes: 'Previous main image / stamps set, auto-archived before promotion',
+        });
+      }
+      updateConcept(concept.id, {
+        designType: 'stamps',
+        stamps: successful.map((s) => ({
+          id: (s as { id?: string }).id || Math.random().toString(36).slice(2, 12),
+          subject: (s as { subject?: string }).subject || '',
+          imageUrl: s.imageUrl,
+          prompt: (s as { prompt?: string }).prompt || '',
+          createdAt: (s as { createdAt?: string }).createdAt || new Date().toISOString(),
+          model: (s as { model?: string }).model,
+        })),
+        // Stamps replace coil/base — clear those so the card reads as a
+        // pure stamps concept.
+        coilImageUrl: '',
+        baseImageUrl: '',
+      });
+      setSaved(true);
+      const failed = data.stamps.length - successful.length;
+      toast(
+        failed === 0
+          ? `Generated ${successful.length} stamps for "${theme}"`
+          : `${successful.length} of ${data.stamps.length} stamps generated — ${failed} failed`,
+        failed === 0 ? 'success' : 'info'
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Stamps generation failed');
+    } finally {
+      setStampsBusy(false);
+    }
+  };
 
   // Append dimension context to the per-part instructions so the prompt is
   // dimension-aware without needing a separate prompt builder field.
@@ -483,21 +567,90 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
             <SliderInput value={complexity} onChange={setComplexity} label="Complexity" />
             <div>
-              <label className="block text-xs text-muted mb-1">Coil Shape</label>
-              <div className="flex gap-1">
-                <button type="button" onClick={() => setCoilShape('rectangle')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${coilShape === 'rectangle' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+              <label className="block text-xs text-muted mb-1">Design Format</label>
+              {/* 3-way picker matching the AI Generate page. Wide / Square
+                  drive coilShape inside the standard coil+base flow;
+                  Stamps switches to multi-graphic mode and hides the
+                  parts of the form (base shape, dimensions) that don't
+                  apply. */}
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  onClick={() => { setDesignType('standard'); setCoilShape('rectangle'); }}
+                  className={`py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${
+                    designType === 'standard' && coilShape === 'rectangle'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted'
+                  }`}
+                  title="Wide rectangular coil (1536×1024)"
+                >
                   <span className="w-7 h-4 border border-current rounded-sm" />
                   Wide
                 </button>
-                <button type="button" onClick={() => setCoilShape('square')} className={`flex-1 py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${coilShape === 'square' ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border text-muted'}`}>
+                <button
+                  type="button"
+                  onClick={() => { setDesignType('standard'); setCoilShape('square'); }}
+                  className={`py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${
+                    designType === 'standard' && coilShape === 'square'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted'
+                  }`}
+                  title="Square coil (1024×1024)"
+                >
                   <span className="w-4 h-4 border border-current rounded-sm" />
                   Square
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignType('stamps')}
+                  className={`py-1.5 text-[10px] rounded border transition-colors flex flex-col items-center gap-0.5 ${
+                    designType === 'stamps'
+                      ? 'bg-accent/20 border-accent text-accent'
+                      : 'bg-background border-border text-muted'
+                  }`}
+                  title="1-5 thematically-related mini graphics"
+                >
+                  <span className="grid grid-cols-2 grid-rows-2 gap-px w-4 h-4">
+                    <span className="bg-current rounded-[1px]" />
+                    <span className="bg-current rounded-[1px]" />
+                    <span className="bg-current rounded-[1px]" />
+                    <span className="bg-current rounded-[1px]" />
+                  </span>
+                  Stamps
+                </button>
               </div>
-              {coilShape === 'rectangle' && coilWidth && coilHeight && Number(coilWidth) < Number(coilHeight) && (
+              {designType === 'standard' && coilShape === 'rectangle' && coilWidth && coilHeight && Number(coilWidth) < Number(coilHeight) && (
                 <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1 leading-snug">
                   ⚠ Your coil dimensions read as portrait ({coilWidth}×{coilHeight}). For a Wide coil the AI will treat the LARGER value as the width axis. Swap them in the Dimensions section if you want the literal numbers respected.
                 </p>
+              )}
+              {designType === 'stamps' && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded px-2 py-2 space-y-1.5">
+                  <p className="text-[10px] text-amber-900 leading-snug">
+                    Stamps mode — pick how many small graphics. AI brainstorms distinct subjects from this concept's name/tags, then generates each independently.
+                  </p>
+                  <div>
+                    <label className="block text-[10px] text-amber-900 mb-1">
+                      Number of stamps: <span className="font-medium">{stampCount}</span>
+                    </label>
+                    <div className="grid grid-cols-5 gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setStampCount(n)}
+                          className={`py-1 text-[10px] rounded border font-medium ${
+                            stampCount === n
+                              ? 'bg-accent text-white border-accent'
+                              : 'bg-surface border-border text-muted hover:text-foreground'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -610,21 +763,40 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </div>
           )}
 
-          {/* Generate Button */}
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="w-full py-3 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            {generating ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Generating Coil + Base...
-              </span>
-            ) : (
-              `✦ ${hasExistingImages ? 'Regenerate' : 'Generate'} Coil + Base Images`
-            )}
-          </button>
+          {/* Generate Button — branches based on the format picker.
+              Standard mode runs the coil+base flow; Stamps mode hits
+              the parallel stamps endpoint and auto-promotes the result. */}
+          {designType === 'stamps' ? (
+            <button
+              onClick={handleGenerateStamps}
+              disabled={stampsBusy || generating}
+              className="w-full py-3 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {stampsBusy ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Generating {stampCount} stamps…
+                </span>
+              ) : (
+                `✦ Generate ${stampCount} stamps`
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="w-full py-3 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {generating ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Generating Coil + Base...
+                </span>
+              ) : (
+                `✦ ${hasExistingImages ? 'Regenerate' : 'Generate'} Coil + Base Images`
+              )}
+            </button>
+          )}
 
           {/* Generated Output */}
           {(generatedCoilUrl || generatedBaseUrl) && (
