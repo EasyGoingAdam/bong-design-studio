@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withLog, log, timer } from '@/lib/log';
 import { callOpenAIChat } from '@/lib/openai';
+import { uploadImage } from '@/lib/supabase';
+import {
+  validateParams,
+  getOpenAIRequestBody,
+  getOpenAIv2RequestBody,
+  getEndpoint,
+  getAuthHeaders,
+  PROVIDER_CONFIG,
+} from '@/lib/ai-providers';
 
 /**
  * POST /api/generate-stamps
@@ -8,21 +17,24 @@ import { callOpenAIChat } from '@/lib/openai';
  * Produces 1-5 thematically-related "stamps" — small, independent
  * black-and-white engraving graphics — for a single theme.
  *
- * Two-stage:
- *   1. Brainstorm subjects: ask gpt-4o-mini for N distinct subjects
- *      related to the theme (e.g. "baseball" → ball, bat, glove,
- *      player, cap). Caller can skip this by passing `subjects`.
- *   2. Generate each subject in parallel via /api/generate-image
- *      proxy. Each gets a consistent engraving-style prompt so the
- *      stamps read as a unified set.
+ * Previously this route fetched its OWN /api/generate-image proxy via
+ * `${origin}/api/generate-image`. That round-trip went OUT of the
+ * Railway container and back in, which the edge layer reliably
+ * killed instantly — successful=0 every time, after ~7ms. Replaced
+ * with DIRECT calls to OpenAI's /v1/images endpoint, reusing the
+ * same helpers that power /api/generate-image. No internal hop.
  *
  * Body:
  *   { theme, count, apiKey, geminiKey?, model?, complexityLevel?,
- *     subjects? } — see below for shape
+ *     subjects? }
  *
  * Returns:
- *   { stamps: Stamp[] }  // Stamp = { id, subject, imageUrl, prompt, createdAt, model? }
+ *   { stamps: Stamp[] }  // each Stamp may include `error` on failure
  */
+
+// Allow up to 5 minutes — 5 parallel image gens at ~30s each can spike
+// well past Vercel/Railway's default 60s function timeout.
+export const maxDuration = 300;
 
 interface Body {
   theme: string;
@@ -43,7 +55,7 @@ interface StampOut {
   prompt: string;
   createdAt: string;
   model?: string;
-  error?: string;        // present when this individual stamp failed; URL will be empty
+  error?: string;
 }
 
 const MAX_STAMPS = 5;
@@ -53,11 +65,6 @@ function newStampId(): string {
   return Math.random().toString(36).slice(2, 12);
 }
 
-/**
- * Ask gpt-4o-mini for N concrete subjects related to the theme.
- * Returns an array of short subject phrases ("baseball bat", not
- * "a beautifully crafted vintage wooden baseball bat with worn leather grip").
- */
 async function brainstormSubjects(theme: string, count: number, apiKey: string): Promise<string[]> {
   const system =
     'You produce concrete subjects for a set of related laser-engraving "stamps". ' +
@@ -93,11 +100,6 @@ async function brainstormSubjects(theme: string, count: number, apiKey: string):
   return subjects.slice(0, count);
 }
 
-/**
- * Build the engraving-ready prompt for a single stamp. Tuned so the set
- * reads as a unified, laser-ready collection — same visual weight,
- * isolated subject, no scenery.
- */
 function buildStampPrompt(theme: string, subject: string, complexityLevel: number): string {
   const complexity =
     complexityLevel <= 2 ? 'simple, minimal'
@@ -113,39 +115,80 @@ function buildStampPrompt(theme: string, subject: string, complexityLevel: numbe
   );
 }
 
-/** Hit our own internal image route to generate a single stamp. */
-async function generateOneStamp(
-  req: NextRequest,
+/**
+ * Generate a single stamp by calling OpenAI's /v1/images endpoint
+ * DIRECTLY. v2 with auto-fallback to v1 on failure, mirroring the
+ * behavior of /api/generate-image so we stay consistent.
+ */
+async function generateStampDirect(
   prompt: string,
-  apiKey?: string,
-  geminiKey?: string,
-  model?: string,
-  complexityLevel?: number
-): Promise<{ url: string; model?: string; error?: string }> {
-  try {
-    // Build absolute URL so the fetch from a server route resolves correctly.
-    const origin = req.nextUrl.origin;
-    const res = await fetch(`${origin}/api/generate-image`, {
+  apiKey: string,
+  model: 'openai' | 'openai_v2',
+  complexityLevel: number,
+  folder: string,
+  filename: string
+): Promise<{ imageUrl: string; modelUsed: string }> {
+  // Build the validated param object the helpers expect.
+  const baseParams = validateParams({
+    prompt,
+    provider: model,
+    apiKey,
+    size: '1024x1024',
+    quality: 'medium',
+    folder,
+    filename,
+    complexityLevel,
+  });
+
+  const callOpenAI = async (variant: 'v1' | 'v2'): Promise<string> => {
+    const body = variant === 'v2' ? getOpenAIv2RequestBody(baseParams) : getOpenAIRequestBody(baseParams);
+    const endpoint = variant === 'v2' ? PROVIDER_CONFIG.openai_v2.endpoint : getEndpoint('openai');
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        apiKey,
-        geminiKey,
-        size: '1024x1024',
-        model: model || 'openai',
-        quality: 'medium',
-        complexityLevel: complexityLevel ?? 3,
-      }),
+      headers: getAuthHeaders(baseParams),
+      body: JSON.stringify(body),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.imageUrl) {
-      return { url: '', error: data.error || `Generate failed (${res.status})` };
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      const label = variant === 'v2' ? 'gpt-image-2' : 'gpt-image-1';
+      throw new Error(errBody?.error?.message || `OpenAI ${label} API error: ${res.status}`);
     }
-    return { url: data.imageUrl as string, model: data.model as string | undefined };
-  } catch (err) {
-    return { url: '', error: err instanceof Error ? err.message : 'Generate failed' };
+    const data = await res.json();
+    const imgData = data.data?.[0];
+    if (!imgData?.b64_json && !imgData?.url) throw new Error('No image data in OpenAI response');
+    if (imgData.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
+    const fetched = await fetch(imgData.url);
+    const buf = await fetched.arrayBuffer();
+    return `data:image/png;base64,${Buffer.from(buf).toString('base64')}`;
+  };
+
+  let base64Data: string;
+  let modelUsed = 'gpt-image-1';
+  if (model === 'openai_v2') {
+    try {
+      base64Data = await callOpenAI('v2');
+      modelUsed = 'gpt-image-2';
+    } catch (v2err) {
+      log.warn('stamps.openai_v2.fallback', { err: v2err });
+      base64Data = await callOpenAI('v1');
+      modelUsed = 'gpt-image-1';
+    }
+  } else {
+    base64Data = await callOpenAI('v1');
+    modelUsed = 'gpt-image-1';
   }
+
+  // Upload to Supabase Storage so the URL outlives the data: URI.
+  // Inline base64 fallback if upload fails (matches generate-image).
+  let imageUrl: string;
+  try {
+    imageUrl = await uploadImage(base64Data, folder, filename);
+  } catch (uploadErr) {
+    log.warn('stamps.upload.fallback_to_inline', { err: uploadErr });
+    imageUrl = base64Data;
+  }
+
+  return { imageUrl, modelUsed };
 }
 
 export const POST = withLog('stamps.generate', async (req: NextRequest) => {
@@ -183,23 +226,50 @@ export const POST = withLog('stamps.generate', async (req: NextRequest) => {
     }
   }
 
-  // Stage 2: parallel generation
+  // Resolve model — Gemini stays through the standard route since this
+  // direct path is OpenAI-only. Default ChatGPT Image 2.0 per the
+  // team's preference.
+  const requestedModel: 'openai' | 'openai_v2' =
+    body.model === 'openai' ? 'openai' : 'openai_v2';
+
+  // Stage 2: parallel direct OpenAI calls
   const tGen = timer();
   const stamps: StampOut[] = await Promise.all(
     subjects.map(async (subject) => {
       const prompt = buildStampPrompt(theme, subject, body.complexityLevel ?? 3);
-      const result = await generateOneStamp(
-        req, prompt, body.apiKey, body.geminiKey, body.model, body.complexityLevel
-      );
-      return {
-        id: newStampId(),
-        subject,
-        imageUrl: result.url,
-        prompt,
-        createdAt: new Date().toISOString(),
-        model: result.model,
-        error: result.error,
-      };
+      const id = newStampId();
+      const slug = subject.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 30);
+      const filename = `stamp-${slug}-${Date.now()}`;
+      try {
+        const { imageUrl, modelUsed } = await generateStampDirect(
+          prompt,
+          body.apiKey!,
+          requestedModel,
+          body.complexityLevel ?? 3,
+          'stamps',
+          filename
+        );
+        return {
+          id,
+          subject,
+          imageUrl,
+          prompt,
+          createdAt: new Date().toISOString(),
+          model: modelUsed,
+        };
+      } catch (err) {
+        log.warn('stamps.one.fail', {
+          theme, subject, err,
+        });
+        return {
+          id,
+          subject,
+          imageUrl: '',
+          prompt,
+          createdAt: new Date().toISOString(),
+          error: err instanceof Error ? err.message : 'Generation failed',
+        };
+      }
     })
   );
 

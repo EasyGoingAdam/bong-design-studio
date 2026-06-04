@@ -45,7 +45,9 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   const [stampCount, setStampCount] = useState<number>(Math.max(1, Math.min(5, concept.stamps?.length || 3)));
   const [stampsBusy, setStampsBusy] = useState(false);
   const [baseShape, setBaseShape] = useState<'circle' | 'oval' | 'square' | 'rectangle'>(concept.specs.baseShape || 'circle');
-  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai');
+  // Default to ChatGPT Image 2.0 — graceful fallback to 1.0 already
+  // wired server-side. Matches the AI Generate page default.
+  const [aiModel, setAiModel] = useState<'openai' | 'openai_v2' | 'gemini'>('openai_v2');
   const [coilInstructions, setCoilInstructions] = useState(concept.coilSpecs.notes || '');
   const [baseInstructions, setBaseInstructions] = useState(concept.baseSpecs.notes || '');
   const [extraNotes, setExtraNotes] = useState('');
