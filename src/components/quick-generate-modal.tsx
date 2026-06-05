@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Concept, GenerationMode, CoilBaseRelationship } from '@/lib/types';
+import { Concept, GenerationMode, CoilBaseRelationship, Stamp } from '@/lib/types';
 import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
@@ -100,6 +100,15 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   // For inline editing of a generated image before saving
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
 
+  // Inline stamps preview — mirrors coil/base preview so the user can
+  // browse the 1-5 freshly generated stamps with arrows, edit/regen/
+  // download per stamp, without leaving the modal. Seeded from
+  // concept.stamps so reopening the modal still shows the active set.
+  const [generatedStamps, setGeneratedStamps] = useState<Stamp[]>(concept.stamps || []);
+  const [stampIndex, setStampIndex] = useState(0);
+  const [editingStamp, setEditingStamp] = useState<Stamp | null>(null);
+  const [regenStampId, setRegenStampId] = useState<string | null>(null);
+
   // Captures the ACTUAL model/provider the server reported using on the
   // last generation. Differs from `aiModel` when v2 fell back to v1.
   const [lastModelUsed, setLastModelUsed] = useState<string | undefined>(undefined);
@@ -172,21 +181,24 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
           notes: 'Previous main image / stamps set, auto-archived before promotion',
         });
       }
+      const freshStamps: Stamp[] = successful.map((s) => ({
+        id: (s as { id?: string }).id || Math.random().toString(36).slice(2, 12),
+        subject: (s as { subject?: string }).subject || '',
+        imageUrl: s.imageUrl,
+        prompt: (s as { prompt?: string }).prompt || '',
+        createdAt: (s as { createdAt?: string }).createdAt || new Date().toISOString(),
+        model: (s as { model?: string }).model,
+      }));
       updateConcept(concept.id, {
         designType: 'stamps',
-        stamps: successful.map((s) => ({
-          id: (s as { id?: string }).id || Math.random().toString(36).slice(2, 12),
-          subject: (s as { subject?: string }).subject || '',
-          imageUrl: s.imageUrl,
-          prompt: (s as { prompt?: string }).prompt || '',
-          createdAt: (s as { createdAt?: string }).createdAt || new Date().toISOString(),
-          model: (s as { model?: string }).model,
-        })),
+        stamps: freshStamps,
         // Stamps replace coil/base — clear those so the card reads as a
         // pure stamps concept.
         coilImageUrl: '',
         baseImageUrl: '',
       });
+      setGeneratedStamps(freshStamps);
+      setStampIndex(0);
       setSaved(true);
       const failedCount = data.stamps.length - successful.length;
       toast(
@@ -199,6 +211,57 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       setError(err instanceof Error ? err.message : 'Stamps generation failed');
     } finally {
       setStampsBusy(false);
+    }
+  };
+
+  /**
+   * Regenerate a SINGLE stamp using its existing subject. Mirrors the
+   * StampsPanel logic but keeps the result in this modal's preview so
+   * the user can iterate. Persists the new image back to the concept
+   * on the spot — same auto-promote contract as the bulk generator.
+   */
+  const handleRegenerateOneStamp = async (stamp: Stamp) => {
+    if (!openAIKey) { setError('Please set your OpenAI API key in Settings first.'); return; }
+    setRegenStampId(stamp.id);
+    setError('');
+    try {
+      const themeFromTag = (concept.tags || []).find(
+        (t) => !['stamps', 'auto-saved', `${stampCount}-pack`].includes(t.toLowerCase())
+      );
+      const themeFromName = concept.name.replace(/\bstamps?\b/gi, '').trim();
+      const theme = (themeFromTag || themeFromName || concept.name).trim();
+      const res = await fetch('/api/generate-stamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme,
+          count: 1,
+          subjects: [stamp.subject],
+          apiKey: openAIKey,
+          geminiKey,
+          model: aiModel,
+          complexityLevel: complexity,
+        }),
+      });
+      const data = await res.json();
+      const fresh = Array.isArray(data.stamps) && data.stamps[0];
+      if (!res.ok || !fresh?.imageUrl) {
+        const msg = data.error || fresh?.error || 'Regenerate failed';
+        setError(msg);
+        toast(msg, 'error');
+        return;
+      }
+      const next = generatedStamps.map((s) => s.id === stamp.id
+        ? { ...s, imageUrl: fresh.imageUrl, prompt: fresh.prompt, createdAt: fresh.createdAt, model: fresh.model }
+        : s
+      );
+      setGeneratedStamps(next);
+      updateConcept(concept.id, { stamps: next });
+      toast(`Regenerated "${stamp.subject}"`, 'success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Regenerate failed');
+    } finally {
+      setRegenStampId(null);
     }
   };
 
@@ -814,6 +877,111 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             </button>
           )}
 
+          {/* Inline Stamps Preview — appears once stamps exist on the
+              concept. Mirrors the coil/base preview: per-stamp download,
+              edit, regenerate, plus arrow nav through the 1-5 stamps.
+              Always visible in stamps mode (even before generating in this
+              session) so existing stamps stay editable. */}
+          {designType === 'stamps' && generatedStamps.length > 0 && (() => {
+            const safeIdx = Math.min(stampIndex, generatedStamps.length - 1);
+            const active = generatedStamps[safeIdx];
+            const isRegen = regenStampId === active.id;
+            const filename = `${concept.name}-stamp-${active.subject.replace(/[^a-z0-9-]/gi, '-').slice(0, 30)}`;
+            const goPrev = () => setStampIndex((i) => (i - 1 + generatedStamps.length) % generatedStamps.length);
+            const goNext = () => setStampIndex((i) => (i + 1) % generatedStamps.length);
+            return (
+              <div className="bg-background border border-border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-muted">
+                    Stamp {safeIdx + 1} of {generatedStamps.length}
+                    <span className="ml-2 font-medium text-foreground">{active.subject}</span>
+                  </span>
+                  <ImageDownloadButtons imageUrl={active.imageUrl} filename={filename} />
+                </div>
+                <div className="relative">
+                  {/* Big square preview matching coil/base aesthetic */}
+                  <div className="aspect-square rounded-lg border border-border overflow-hidden bg-surface placeholder-pattern relative">
+                    {active.imageUrl && !isRegen ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={active.imageUrl} alt={active.subject} className="w-full h-full object-contain p-3" />
+                    ) : isRegen ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-muted">No image</div>
+                    )}
+                  </div>
+                  {/* Arrows — only render when there's more than one stamp */}
+                  {generatedStamps.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={goPrev}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface/95 border border-border shadow hover:bg-surface flex items-center justify-center text-foreground text-lg disabled:opacity-50"
+                        aria-label="Previous stamp"
+                        disabled={isRegen}
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface/95 border border-border shadow hover:bg-surface flex items-center justify-center text-foreground text-lg disabled:opacity-50"
+                        aria-label="Next stamp"
+                        disabled={isRegen}
+                      >
+                        ▶
+                      </button>
+                    </>
+                  )}
+                </div>
+                {/* Edit + Regenerate, matching the coil/base button row */}
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStamp(active)}
+                    disabled={isRegen || !active.imageUrl}
+                    className="flex-1 py-1.5 bg-accent hover:bg-accent-hover text-white text-[11px] font-medium rounded transition-colors disabled:opacity-50"
+                  >
+                    ✎ Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRegenerateOneStamp(active)}
+                    disabled={isRegen || stampsBusy}
+                    className="flex-1 py-1.5 bg-background border border-border text-foreground text-[11px] font-medium rounded hover:bg-surface-hover transition-colors disabled:opacity-50"
+                  >
+                    {isRegen ? '↻ Regenerating…' : '↻ Regenerate this stamp'}
+                  </button>
+                </div>
+                {/* Dot/thumb strip — quick jump to any stamp */}
+                {generatedStamps.length > 1 && (
+                  <div className="mt-2 flex gap-1.5 justify-center">
+                    {generatedStamps.map((s, i) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setStampIndex(i)}
+                        className={`w-10 h-10 rounded border-2 overflow-hidden transition-all ${
+                          i === safeIdx ? 'border-accent ring-1 ring-accent/40' : 'border-border opacity-70 hover:opacity-100'
+                        }`}
+                        title={s.subject}
+                      >
+                        {s.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[8px] text-muted">{s.subject.slice(0, 4)}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Generated Output */}
           {(generatedCoilUrl || generatedBaseUrl) && (
             <div className="space-y-3">
@@ -972,6 +1140,25 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
             }
           }}
           onClose={() => setEditingImage(null)}
+        />
+      )}
+
+      {editingStamp && (
+        <EditImageModal
+          imageUrl={editingStamp.imageUrl}
+          label={`stamp: ${editingStamp.subject}`}
+          conceptId={concept.id}
+          onEdited={({ url }) => {
+            // Replace this stamp's image; auto-promote to concept too so
+            // the workflow card + concept detail update instantly.
+            const next = generatedStamps.map((s) =>
+              s.id === editingStamp.id ? { ...s, imageUrl: url } : s
+            );
+            setGeneratedStamps(next);
+            updateConcept(concept.id, { stamps: next });
+            toast(`Edited "${editingStamp.subject}"`, 'success');
+          }}
+          onClose={() => setEditingStamp(null)}
         />
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { Concept } from '@/lib/types';
 import { StatusBadge, PriorityBadge, Tag } from './ui';
+import { ImageDownloadButtons } from './image-download';
 
 export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept; onClick: () => void; onGenerate?: () => void }) {
   const hasImages = !!(concept.coilImageUrl || concept.baseImageUrl);
@@ -138,7 +139,7 @@ export function ConceptCardMini({
             {(concept.stamps || []).slice(0, 4).map((s) => (
               <div
                 key={s.id}
-                className="bg-background placeholder-pattern border border-border rounded-sm overflow-hidden"
+                className="bg-background placeholder-pattern border border-border rounded-sm overflow-hidden relative group/stamp"
                 title={s.subject}
               >
                 {s.imageUrl ? (
@@ -146,6 +147,20 @@ export function ConceptCardMini({
                   <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-cover" />
                 ) : (
                   <span className="block text-[7px] text-muted px-0.5">{s.subject.slice(0, 4)}</span>
+                )}
+                {/* Per-stamp download — appears on hover so the 2x2 grid
+                    stays clean. stopPropagation inside ImageDownloadButtons
+                    prevents the parent card click from firing. */}
+                {s.imageUrl && (
+                  <div
+                    className="absolute top-0.5 right-0.5 opacity-0 group-hover/stamp:opacity-100 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ImageDownloadButtons
+                      imageUrl={s.imageUrl}
+                      filename={`${concept.name}-stamp-${s.subject.replace(/[^a-z0-9-]/gi, '-').slice(0, 30)}`}
+                    />
+                  </div>
                 )}
               </div>
             ))}
