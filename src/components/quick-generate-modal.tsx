@@ -146,7 +146,21 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         setError(data.error || 'Stamps generation failed');
         return;
       }
-      const successful = (data.stamps as Array<{ imageUrl: string }>).filter((s) => s.imageUrl);
+      type StampOut = { imageUrl: string; error?: string; subject: string };
+      const successful = (data.stamps as StampOut[]).filter((s) => s.imageUrl);
+      const failed = (data.stamps as StampOut[]).filter((s) => !s.imageUrl);
+
+      // LOUD FAILURE: if everything failed, surface the actual upstream
+      // error instead of silently writing an empty stamps array to the
+      // concept. Was a real bug: user clicked Generate, all 5 calls
+      // failed with "incorrect API key", but the concept got updated
+      // with `stamps: []` and the modal closed with no message.
+      if (successful.length === 0) {
+        const firstErr = failed[0]?.error || 'All stamps failed to generate. Check your OpenAI key in Settings.';
+        setError(firstErr);
+        toast(`0 of ${data.stamps.length} stamps generated — ${firstErr}`, 'error');
+        return;
+      }
 
       // AUTO-PROMOTE: snapshot prior state, then write the new stamps
       // + flip designType to 'stamps'. Mirrors the coil/base flow.
@@ -174,12 +188,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         baseImageUrl: '',
       });
       setSaved(true);
-      const failed = data.stamps.length - successful.length;
+      const failedCount = data.stamps.length - successful.length;
       toast(
-        failed === 0
+        failedCount === 0
           ? `Generated ${successful.length} stamps for "${theme}"`
-          : `${successful.length} of ${data.stamps.length} stamps generated — ${failed} failed`,
-        failed === 0 ? 'success' : 'info'
+          : `${successful.length} of ${data.stamps.length} stamps generated — ${failedCount} failed`,
+        failedCount === 0 ? 'success' : 'info'
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Stamps generation failed');

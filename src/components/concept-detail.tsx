@@ -340,13 +340,9 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           >
             ✦ Variants
           </button>
-          <button
-            onClick={() => setShowCostCalc(true)}
-            className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover"
-            title="Compute unit cost and suggested retail"
-          >
-            $ Cost
-          </button>
+          {/* Cost calculator button removed per team request — the
+              dedicated modal is still available via the audit/insights
+              surfaces if needed. */}
           {concept.status !== 'approved' && (
             <button onClick={handleApprove} className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg">
               Approve
@@ -385,6 +381,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Images */}
           <div className="lg:col-span-2 space-y-4">
+            {/* Stamps mode replaces the coil/base/combined trio with a
+                bigger stamps panel rendered higher up the page. We
+                skip the standard image grid here entirely so the
+                stamps art has the full canvas. */}
+            {concept.designType === 'stamps' ? (
+              <StampsPanel concept={concept} />
+            ) : (
             <div className={`grid gap-3 sm:gap-4 grid-cols-1 ${concept.coilOnly ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -527,6 +530,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                 </div>
               </div>
             </div>
+            )}
 
             {/* AI Generate Button */}
             <button
@@ -703,12 +707,10 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               onTabChange={(tab) => setActiveSection(tab)}
             />
 
-            {/* Stamps panel — only renders for stamps-mode concepts.
-                Replaces the coil/base review surface since stamps
-                concepts don't have those. */}
-            {concept.designType === 'stamps' && (
-              <StampsPanel concept={concept} />
-            )}
+            {/* StampsPanel now lives in the main image column (see top
+                of the overview section) so a stamps concept gets the
+                full canvas. The right-rail position used to render a
+                second one — removed to avoid duplication. */}
 
             {(concept.coilImageUrl || concept.baseImageUrl) && (
               <DesignReviewer

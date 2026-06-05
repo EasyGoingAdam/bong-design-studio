@@ -5,6 +5,7 @@ import { Concept, Stamp } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { log } from '@/lib/log';
+import { ImageDownloadButtons } from './image-download';
 
 /**
  * StampsPanel — concept-detail surface for stamps-mode concepts.
@@ -207,42 +208,67 @@ export function StampsPanel({ concept }: { concept: Concept }) {
           No stamps yet. Use the AI Generate tab in Stamps mode to seed this concept, or click <strong>+ Add stamp</strong>.
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        // Larger grid — these are the PRIMARY images for a stamps
+        // concept (no separate coil/base) so they need room to be
+        // inspected. Two-up on mobile, three-up on lg+, never more.
+        // Each tile has the same download buttons + score the coil
+        // image would normally get.
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {stamps.map((s) => {
             const isBusy = busyId === s.id || busyAll;
             return (
-              <div key={s.id} className="bg-background border border-border rounded-lg overflow-hidden group">
+              <div key={s.id} className="bg-background border border-border rounded-xl overflow-hidden">
+                {/* Big square preview — matches the coil-image preview
+                    sizing on standard concepts. */}
                 <div className="aspect-square bg-background placeholder-pattern relative">
                   {s.imageUrl && !isBusy && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-cover" />
+                    <img
+                      src={s.imageUrl}
+                      alt={s.subject}
+                      className="w-full h-full object-contain p-2"
+                    />
                   )}
                   {isBusy && (
                     <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => removeStamp(s.id)}
-                    disabled={isBusy}
-                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-background/80 hover:bg-red-100 text-muted hover:text-red-700 text-sm opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
-                    aria-label={`Remove ${s.subject}`}
-                    title="Remove this stamp"
-                  >
-                    ×
-                  </button>
+                  {!s.imageUrl && !isBusy && (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted">
+                      No image
+                    </div>
+                  )}
                 </div>
-                <div className="p-2 text-xs">
-                  <div className="font-medium truncate" title={s.subject}>{s.subject}</div>
-                  <button
-                    type="button"
-                    onClick={() => regenerateOne(s.id)}
-                    disabled={isBusy}
-                    className="mt-1 w-full text-[10px] px-2 py-1 bg-surface border border-border rounded hover:border-foreground disabled:opacity-50"
-                  >
-                    {busyId === s.id ? '↻ Regenerating…' : '↻ Regenerate'}
-                  </button>
+                <div className="p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium text-sm truncate" title={s.subject}>{s.subject}</div>
+                    {s.imageUrl && (
+                      <ImageDownloadButtons
+                        imageUrl={s.imageUrl}
+                        filename={`${concept.name}-stamp-${s.subject.replace(/[^a-z0-9-]/gi, '-').slice(0, 30)}`}
+                      />
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => regenerateOne(s.id)}
+                      disabled={isBusy}
+                      className="flex-1 text-xs px-2 py-1.5 bg-surface border border-border rounded hover:border-foreground disabled:opacity-50"
+                    >
+                      {busyId === s.id ? '↻ Regenerating…' : '↻ Regenerate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStamp(s.id)}
+                      disabled={isBusy}
+                      className="text-xs px-2 py-1.5 bg-surface border border-border rounded hover:border-red-300 text-muted hover:text-red-700 disabled:opacity-50"
+                      title="Remove this stamp"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               </div>
             );
