@@ -93,8 +93,12 @@ async function brainstormSubjects(theme: string, count: number, apiKey: string):
   try { parsed = JSON.parse(raw); } catch {
     throw new Error('Brainstorm returned non-JSON');
   }
+  // Trim each subject — the model occasionally returns " tractor" with a
+  // leading space, which breaks subject-keyed matching in regenerate-all.
   const subjects = Array.isArray(parsed?.subjects)
-    ? parsed.subjects.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    ? parsed.subjects
+        .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+        .map((s) => s.trim())
     : [];
   if (subjects.length === 0) throw new Error('Brainstorm returned no subjects');
   return subjects.slice(0, count);
