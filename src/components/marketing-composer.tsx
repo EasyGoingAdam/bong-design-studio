@@ -67,6 +67,10 @@ export function MarketingComposer({ concept, onClose }: Props) {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
+        // Reset rotation on every new photo — the "Replace" path did this
+        // but the initial-upload path didn't, so a rotation from a prior
+        // photo silently applied to the new one.
+        setRotateDeg(0);
         setProductPhoto(reader.result);
       }
     };
@@ -119,7 +123,9 @@ export function MarketingComposer({ concept, onClose }: Props) {
       return;
     }
     if (!concept.coilImageUrl) {
-      setError('This concept has no coil design image — generate one first.');
+      setError(concept.designType === 'stamps'
+        ? 'Marketing graphics need a coil design — this is a stamps concept. Generate a standard coil design first.'
+        : 'This concept has no coil design image — generate one first.');
       return;
     }
 

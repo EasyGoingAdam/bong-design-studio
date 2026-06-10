@@ -66,6 +66,7 @@ export function dbConceptToFrontend(
           coordinationMode: specs.coordination_mode ?? 'thematic',
           productionFeasibility: specs.production_feasibility ?? 3,
           riskNotes: specs.risk_notes ?? '',
+          baseShape: specs.base_shape ?? 'circle',
         }
       : {
           designStyleName: '',
@@ -80,6 +81,7 @@ export function dbConceptToFrontend(
           coordinationMode: 'thematic',
           productionFeasibility: 3,
           riskNotes: '',
+          baseShape: 'circle',
         },
     coilSpecs: coilSpecs
       ? {
@@ -369,6 +371,7 @@ export async function POST(request: NextRequest) {
         coordination_mode: specs.coordinationMode ?? 'thematic',
         production_feasibility: specs.productionFeasibility ?? 3,
         risk_notes: specs.riskNotes ?? '',
+        base_shape: specs.baseShape ?? 'circle',
       }, 'concept_specs'),
       insertWithMissingColumnFallback('coil_specs', {
         concept_id: conceptId,

@@ -293,11 +293,17 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
     // Send just the updates to the API, not the full concept
     try {
-      await fetch(`/api/concepts/${id}`, {
+      const res = await fetch(`/api/concepts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalUpdates),
       });
+      if (!res.ok) {
+        // fetch() doesn't throw on HTTP errors — without this check a 4xx/5xx
+        // left the optimistic UI claiming success while the DB kept old data.
+        const body = await res.json().catch(() => ({}));
+        console.error(`Failed to persist concept update (${res.status}):`, body.error || body);
+      }
     } catch (err) {
       console.error('Failed to update concept:', err);
     }
@@ -328,6 +334,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
       coilImageUrl: original.coilImageUrl,
       baseImageUrl: original.baseImageUrl,
       combinedImageUrl: original.combinedImageUrl,
+      // Stamps-mode fields — without these, duplicating a stamps concept
+      // silently dropped every stamp and reverted the copy to standard mode.
+      designType: original.designType,
+      stamps: (original.stamps || []).map((s) => ({ ...s })),
+      coilOnly: original.coilOnly,
       priority: original.priority,
       lifecycleType: original.lifecycleType,
       specs: { ...original.specs },

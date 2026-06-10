@@ -6,6 +6,7 @@ import { PriorityBadge, Tag } from './ui';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { ImageDownloadButtons } from './image-download';
+import { conceptPrimaryImage } from '@/lib/concept-images';
 import { formatDate } from '@/lib/utils';
 
 type SortBy = 'archived_desc' | 'archived_asc' | 'name_asc' | 'name_desc' | 'collection';
@@ -371,14 +372,15 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
                   />
                 </div>
 
-                {/* Images */}
+                {/* Images — for stamps concepts the coil slot falls back
+                    to the first stamp so archived stamps aren't blank. */}
                 <div className="flex gap-2 shrink-0">
                   <div className="w-20 h-20 rounded-lg bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden relative group">
-                    {c.coilImageUrl ? (
+                    {conceptPrimaryImage(c) ? (
                       <>
-                        <img src={c.coilImageUrl} alt="Coil" className="w-full h-full object-contain" />
+                        <img src={conceptPrimaryImage(c)} alt="Design" className="w-full h-full object-contain" />
                         <div className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ImageDownloadButtons imageUrl={c.coilImageUrl} filename={`${c.name}-coil`} />
+                          <ImageDownloadButtons imageUrl={conceptPrimaryImage(c)} filename={`${c.name}-${c.coilImageUrl ? 'coil' : 'design'}`} />
                         </div>
                       </>
                     ) : (
@@ -467,16 +469,9 @@ export function ArchiveBrowser({ onOpenConcept }: { onOpenConcept: (id: string) 
                     className="w-3.5 h-3.5 rounded accent-accent cursor-pointer"
                   />
                 </div>
-                {c.coilImageUrl ? (
+                {conceptPrimaryImage(c) ? (
                   <img
-                    src={c.coilImageUrl}
-                    alt={c.name}
-                    className="w-full h-full object-contain cursor-pointer"
-                    onClick={() => onOpenConcept(c.id)}
-                  />
-                ) : c.baseImageUrl ? (
-                  <img
-                    src={c.baseImageUrl}
+                    src={conceptPrimaryImage(c)}
                     alt={c.name}
                     className="w-full h-full object-contain cursor-pointer"
                     onClick={() => onOpenConcept(c.id)}

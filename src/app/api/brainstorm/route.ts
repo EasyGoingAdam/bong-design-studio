@@ -109,11 +109,15 @@ export async function POST(request: NextRequest) {
         .insert(rows)
         .select();
 
-      // Return ideas WITH their db ids so we can mark as used later
-      const withIds = (inserted || []).map((row, idx) => ({
-        ...uniqueConcepts[idx],
-        id: row.id,
-      }));
+      // Return ideas WITH their db ids so we can mark as used later.
+      // Match by NAME, not array position — if the insert partially fails
+      // or returns rows out of order, positional indexing would pair ids
+      // with the wrong ideas.
+      const idByName = new Map((inserted || []).map((row) => [row.name, row.id]));
+      const withIds = uniqueConcepts.map((c) => ({
+        ...c,
+        id: idByName.get(c.name || 'Untitled'),
+      })).filter((c) => c.id);
       return NextResponse.json({ concepts: withIds, filteredOut: concepts.length - uniqueConcepts.length });
     }
 

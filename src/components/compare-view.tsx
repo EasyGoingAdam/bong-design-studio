@@ -1,5 +1,6 @@
 'use client';
 
+import { conceptHasImages, conceptPrimaryImage } from '@/lib/concept-images';
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
@@ -163,10 +164,10 @@ function ConceptColumn({
     <div className="bg-surface border border-border rounded-xl overflow-hidden flex flex-col">
       {/* Image */}
       <div className="aspect-square bg-background placeholder-pattern relative">
-        {c.coilImageUrl || c.baseImageUrl ? (
+        {conceptHasImages(c) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={c.combinedImageUrl || c.coilImageUrl || c.baseImageUrl}
+            src={c.combinedImageUrl || conceptPrimaryImage(c)}
             alt={c.name}
             className="w-full h-full object-cover"
           />
@@ -282,9 +283,9 @@ function Picker({
                 className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover text-left"
               >
                 <div className="w-10 h-10 rounded bg-background placeholder-pattern shrink-0 overflow-hidden">
-                  {c.coilImageUrl && (
+                  {conceptPrimaryImage(c) && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.coilImageUrl} alt="" className="w-full h-full object-cover" />
+                    <img src={conceptPrimaryImage(c)} alt="" className="w-full h-full object-cover" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

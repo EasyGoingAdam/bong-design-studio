@@ -134,7 +134,9 @@ export function MockupComposer({ concept, onClose }: Props) {
       return;
     }
     if (!concept.coilImageUrl) {
-      setError('This concept needs a generated coil design first.');
+      setError(concept.designType === 'stamps'
+        ? 'Mockups need a coil design — this is a stamps concept. Generate a standard coil design first.'
+        : 'This concept needs a generated coil design first.');
       return;
     }
     if (!openAIKey) {

@@ -5,12 +5,28 @@ import { StatusBadge, PriorityBadge, Tag } from './ui';
 import { ImageDownloadButtons } from './image-download';
 
 export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept; onClick: () => void; onGenerate?: () => void }) {
-  const hasImages = !!(concept.coilImageUrl || concept.baseImageUrl);
+  const isStamps = concept.designType === 'stamps' && (concept.stamps?.length || 0) > 0;
+  const hasImages = !!(concept.coilImageUrl || concept.baseImageUrl) || isStamps;
 
   return (
     <div className="w-full bg-surface border border-border rounded-xl p-4 hover:border-border-light transition-all text-left group">
-      {/* Image Row */}
+      {/* Image Row — stamps concepts tile their stamps instead of the
+          coil/base pair (those URLs are empty in stamps mode). */}
       <button onClick={onClick} className="w-full text-left">
+        {isStamps ? (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {(concept.stamps || []).slice(0, 4).map((s) => (
+              <div key={s.id} className="aspect-square rounded-lg bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden" title={s.subject}>
+                {s.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.imageUrl} alt={s.subject} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-[10px] text-muted px-1 truncate">{s.subject}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="flex gap-2 mb-3">
           <div className="flex-1 aspect-square rounded-lg bg-background placeholder-pattern border border-border flex items-center justify-center overflow-hidden">
             {concept.coilImageUrl ? (
@@ -27,6 +43,7 @@ export function ConceptCard({ concept, onClick, onGenerate }: { concept: Concept
             )}
           </div>
         </div>
+        )}
 
         {/* Info */}
         <h3 className="text-sm font-semibold truncate group-hover:text-accent transition-colors">{concept.name}</h3>

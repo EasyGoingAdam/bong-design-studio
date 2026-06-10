@@ -169,6 +169,7 @@ export async function PATCH(
         coordinationMode: 'coordination_mode',
         productionFeasibility: 'production_feasibility',
         riskNotes: 'risk_notes',
+        baseShape: 'base_shape',
       };
       for (const [camel, snake] of Object.entries(specsFieldMap)) {
         if (s[camel] !== undefined) {
@@ -176,9 +177,25 @@ export async function PATCH(
         }
       }
       if (Object.keys(specsUpdate).length > 0) {
-        updates.push(
-          supabaseAdmin.from('concept_specs').update(specsUpdate).eq('concept_id', id).select()
-        );
+        // Strip-and-retry on missing columns (mirrors the insert fallback
+        // in ../route.ts) so one un-migrated column — e.g. base_shape —
+        // can't silently sink the ENTIRE specs update.
+        updates.push((async () => {
+          const attempt = { ...specsUpdate };
+          for (let i = 0; i < 10; i++) {
+            const { error } = await supabaseAdmin
+              .from('concept_specs').update(attempt).eq('concept_id', id);
+            if (!error) return;
+            const m = error.message.match(/Could not find the '([^']+)' column/i);
+            if (!m || !(m[1] in attempt)) {
+              console.error('concept_specs update failed:', error.message);
+              return;
+            }
+            console.warn(`concept_specs missing column '${m[1]}' — stripping and retrying (run the matching migration)`);
+            delete attempt[m[1]];
+            if (Object.keys(attempt).length === 0) return;
+          }
+        })());
       }
     }
 

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+// Image generation/processing can take minutes — without this the
+// platform's default 60s function timeout kills slow renders mid-flight.
+export const maxDuration = 300;
 import { uploadImage } from '@/lib/supabase';
 import { withLog, log, timer } from '@/lib/log';
 

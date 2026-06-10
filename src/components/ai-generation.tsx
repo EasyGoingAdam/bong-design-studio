@@ -532,14 +532,16 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       let lastModel: string | undefined = coilData.model as string | undefined;
       let lastProvider: string | undefined = coilData.provider as string | undefined;
       let anyFellBack = !!coilData.fellBack;
+      let baseImageUrl = '';
 
       if (baseRes) {
         const baseData = await safeJsonResponse(baseRes);
         if (!baseRes.ok || !baseData.imageUrl) {
           throw new Error((baseData.error as string) || 'Failed to generate base image');
         }
-        setGeneratedBaseUrl(baseData.imageUrl as string);
-        addBaseToHistory(baseData.imageUrl as string, 'generated');
+        baseImageUrl = baseData.imageUrl as string;
+        setGeneratedBaseUrl(baseImageUrl);
+        addBaseToHistory(baseImageUrl, 'generated');
         lastModel = (baseData.model as string | undefined) || lastModel;
         lastProvider = (baseData.provider as string | undefined) || lastProvider;
         anyFellBack = anyFellBack || !!baseData.fellBack;
@@ -564,12 +566,11 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
       // the preview render.
       try {
         const coilUrl = (coilData.imageUrl as string) || '';
-        // BUG FIX: was reading the base body twice via baseRes.clone() —
-        // wasteful + fragile if streamed/buffered weirdly. The outer
-        // baseData captured above has imageUrl already; reuse it.
-        const baseUrl = baseRes
-          ? ((await safeJsonResponse(baseRes.clone())).imageUrl as string) || ''
-          : '';
+        // BUG FIX: this previously re-read the base body via
+        // baseRes.clone() — but clone() THROWS once the body has been
+        // consumed (which happened above), so auto-save failed on every
+        // coil+base generation. Reuse the URL captured above instead.
+        const baseUrl = baseImageUrl;
 
         // BUG FIX: detect a stale targetConceptId (concept was deleted
         // mid-session). Without this, addAIGeneration to a ghost id
@@ -1338,7 +1339,9 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                   }
                   return `✦ Generating… ${formatElapsed(genElapsedMs)} · still working`;
                 })()
-              : '✦ Generate Coil + Base Concepts'}
+              : designType === 'stamps'
+                ? 'Stamps mode — use the Generate Stamps button above ↑'
+                : '✦ Generate Coil + Base Concepts'}
           </button>
           {generating && (
             <div className="w-full h-1 bg-background rounded-full overflow-hidden mt-1">

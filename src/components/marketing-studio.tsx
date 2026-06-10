@@ -138,7 +138,7 @@ export function MarketingStudio() {
 
 function ConceptMarketingCard({ concept, onOpen }: { concept: Concept; onOpen: () => void }) {
   const hasGraphic = !!concept.marketingGraphicUrl;
-  const thumb = concept.marketingGraphicUrl || concept.coilImageUrl || concept.combinedImageUrl || concept.baseImageUrl;
+  const thumb = concept.marketingGraphicUrl || concept.coilImageUrl || concept.combinedImageUrl || concept.baseImageUrl || (concept.stamps || []).find((s) => s.imageUrl)?.imageUrl || '';
 
   return (
     <div

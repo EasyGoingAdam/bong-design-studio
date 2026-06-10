@@ -1,5 +1,6 @@
 'use client';
 
+import { conceptPrimaryImage } from '@/lib/concept-images';
 import { useAppStore } from '@/lib/store';
 import { StatCard, StatusBadge, PriorityBadge } from './ui';
 import { ConceptStatus } from '@/lib/types';
@@ -173,8 +174,8 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
                   className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white transition-colors text-left group"
                 >
                   <div className="w-10 h-10 rounded bg-background placeholder-pattern border border-border shrink-0 overflow-hidden">
-                    {c.coilImageUrl ? (
-                      <img src={c.coilImageUrl} alt="" className="w-full h-full object-contain" />
+                    {conceptPrimaryImage(c) ? (
+                      <img src={conceptPrimaryImage(c)} alt="" className="w-full h-full object-contain" />
                     ) : null}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -233,7 +234,7 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded bg-border placeholder-pattern shrink-0 overflow-hidden">
-                      {c.coilImageUrl && <img src={c.coilImageUrl} alt="" className="w-full h-full object-contain" />}
+                      {conceptPrimaryImage(c) && <img src={conceptPrimaryImage(c)} alt="" className="w-full h-full object-contain" />}
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{c.name}</div>
@@ -267,7 +268,7 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded bg-border placeholder-pattern shrink-0 overflow-hidden">
-                      {c.coilImageUrl && <img src={c.coilImageUrl} alt="" className="w-full h-full object-contain" />}
+                      {conceptPrimaryImage(c) && <img src={conceptPrimaryImage(c)} alt="" className="w-full h-full object-contain" />}
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{c.name}</div>
@@ -295,7 +296,7 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded bg-border placeholder-pattern shrink-0 overflow-hidden">
-                    {c.coilImageUrl && <img src={c.coilImageUrl} alt="" className="w-full h-full object-contain" />}
+                    {conceptPrimaryImage(c) && <img src={conceptPrimaryImage(c)} alt="" className="w-full h-full object-contain" />}
                   </div>
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{c.name}</div>

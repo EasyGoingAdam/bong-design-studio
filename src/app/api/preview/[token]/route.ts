@@ -43,12 +43,16 @@ export async function GET(
     return NextResponse.json({ error: 'Concept not available' }, { status: 404 });
   }
 
-  // Increment view counter — fire and forget
+  // Increment view counter — fire and forget, but handle rejection so a
+  // transient network failure can't surface as an unhandled rejection.
   supabaseAdmin
     .from('share_links')
     .update({ view_count: (link.view_count ?? 0) + 1 })
     .eq('token', token)
-    .then(() => undefined);
+    .then(
+      ({ error }) => { if (error) console.error('share_links view_count update failed:', error.message); },
+      (err) => console.error('share_links view_count update rejected:', err)
+    );
 
   // Sanitized payload — public-safe fields only
   return NextResponse.json({

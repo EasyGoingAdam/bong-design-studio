@@ -6,6 +6,7 @@ import { Concept, GenerationMode, CoilBaseRelationship, Stamp } from '@/lib/type
 import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
 import { ImageDownloadButtons } from './image-download';
+import { getStampTheme } from '@/lib/concept-images';
 import { useToast } from './toast';
 import { EditImageModal } from './edit-image-modal';
 import { safeJsonResponse } from '@/lib/fetch-helpers';
@@ -130,13 +131,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     setStampsBusy(true);
     setError('');
     try {
-      // Pull a clean theme from the concept. Try first non-meta tag, then
-      // strip "stamps" / "stamp" off the concept name as a fallback.
-      const themeFromTag = (concept.tags || []).find(
-        (t) => !['stamps', 'auto-saved', `${stampCount}-pack`].includes(t.toLowerCase())
-      );
-      const themeFromName = concept.name.replace(/\bstamps?\b/gi, '').trim();
-      const theme = (themeFromTag || themeFromName || concept.name).trim();
+      const theme = getStampTheme(concept);
 
       const res = await fetch('/api/generate-stamps', {
         method: 'POST',
@@ -225,11 +220,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     setRegenStampId(stamp.id);
     setError('');
     try {
-      const themeFromTag = (concept.tags || []).find(
-        (t) => !['stamps', 'auto-saved', `${stampCount}-pack`].includes(t.toLowerCase())
-      );
-      const themeFromName = concept.name.replace(/\bstamps?\b/gi, '').trim();
-      const theme = (themeFromTag || themeFromName || concept.name).trim();
+      const theme = getStampTheme(concept);
       const res = await fetch('/api/generate-stamps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

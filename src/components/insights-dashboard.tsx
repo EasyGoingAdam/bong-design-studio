@@ -1,5 +1,6 @@
 'use client';
 
+import { conceptHasImages } from '@/lib/concept-images';
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Concept, KANBAN_COLUMNS, STATUS_LABELS } from '@/lib/types';
@@ -61,7 +62,7 @@ export function InsightsDashboard({ onOpenConcept }: { onOpenConcept: (id: strin
         ttManu.push(days);
       }
       if (c.priority === 'urgent') urgent++;
-      if (c.coilImageUrl || c.baseImageUrl) withImages++;
+      if (conceptHasImages(c)) withImages++;
     }
 
     const avgTtManu = ttManu.length

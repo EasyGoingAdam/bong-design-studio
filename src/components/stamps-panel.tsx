@@ -5,6 +5,7 @@ import { Concept, Stamp } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { log } from '@/lib/log';
+import { getStampTheme } from '@/lib/concept-images';
 import { ImageDownloadButtons } from './image-download';
 
 /**
@@ -30,12 +31,7 @@ export function StampsPanel({ concept }: { concept: Concept }) {
   const [busyAll, setBusyAll] = useState(false);
 
   const stamps = concept.stamps || [];
-  const themeFromConcept = (() => {
-    // Theme might live in name ("baseball stamps"), description, or tags.
-    // Use the first tag if it looks like a theme, else fall back to name.
-    const firstTag = (concept.tags || []).find((t) => !['stamps', `${stamps.length}-pack`].includes(t.toLowerCase()));
-    return firstTag || concept.name.replace(/\bstamps?\b/i, '').trim() || concept.name;
-  })();
+  const themeFromConcept = getStampTheme(concept);
 
   const saveStamps = (next: Stamp[]) => {
     updateConcept(concept.id, { stamps: next });
