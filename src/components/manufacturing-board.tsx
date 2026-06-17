@@ -6,6 +6,7 @@ import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { ProductionJobModal } from './production-job-modal';
 import { ProductionReports } from './production-reports';
+import { ProductionCalendar } from './production-calendar';
 import { ProductionSettingsModal } from './production-settings-modal';
 import { ProductionCloseoutModal } from './production-closeout-modal';
 import { ConfirmDialog } from './confirm-dialog';
@@ -58,7 +59,7 @@ export function ManufacturingBoard() {
   const [aiBusy, setAiBusy] = useState<'schedule' | 'review' | null>(null);
   const [aiReview, setAiReview] = useState<{ approved_to_lock: boolean; issues: string[]; recommended_changes: string[] } | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [view, setView] = useState<'board' | 'reports'>('board');
+  const [view, setView] = useState<'board' | 'calendar' | 'reports'>('board');
   const [showSettings, setShowSettings] = useState(false);
   const [showCloseout, setShowCloseout] = useState(false);
 
@@ -363,7 +364,8 @@ export function ManufacturingBoard() {
           </div>
           <div className="inline-flex rounded-lg border border-border overflow-hidden">
             <button onClick={() => setView('board')} className={`px-3 py-1.5 text-sm ${view === 'board' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Board</button>
-            <button onClick={() => setView('reports')} className={`px-3 py-1.5 text-sm ${view === 'reports' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Reports</button>
+            <button onClick={() => setView('calendar')} className={`px-3 py-1.5 text-sm border-l border-border ${view === 'calendar' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Calendar</button>
+            <button onClick={() => setView('reports')} className={`px-3 py-1.5 text-sm border-l border-border ${view === 'reports' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Reports</button>
           </div>
         </div>
         {view === 'board' && (
@@ -380,6 +382,10 @@ export function ManufacturingBoard() {
       </div>
 
       {view === 'reports' && <ProductionReports />}
+
+      {view === 'calendar' && (
+        <ProductionCalendar onPickDay={(d) => { setViewedDate(d); setView('board'); }} />
+      )}
 
       {view === 'board' && (
       <>
