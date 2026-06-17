@@ -5,6 +5,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { ProductionJobModal } from './production-job-modal';
+import { ProductionReports } from './production-reports';
 import { ConfirmDialog } from './confirm-dialog';
 import {
   ProductionJob,
@@ -53,6 +54,7 @@ export function ManufacturingBoard() {
   const [aiBusy, setAiBusy] = useState<'schedule' | 'review' | null>(null);
   const [aiReview, setAiReview] = useState<{ approved_to_lock: boolean; issues: string[]; recommended_changes: string[] } | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [view, setView] = useState<'board' | 'reports'>('board');
 
   const activeMachines = useMemo(
     () => machines.filter((m) => m.active).sort((a, b) => a.position - b.position),
@@ -327,10 +329,17 @@ export function ManufacturingBoard() {
     <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold">Manufacturing</h2>
-          <p className="text-xs text-muted">Daily laser production schedule · {activeMachines.length} machines</p>
+        <div className="min-w-0 flex items-center gap-3">
+          <div>
+            <h2 className="text-xl font-semibold">Manufacturing</h2>
+            <p className="text-xs text-muted">Daily laser production schedule · {activeMachines.length} machines</p>
+          </div>
+          <div className="inline-flex rounded-lg border border-border overflow-hidden">
+            <button onClick={() => setView('board')} className={`px-3 py-1.5 text-sm ${view === 'board' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Board</button>
+            <button onClick={() => setView('reports')} className={`px-3 py-1.5 text-sm ${view === 'reports' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Reports</button>
+          </div>
         </div>
+        {view === 'board' && (
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => setViewedDate(addDays(viewedDate, -1))} className="px-2 py-1.5 text-sm border border-border rounded-lg hover:border-foreground">←</button>
           <button onClick={() => setViewedDate(todayKey())} className={`px-3 py-1.5 text-sm rounded-lg border ${viewedDate === todayKey() ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'}`}>Today</button>
@@ -340,8 +349,13 @@ export function ManufacturingBoard() {
           <span className="text-sm font-medium ml-1">{dateLabel}</span>
           {locked && <span className="text-[11px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full font-medium">🔒 Locked</span>}
         </div>
+        )}
       </div>
 
+      {view === 'reports' && <ProductionReports />}
+
+      {view === 'board' && (
+      <>
       {/* Action bar */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <button onClick={openCreate} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg font-medium">+ Manual Job</button>
@@ -461,6 +475,8 @@ export function ManufacturingBoard() {
           </Column>
         </div>
       </DragDropContext>
+      </>
+      )}
 
       {showModal && (
         <ProductionJobModal job={modalJob || undefined} onClose={() => { setShowModal(false); setModalJob(null); }} />
