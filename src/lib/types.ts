@@ -267,3 +267,163 @@ export const KANBAN_COLUMNS: ConceptStatus[] = [
   'manufactured',
   'archived',
 ];
+
+// ───────────────────────────────────────────────────────────────────────────
+// Manufacturing / Production Schedule
+// ───────────────────────────────────────────────────────────────────────────
+
+export type ProductionComplexity = 'low' | 'medium' | 'high' | 'very_high';
+export type SetupComplexity = 'low' | 'medium' | 'high';
+export type ProductionJobStatus =
+  | 'backlog'
+  | 'scheduled'
+  | 'in_progress'
+  | 'paused'
+  | 'completed'
+  | 'rework'
+  | 'held';
+export type ProductionSourceType = 'manual' | 'workflow' | 'shipstation';
+
+export interface Machine {
+  id: string;
+  name: string;
+  active: boolean;
+  dailyPieceTarget: number;
+  /** Available run hours/day — drives utilization %. */
+  dailyHours: number;
+  notes: string;
+  position: number;
+}
+
+export interface ProductionJob {
+  id: string;
+  title: string;
+  sourceType: ProductionSourceType;
+  sourceId: string;
+  /** Design Studio concept this job was created from (workflow source). */
+  conceptId?: string;
+  orderId: string;
+  shipstationOrderId: string;
+  productType: string;
+  sku: string;
+  quantity: number;
+  complexity: ProductionComplexity;
+  /** Alignment/fixturing difficulty — separate from engraving complexity. */
+  setupComplexity: SetupComplexity;
+  alignmentDifficulty: 'low' | 'medium' | 'high';
+  detailLevel: string;
+  etchingZones: number;
+  repeatDesign: boolean;
+  estimatedSetupMinutes: number;
+  estimatedRunMinutes: number;
+  estimatedFinishMinutes: number;
+  estimatedTotalMinutes: number;
+  actualStartTime?: string;
+  actualEndTime?: string;
+  actualTotalMinutes?: number;
+  pausedAt?: string;
+  accumulatedMinutes: number;
+  machineId?: string;
+  operatorId: string;
+  operatorName: string;
+  scheduledDate?: string;     // YYYY-MM-DD
+  scheduledPosition: number;
+  status: ProductionJobStatus;
+  priority: PriorityLevel;
+  dueDate?: string;
+  shipByDate?: string;
+  orderDate?: string;
+  rush: boolean;
+  revenueValue: number;
+  inventoryAvailable: boolean;
+  designName: string;
+  designImageUrl: string;
+  customerName: string;
+  tags: string[];
+  notes: string;
+  designNotes: string;
+  overrideReason: string;
+  lockedScheduleId?: string;
+  quantityCompleted: number;
+  quantityFailed: number;
+  reworkReason: string;
+  scrapCount: number;
+  aiConfidence?: number;
+  aiReasoning: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductionScheduleDay {
+  id: string;
+  date: string;
+  locked: boolean;
+  lockedAt?: string;
+  lockedBy: string;
+  notes: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  aiSummary?: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductionLog {
+  id: string;
+  productionJobId: string;
+  action: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  oldValue?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  newValue?: any;
+  userId: string;
+  userName: string;
+  reason: string;
+  createdAt: string;
+}
+
+export const PRODUCTION_STATUS_LABELS: Record<ProductionJobStatus, string> = {
+  backlog: 'Backlog',
+  scheduled: 'Scheduled',
+  in_progress: 'In Progress',
+  paused: 'Paused',
+  completed: 'Completed',
+  rework: 'Needs Rework',
+  held: 'Held / Problem',
+};
+
+export const COMPLEXITY_LABELS: Record<ProductionComplexity, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  very_high: 'Very High',
+};
+
+/** Baseline minutes per complexity tier (total). AI / manual entry override. */
+export const COMPLEXITY_BASE_MINUTES: Record<ProductionComplexity, number> = {
+  low: 30,
+  medium: 60,
+  high: 90,
+  very_high: 120,
+};
+
+/** Override reasons logged when a locked schedule is changed. */
+export const OVERRIDE_REASONS = [
+  'Machine issue',
+  'Design issue',
+  'Material issue',
+  'Order priority changed',
+  'Operator issue',
+  'Rework needed',
+  'Other',
+] as const;
+
+/** Quality / rework reasons. */
+export const REWORK_REASONS = [
+  'Alignment issue',
+  'Burn depth issue',
+  'Wrong design',
+  'Wrong piece',
+  'Machine issue',
+  'Customer change',
+  'Other',
+] as const;

@@ -18,6 +18,7 @@ import { PresetLibrary } from './preset-library';
 import { BenchmarkDashboard } from './benchmark-dashboard';
 import { MarketingStudio } from './marketing-studio';
 import { MockupStudio } from './mockup-studio';
+import { ManufacturingBoard } from './manufacturing-board';
 import { HolidayCalendar } from './holiday-calendar';
 import { CustomerDesigns } from './customer-designs';
 import { UpcomingHolidayBanner } from './upcoming-holiday-banner';
@@ -27,10 +28,11 @@ import { ConceptLineage } from './concept-lineage';
 import { DropPlanner } from './drop-planner';
 import { ToastProvider } from './toast';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
+  { id: 'manufacturing', label: 'Manufacturing', icon: '⚒' },
   { id: 'customer', label: 'Customer Designs', icon: '◐' },
   { id: 'drops', label: 'Drops', icon: '◇' },
   { id: 'calendar', label: 'Calendar', icon: '◷' },
@@ -110,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (tab) {
       // Tab id is validated against the union below; anything we don't
       // know is ignored.
-      const validTabs: Tab[] = ['workflow','calendar','customer','drops','brainstorm','ai','presets','mockup','marketing','specs','archive','dashboard','concepts','insights','compare','lineage','benchmark'];
+      const validTabs: Tab[] = ['workflow','manufacturing','calendar','customer','drops','brainstorm','ai','presets','mockup','marketing','specs','archive','dashboard','concepts','insights','compare','lineage','benchmark'];
       if ((validTabs as string[]).includes(tab)) {
         setActiveTab(tab as Tab);
       }
@@ -342,6 +344,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onOpenArchive={() => setActiveTab('archive')}
           />
         )}
+        {initialized && activeTab === 'manufacturing' && <ManufacturingBoard />}
         {initialized && activeTab === 'specs' && <SpecsDatabase />}
         {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
         {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}

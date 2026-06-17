@@ -10,6 +10,9 @@ import {
   ConceptVersion,
   AIGenerationRecord,
   ManufacturingRecord,
+  ProductionJob,
+  Machine,
+  ProductionScheduleDay,
 } from './types';
 import { sampleUsers } from './sample-data';
 import { safeJsonArray, safeJsonResponse } from './fetch-helpers';
@@ -23,6 +26,11 @@ interface AppState {
   geminiKey: string;
   loading: boolean;
   initialized: boolean;
+
+  // Manufacturing / production
+  productionJobs: ProductionJob[];
+  machines: Machine[];
+  scheduleDays: ProductionScheduleDay[];
 
   // Init
   initialize: () => Promise<void>;
@@ -64,6 +72,14 @@ interface AppState {
 
   // Refresh from server
   refreshConcepts: () => Promise<void>;
+
+  // Manufacturing actions
+  loadProduction: () => Promise<void>;
+  addProductionJob: (job: Partial<ProductionJob>) => Promise<ProductionJob | null>;
+  updateProductionJob: (id: string, patch: Partial<ProductionJob> & { overrideReason?: string }) => Promise<void>;
+  deleteProductionJob: (id: string) => Promise<void>;
+  setScheduleDay: (day: ProductionScheduleDay) => void;
+  lockScheduleDay: (date: string, locked: boolean) => Promise<void>;
 }
 
 
@@ -89,6 +105,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   geminiKey: '',
   loading: false,
   initialized: false,
+  productionJobs: [],
+  machines: [],
+  scheduleDays: [],
 
   setAuthUser: (userId, email) => {
     // Load profile from Supabase
@@ -171,6 +190,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
     } finally {
       set({ loading: false, initialized: true });
     }
+
+    // Load manufacturing data in the background — never block the main
+    // app boot on it, and never throw if the tables aren't migrated yet.
+    get().loadProduction();
   },
 
   refreshConcepts: async () => {
@@ -534,5 +557,104 @@ export const useAppStore = create<AppState>()((set, get) => ({
       currentUser: { ...state.currentUser, name, avatar: name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) },
     }));
     saveSetting('user_name', name);
+  },
+
+  // ── Manufacturing ──────────────────────────────────────────────────────
+  loadProduction: async () => {
+    try {
+      const [jobsRes, machinesRes, daysRes] = await Promise.all([
+        fetch('/api/production/jobs'),
+        fetch('/api/production/machines'),
+        fetch('/api/production/schedule'),
+      ]);
+      if (jobsRes.ok) set({ productionJobs: (await safeJsonArray(jobsRes)) as unknown as ProductionJob[] });
+      if (machinesRes.ok) set({ machines: (await safeJsonArray(machinesRes)) as unknown as Machine[] });
+      if (daysRes.ok) set({ scheduleDays: (await safeJsonArray(daysRes)) as unknown as ProductionScheduleDay[] });
+    } catch (err) {
+      // Tables may not be migrated yet — degrade silently, the board shows
+      // an empty state rather than crashing the app.
+      console.error('Failed to load production data:', err);
+    }
+  },
+
+  addProductionJob: async (partial) => {
+    try {
+      const res = await fetch('/api/production/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...partial, actorName: get().currentUser.name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Failed to create production job:', body.error || res.status);
+        return null;
+      }
+      const job = (await res.json()) as ProductionJob;
+      set((state) => ({ productionJobs: [job, ...state.productionJobs] }));
+      return job;
+    } catch (err) {
+      console.error('Failed to create production job:', err);
+      return null;
+    }
+  },
+
+  updateProductionJob: async (id, patch) => {
+    // Optimistic update.
+    set((state) => ({
+      productionJobs: state.productionJobs.map((j) =>
+        j.id === id ? { ...j, ...patch, updatedAt: new Date().toISOString() } : j,
+      ),
+    }));
+    try {
+      const res = await fetch(`/api/production/jobs/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...patch, actorName: get().currentUser.name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error(`Failed to persist production job update (${res.status}):`, body.error || body);
+      } else {
+        // Reconcile with the server's canonical row (computed fields, etc.).
+        const fresh = (await res.json()) as ProductionJob;
+        set((state) => ({
+          productionJobs: state.productionJobs.map((j) => (j.id === id ? fresh : j)),
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to update production job:', err);
+    }
+  },
+
+  deleteProductionJob: async (id) => {
+    set((state) => ({ productionJobs: state.productionJobs.filter((j) => j.id !== id) }));
+    try {
+      await fetch(`/api/production/jobs/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete production job:', err);
+    }
+  },
+
+  setScheduleDay: (day) => {
+    set((state) => {
+      const others = state.scheduleDays.filter((d) => d.date !== day.date);
+      return { scheduleDays: [...others, day] };
+    });
+  },
+
+  lockScheduleDay: async (date, locked) => {
+    try {
+      const res = await fetch('/api/production/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, locked, lockedBy: get().currentUser.name }),
+      });
+      if (res.ok) {
+        const day = (await res.json()) as ProductionScheduleDay;
+        if (day) get().setScheduleDay(day);
+      }
+    } catch (err) {
+      console.error('Failed to lock/unlock schedule:', err);
+    }
   },
 }));
