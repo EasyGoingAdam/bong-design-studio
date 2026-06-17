@@ -13,6 +13,8 @@ import {
   ProductionJob,
   Machine,
   ProductionScheduleDay,
+  ProductionSettings,
+  DEFAULT_PRODUCTION_SETTINGS,
 } from './types';
 import { sampleUsers } from './sample-data';
 import { safeJsonArray, safeJsonResponse } from './fetch-helpers';
@@ -31,6 +33,7 @@ interface AppState {
   productionJobs: ProductionJob[];
   machines: Machine[];
   scheduleDays: ProductionScheduleDay[];
+  productionSettings: ProductionSettings;
 
   // Init
   initialize: () => Promise<void>;
@@ -80,6 +83,7 @@ interface AppState {
   deleteProductionJob: (id: string) => Promise<void>;
   setScheduleDay: (day: ProductionScheduleDay) => void;
   lockScheduleDay: (date: string, locked: boolean) => Promise<void>;
+  setProductionSettings: (patch: Partial<ProductionSettings>) => void;
 }
 
 
@@ -108,6 +112,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   productionJobs: [],
   machines: [],
   scheduleDays: [],
+  productionSettings: DEFAULT_PRODUCTION_SETTINGS,
 
   setAuthUser: (userId, email) => {
     // Load profile from Supabase
@@ -183,6 +188,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
               avatar: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
             },
           });
+        }
+        if (settings.production_settings) {
+          // Merge stored overrides onto defaults so new fields added later
+          // still have sane values for existing rows.
+          try {
+            const parsed = JSON.parse(settings.production_settings as string);
+            set({ productionSettings: { ...DEFAULT_PRODUCTION_SETTINGS, ...parsed } });
+          } catch { /* keep defaults on parse error */ }
         }
       }
     } catch (err) {
@@ -640,6 +653,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const others = state.scheduleDays.filter((d) => d.date !== day.date);
       return { scheduleDays: [...others, day] };
     });
+  },
+
+  setProductionSettings: (patch) => {
+    const next = { ...get().productionSettings, ...patch };
+    set({ productionSettings: next });
+    saveSetting('production_settings', JSON.stringify(next));
   },
 
   lockScheduleDay: async (date, locked) => {

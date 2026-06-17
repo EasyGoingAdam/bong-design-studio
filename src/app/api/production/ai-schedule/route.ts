@@ -47,6 +47,15 @@ export const POST = withLog('production.ai_schedule', async (req: NextRequest) =
   const workdayStart = (settings.workdayStart as string) || '09:00';
   const workdayHours = Number(settings.workdayHours ?? 8);
   const bufferPct = Number(settings.bufferPct ?? 15);
+  // Admin-tuned 1-5 weights (higher = stronger). Defaults match the UI.
+  const w = (settings.weights ?? {}) as Record<string, number>;
+  const weights = {
+    dueDate: w.dueDate ?? 5,
+    revenue: w.revenue ?? 3,
+    rushBoost: w.rushBoost ?? 5,
+    complexitySpread: w.complexitySpread ?? 3,
+    testingPriority: w.testingPriority ?? 1,
+  };
 
   const system =
     'You are a production scheduler for a 2-machine laser-etching shop. ' +
@@ -58,6 +67,10 @@ export const POST = withLog('production.ai_schedule', async (req: NextRequest) =
     '4) Respect each machine\'s available hours; keep a buffer of ' + bufferPct + '% for issues. ' +
     '5) Avoid stacking many high/very_high complexity jobs back-to-back on one machine. ' +
     '6) Batch similar productType where possible; put lower-risk jobs earlier. ' +
+    'PRIORITY WEIGHTS (1=minor, 5=dominant) — weigh these against each other: ' +
+    `due-date urgency=${weights.dueDate}, revenue value=${weights.revenue}, ` +
+    `rush-order boost=${weights.rushBoost}, complexity-spreading=${weights.complexitySpread}, ` +
+    `testing-job priority=${weights.testingPriority}. ` +
     'Estimate start/end clock times sequentially per machine starting at ' + workdayStart + '. ' +
     'Schema: { "schedule_date": string, "assignments": [ { "job_id": string, ' +
     '"machine_id": string, "position": int, "start_time": "HH:MM", "end_time": "HH:MM", ' +

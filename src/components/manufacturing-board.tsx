@@ -6,7 +6,9 @@ import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { ProductionJobModal } from './production-job-modal';
 import { ProductionReports } from './production-reports';
+import { ProductionSettingsModal } from './production-settings-modal';
 import { ConfirmDialog } from './confirm-dialog';
+import { workdayHours } from '@/lib/types';
 import {
   ProductionJob,
   Machine,
@@ -40,7 +42,7 @@ const COMPLEXITY_BADGE: Record<string, string> = {
 
 export function ManufacturingBoard() {
   const {
-    productionJobs, machines, scheduleDays, currentUser, concepts, openAIKey,
+    productionJobs, machines, scheduleDays, currentUser, concepts, openAIKey, productionSettings,
     updateProductionJob, deleteProductionJob, addProductionJob, lockScheduleDay, setScheduleDay,
   } = useAppStore();
   const { toast } = useToast();
@@ -55,6 +57,7 @@ export function ManufacturingBoard() {
   const [aiReview, setAiReview] = useState<{ approved_to_lock: boolean; issues: string[]; recommended_changes: string[] } | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [view, setView] = useState<'board' | 'reports'>('board');
+  const [showSettings, setShowSettings] = useState(false);
 
   const activeMachines = useMemo(
     () => machines.filter((m) => m.active).sort((a, b) => a.position - b.position),
@@ -226,11 +229,30 @@ export function ManufacturingBoard() {
       const candidates = [
         ...dayJobs.filter((j) => j.status !== 'completed'),
         ...backlog.filter((j) => j.inventoryAvailable),
-      ];
+      ].slice(0, productionSettings.maxJobsPerPlan);
       const res = await fetch('/api/production/ai-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: viewedDate, jobs: candidates, machines: activeMachines, apiKey: openAIKey }),
+        body: JSON.stringify({
+          date: viewedDate,
+          jobs: candidates,
+          machines: activeMachines,
+          apiKey: openAIKey,
+          model: productionSettings.model,
+          settings: {
+            workdayStart: productionSettings.workdayStart,
+            workdayHours: workdayHours(productionSettings),
+            bufferPct: productionSettings.bufferPct,
+            dailyPieceTarget: productionSettings.dailyPieceTarget,
+            weights: {
+              dueDate: productionSettings.dueDateWeight,
+              revenue: productionSettings.revenueWeight,
+              rushBoost: productionSettings.rushBoost,
+              complexitySpread: productionSettings.complexityPenalty,
+              testingPriority: productionSettings.testingPriority,
+            },
+          },
+        }),
       });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'AI schedule failed', 'error'); return; }
@@ -277,6 +299,7 @@ export function ManufacturingBoard() {
           backlogJobs: backlog,
           machines: activeMachines,
           apiKey: openAIKey,
+          model: productionSettings.model,
         }),
       });
       const data = await res.json();
@@ -368,6 +391,7 @@ export function ManufacturingBoard() {
             <button onClick={runAIReview} disabled={aiBusy !== null} className="px-3 py-1.5 text-sm border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 disabled:opacity-50">
               {aiBusy === 'review' ? 'Reviewing…' : '✦ AI Review'}
             </button>
+            <button onClick={() => setShowSettings(true)} className="px-3 py-1.5 text-sm border border-border rounded-lg hover:border-foreground" title="AI production settings">⚙ AI Settings</button>
             <button onClick={toggleLock} className={`px-3 py-1.5 text-sm rounded-lg font-medium ml-auto ${locked ? 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200' : 'bg-foreground text-background hover:opacity-90'}`}>
               {locked ? '🔓 Unlock Schedule' : '🔒 Lock Today’s Schedule'}
             </button>
@@ -481,6 +505,8 @@ export function ManufacturingBoard() {
       {showModal && (
         <ProductionJobModal job={modalJob || undefined} onClose={() => { setShowModal(false); setModalJob(null); }} />
       )}
+
+      {showSettings && <ProductionSettingsModal onClose={() => setShowSettings(false)} />}
 
       {showWorkflowPicker && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowWorkflowPicker(false)}>

@@ -417,6 +417,47 @@ export const OVERRIDE_REASONS = [
   'Other',
 ] as const;
 
+/**
+ * Admin-tunable settings for the AI production brain. Persisted in
+ * app_settings under the key 'production_settings' as JSON. All weights are
+ * 1-5 (higher = stronger influence on the AI schedule).
+ */
+export interface ProductionSettings {
+  model: string;             // OpenAI model used for planning/review
+  maxJobsPerPlan: number;    // cap candidates sent to the AI per request
+  workdayStart: string;      // 'HH:MM'
+  workdayEnd: string;        // 'HH:MM'
+  bufferPct: number;         // % of machine time reserved for issues
+  dailyPieceTarget: number;  // default per-machine piece target
+  revenueWeight: number;     // 1-5
+  dueDateWeight: number;     // 1-5
+  complexityPenalty: number; // 1-5 — how hard to avoid stacking hard jobs
+  testingPriority: number;   // 1-5 — how much to favor testing/internal jobs
+  rushBoost: number;         // 1-5 — how strongly rush orders float up
+}
+
+export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
+  model: 'gpt-4o',
+  maxJobsPerPlan: 40,
+  workdayStart: '09:00',
+  workdayEnd: '17:00',
+  bufferPct: 15,
+  dailyPieceTarget: 4,
+  revenueWeight: 3,
+  dueDateWeight: 5,
+  complexityPenalty: 3,
+  testingPriority: 1,
+  rushBoost: 5,
+};
+
+/** Workday length in hours derived from start/end ('HH:MM'). */
+export function workdayHours(s: ProductionSettings): number {
+  const [sh, sm] = s.workdayStart.split(':').map(Number);
+  const [eh, em] = s.workdayEnd.split(':').map(Number);
+  const mins = (eh * 60 + em) - (sh * 60 + sm);
+  return mins > 0 ? Math.round((mins / 60) * 10) / 10 : 8;
+}
+
 /** Quality / rework reasons. */
 export const REWORK_REASONS = [
   'Alignment issue',
