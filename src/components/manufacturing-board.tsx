@@ -7,6 +7,7 @@ import { useToast } from './toast';
 import { ProductionJobModal } from './production-job-modal';
 import { ProductionReports } from './production-reports';
 import { ProductionSettingsModal } from './production-settings-modal';
+import { ProductionCloseoutModal } from './production-closeout-modal';
 import { ConfirmDialog } from './confirm-dialog';
 import { workdayHours } from '@/lib/types';
 import {
@@ -44,6 +45,7 @@ export function ManufacturingBoard() {
   const {
     productionJobs, machines, scheduleDays, currentUser, concepts, openAIKey, productionSettings,
     updateProductionJob, deleteProductionJob, addProductionJob, lockScheduleDay, setScheduleDay,
+    reopenDay,
   } = useAppStore();
   const { toast } = useToast();
 
@@ -58,6 +60,7 @@ export function ManufacturingBoard() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [view, setView] = useState<'board' | 'reports'>('board');
   const [showSettings, setShowSettings] = useState(false);
+  const [showCloseout, setShowCloseout] = useState(false);
 
   const activeMachines = useMemo(
     () => machines.filter((m) => m.active).sort((a, b) => a.position - b.position),
@@ -66,6 +69,7 @@ export function ManufacturingBoard() {
 
   const scheduleDay = scheduleDays.find((d) => d.date === viewedDate);
   const locked = !!scheduleDay?.locked;
+  const closed = !!scheduleDay?.closed;
 
   // Partition jobs for the viewed day.
   const dayJobs = useMemo(
@@ -383,6 +387,16 @@ export function ManufacturingBoard() {
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <button onClick={openCreate} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg font-medium">+ Manual Job</button>
         <button onClick={() => setShowWorkflowPicker(true)} className="px-3 py-1.5 text-sm border border-border rounded-lg hover:border-foreground">+ From Design Studio {eligibleConcepts.length > 0 && <span className="ml-1 text-[10px] bg-accent/10 text-accent px-1.5 rounded-full">{eligibleConcepts.length}</span>}</button>
+        {closed ? (
+          <span className="flex items-center gap-2 px-3 py-1.5 text-sm bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg">
+            ✓ Day closed{scheduleDay?.closedBy ? ` by ${scheduleDay.closedBy}` : ''}
+            {isAdmin && (
+              <button onClick={() => reopenDay(viewedDate)} className="text-[11px] underline hover:no-underline">Reopen</button>
+            )}
+          </span>
+        ) : (
+          <button onClick={() => setShowCloseout(true)} className="px-3 py-1.5 text-sm border border-foreground/30 rounded-lg hover:bg-surface-hover">✓ Close Out Day</button>
+        )}
         {isAdmin && (
           <>
             <button onClick={generateAISchedule} disabled={aiBusy !== null} className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:opacity-50">
@@ -420,6 +434,15 @@ export function ManufacturingBoard() {
               <ul className="list-disc ml-5 space-y-0.5">{aiReview.recommended_changes.map((s, i) => <li key={i}>{s}</li>)}</ul>
             </div>
           )}
+        </div>
+      )}
+
+      {closed && scheduleDay?.closeout && (
+        <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm text-emerald-900">
+          <div className="font-semibold mb-0.5">Day closed{scheduleDay.closedAt ? ` · ${new Date(scheduleDay.closedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs"><span className="font-medium">Completed:</span> {scheduleDay.closeout.completedSummary}</div>
+          {scheduleDay.closeout.unfinishedSummary && <div className="text-xs whitespace-pre-line mt-0.5"><span className="font-medium">Unfinished:</span> {scheduleDay.closeout.unfinishedSummary}</div>}
+          {scheduleDay.closeout.notes && <div className="text-xs mt-0.5"><span className="font-medium">Notes:</span> {scheduleDay.closeout.notes}</div>}
         </div>
       )}
 
@@ -507,6 +530,16 @@ export function ManufacturingBoard() {
       )}
 
       {showSettings && <ProductionSettingsModal onClose={() => setShowSettings(false)} />}
+
+      {showCloseout && (
+        <ProductionCloseoutModal
+          date={viewedDate}
+          completedPieces={summary.completedPieces}
+          targetPieces={summary.targetPieces}
+          unfinished={dayJobs.filter((j) => !['completed', 'held'].includes(j.status))}
+          onClose={() => setShowCloseout(false)}
+        />
+      )}
 
       {showWorkflowPicker && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowWorkflowPicker(false)}>

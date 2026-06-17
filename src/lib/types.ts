@@ -354,6 +354,16 @@ export interface ProductionJob {
   updatedAt: string;
 }
 
+export interface ProductionCloseout {
+  completedSummary: string;   // what got made
+  unfinishedSummary: string;  // what didn't + why
+  notes: string;
+  // snapshot of the day's numbers at close time
+  completedPieces: number;
+  targetPieces: number;
+  unfinishedJobs: number;
+}
+
 export interface ProductionScheduleDay {
   id: string;
   date: string;
@@ -361,6 +371,10 @@ export interface ProductionScheduleDay {
   lockedAt?: string;
   lockedBy: string;
   notes: string;
+  closed: boolean;
+  closedAt?: string;
+  closedBy: string;
+  closeout?: ProductionCloseout;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   aiSummary?: any;
   createdAt: string;

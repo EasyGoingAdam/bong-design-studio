@@ -54,6 +54,12 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.notes !== undefined) patch.notes = body.notes;
     if (body.aiSummary !== undefined) patch.ai_summary = body.aiSummary;
+    if (body.closed !== undefined) {
+      patch.closed = body.closed;
+      patch.closed_at = body.closed ? new Date().toISOString() : null;
+      patch.closed_by = body.closed ? (body.closedBy ?? '') : '';
+    }
+    if (body.closeout !== undefined) patch.closeout = body.closeout;
 
     // Upsert the day row.
     const existing = await supabaseAdmin
@@ -85,6 +91,13 @@ export async function PATCH(request: NextRequest) {
         action: body.locked ? 'schedule.lock' : 'schedule.unlock',
         newValue: { date },
         userName: body.lockedBy,
+      });
+    }
+    if (body.closed !== undefined) {
+      logProduction({
+        action: body.closed ? 'schedule.closeout' : 'schedule.reopen',
+        newValue: body.closed ? { date, closeout: body.closeout } : { date },
+        userName: body.closedBy,
       });
     }
 

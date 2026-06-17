@@ -15,6 +15,7 @@ import {
   ProductionScheduleDay,
   ProductionSettings,
   DEFAULT_PRODUCTION_SETTINGS,
+  ProductionCloseout,
 } from './types';
 import { sampleUsers } from './sample-data';
 import { safeJsonArray, safeJsonResponse } from './fetch-helpers';
@@ -84,6 +85,8 @@ interface AppState {
   setScheduleDay: (day: ProductionScheduleDay) => void;
   lockScheduleDay: (date: string, locked: boolean) => Promise<void>;
   setProductionSettings: (patch: Partial<ProductionSettings>) => void;
+  closeOutDay: (date: string, closeout: ProductionCloseout) => Promise<void>;
+  reopenDay: (date: string) => Promise<void>;
 }
 
 
@@ -659,6 +662,38 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const next = { ...get().productionSettings, ...patch };
     set({ productionSettings: next });
     saveSetting('production_settings', JSON.stringify(next));
+  },
+
+  closeOutDay: async (date, closeout) => {
+    try {
+      const res = await fetch('/api/production/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, closed: true, closedBy: get().currentUser.name, closeout }),
+      });
+      if (res.ok) {
+        const day = await res.json();
+        if (day) get().setScheduleDay(day);
+      }
+    } catch (err) {
+      console.error('Failed to close out day:', err);
+    }
+  },
+
+  reopenDay: async (date) => {
+    try {
+      const res = await fetch('/api/production/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, closed: false, closedBy: get().currentUser.name }),
+      });
+      if (res.ok) {
+        const day = await res.json();
+        if (day) get().setScheduleDay(day);
+      }
+    } catch (err) {
+      console.error('Failed to reopen day:', err);
+    }
   },
 
   lockScheduleDay: async (date, locked) => {
