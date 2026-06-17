@@ -519,7 +519,18 @@ export function WorkflowBoard({
       )}
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 260px)' }}>
+        {/* Board layout, three regimes:
+            - Mobile (<sm): one column per screen (85vw) with snap scrolling
+              — swipe between stages, next column peeks in as an affordance.
+            - Tablet (sm–lg): fixed 288px columns, horizontal scroll.
+            - Desktop (lg+): all 6 columns flex to share the viewport width
+              equally (min 200px each) — nothing is cut off and there's no
+              hidden horizontal scroll to discover. Only if the window is
+              narrower than 6×200px does scrolling kick back in. */}
+        <div
+          className="flex gap-3 lg:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:snap-none"
+          style={{ minHeight: 'calc(100vh - 260px)' }}
+        >
           {KANBAN_COLUMNS.map((col) => {
             const colConcepts = columns[col] || [];
             const allSelected = colConcepts.length > 0 && colConcepts.every((c) => selectedIds.has(c.id));
@@ -535,7 +546,7 @@ export function WorkflowBoard({
             return (
               <div
                 key={col}
-                className="flex-shrink-0 w-64 sm:w-72 bg-surface border border-border rounded-lg flex flex-col overflow-hidden"
+                className="shrink-0 lg:shrink snap-center sm:snap-align-none w-[85vw] sm:w-72 lg:w-auto lg:flex-1 lg:basis-0 lg:min-w-[200px] bg-surface border border-border rounded-lg flex flex-col overflow-hidden"
               >
                 <div className={`col-strip ${COLUMN_STRIP[col]}`} />
                 {/* Column Header */}
