@@ -9,6 +9,7 @@ import { ProductionReports } from './production-reports';
 import { ProductionCalendar } from './production-calendar';
 import { ProductionSettingsModal } from './production-settings-modal';
 import { ProductionCloseoutModal } from './production-closeout-modal';
+import { ProductionShipstationModal } from './production-shipstation-modal';
 import { ConfirmDialog } from './confirm-dialog';
 import { workdayHours } from '@/lib/types';
 import {
@@ -62,6 +63,7 @@ export function ManufacturingBoard() {
   const [view, setView] = useState<'board' | 'calendar' | 'reports'>('board');
   const [showSettings, setShowSettings] = useState(false);
   const [showCloseout, setShowCloseout] = useState(false);
+  const [showShipstation, setShowShipstation] = useState(false);
 
   const activeMachines = useMemo(
     () => machines.filter((m) => m.active).sort((a, b) => a.position - b.position),
@@ -393,6 +395,7 @@ export function ManufacturingBoard() {
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <button onClick={openCreate} className="px-3 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg font-medium">+ Manual Job</button>
         <button onClick={() => setShowWorkflowPicker(true)} className="px-3 py-1.5 text-sm border border-border rounded-lg hover:border-foreground">+ From Design Studio {eligibleConcepts.length > 0 && <span className="ml-1 text-[10px] bg-accent/10 text-accent px-1.5 rounded-full">{eligibleConcepts.length}</span>}</button>
+        <button onClick={() => setShowShipstation(true)} className="px-3 py-1.5 text-sm border border-border rounded-lg hover:border-foreground" title="Pull open orders from ShipStation">📦 Import from ShipStation</button>
         {closed ? (
           <span className="flex items-center gap-2 px-3 py-1.5 text-sm bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg">
             ✓ Day closed{scheduleDay?.closedBy ? ` by ${scheduleDay.closedBy}` : ''}
@@ -536,6 +539,8 @@ export function ManufacturingBoard() {
       )}
 
       {showSettings && <ProductionSettingsModal onClose={() => setShowSettings(false)} />}
+
+      {showShipstation && <ProductionShipstationModal onClose={() => setShowShipstation(false)} />}
 
       {showCloseout && (
         <ProductionCloseoutModal

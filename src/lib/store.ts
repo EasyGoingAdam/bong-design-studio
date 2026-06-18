@@ -87,6 +87,7 @@ interface AppState {
   setProductionSettings: (patch: Partial<ProductionSettings>) => void;
   closeOutDay: (date: string, closeout: ProductionCloseout) => Promise<void>;
   reopenDay: (date: string) => Promise<void>;
+  importProductionJobs: (drafts: Partial<ProductionJob>[]) => Promise<number>;
 }
 
 
@@ -678,6 +679,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
     } catch (err) {
       console.error('Failed to close out day:', err);
     }
+  },
+
+  importProductionJobs: async (drafts) => {
+    // Dedup against jobs already imported from the same ShipStation shipment.
+    const existing = new Set(
+      get().productionJobs.map((j) => j.shipstationOrderId).filter(Boolean),
+    );
+    let created = 0;
+    for (const d of drafts) {
+      if (d.shipstationOrderId && existing.has(d.shipstationOrderId)) continue;
+      const job = await get().addProductionJob(d);
+      if (job) { created++; if (d.shipstationOrderId) existing.add(d.shipstationOrderId); }
+    }
+    return created;
   },
 
   reopenDay: async (date) => {
