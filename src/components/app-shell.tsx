@@ -27,6 +27,7 @@ import { CompareView } from './compare-view';
 import { ConceptLineage } from './concept-lineage';
 import { DropPlanner } from './drop-planner';
 import { ToastProvider } from './toast';
+import { ErrorBoundary } from './error-boundary';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
 
@@ -170,6 +171,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setSelectedConceptId(null);
     setActiveTab(previousTab);
   };
+
+  // Inline fallback for a crashed tab — keeps the nav usable and shows the
+  // real error (message + stack) so it can be copied/reported.
+  const renderTabError = ({ error, reset, scope }: { error: Error; reset: () => void; scope?: string }) => (
+    <div className="p-6 max-w-2xl mx-auto">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+        <h2 className="text-lg font-semibold text-red-800">This section hit an error{scope ? ` (${scope})` : ''}</h2>
+        <p className="text-sm text-red-700 mt-1">The rest of the app is fine — switch tabs, try again, or reload.</p>
+        <pre className="mt-3 text-xs bg-white/70 border border-red-200 rounded-lg p-3 overflow-auto max-h-64 text-red-900 whitespace-pre-wrap">
+          {error.message}{error.stack ? `\n\n${error.stack}` : ''}
+        </pre>
+        <div className="mt-3 flex gap-2">
+          <button onClick={reset} className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium">Try again</button>
+          <button onClick={() => { try { navigator.clipboard.writeText(`${error.message}\n${error.stack || ''}`); } catch {} }} className="px-3 py-1.5 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-100">Copy error</button>
+          <button onClick={() => { if (typeof window !== 'undefined') window.location.reload(); }} className="px-3 py-1.5 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-100">Reload</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Stale-chunk recovery: after a deploy, an already-open tab can reference
+  // JS chunks that no longer exist, throwing ChunkLoadError on navigation.
+  // Auto-reload once (guarded against loops) to pull the fresh manifest.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isChunkError = (msg: string) =>
+      /ChunkLoadError|Loading chunk [\d]+ failed|Failed to fetch dynamically imported module|importing a module script failed/i.test(msg);
+    const recover = (msg: string) => {
+      if (!isChunkError(msg)) return;
+      const KEY = 'chunk-reload-at';
+      const last = Number(sessionStorage.getItem(KEY) || '0');
+      // Only reload if we haven't already done so in the last 10s.
+      if (Date.now() - last > 10_000) {
+        sessionStorage.setItem(KEY, String(Date.now()));
+        window.location.reload();
+      }
+    };
+    const onError = (e: ErrorEvent) => recover(e.message || String(e.error || ''));
+    const onRejection = (e: PromiseRejectionEvent) => recover(String((e.reason && (e.reason.message || e.reason)) || ''));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
 
   // Show nothing while checking auth
   if (!authChecked) {
@@ -336,32 +383,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
-        {initialized && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'workflow' && (
-          <WorkflowBoard
-            onOpenConcept={openConcept}
-            onOpenArchive={() => setActiveTab('archive')}
-          />
-        )}
-        {initialized && activeTab === 'manufacturing' && <ManufacturingBoard />}
-        {initialized && activeTab === 'specs' && <SpecsDatabase />}
-        {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'marketing' && <MarketingStudio />}
-        {initialized && activeTab === 'mockup' && <MockupStudio />}
-        {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
-        {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'lineage' && <ConceptLineage onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'drops' && <DropPlanner onOpenConcept={openConcept} />}
-        {initialized && activeTab === 'detail' && selectedConceptId && (
-          <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
-        )}
+        {/* Each tab is isolated in its own error boundary, keyed by the
+            active tab so switching tabs always re-mounts a fresh boundary.
+            A crash in one view (e.g. AI Generate) now shows an inline error
+            with the message + stack instead of white-screening the app. */}
+        <ErrorBoundary key={activeTab} scope={activeTab} fallback={renderTabError}>
+          {initialized && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'workflow' && (
+            <WorkflowBoard
+              onOpenConcept={openConcept}
+              onOpenArchive={() => setActiveTab('archive')}
+            />
+          )}
+          {initialized && activeTab === 'manufacturing' && <ManufacturingBoard />}
+          {initialized && activeTab === 'specs' && <SpecsDatabase />}
+          {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'marketing' && <MarketingStudio />}
+          {initialized && activeTab === 'mockup' && <MockupStudio />}
+          {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
+          {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'lineage' && <ConceptLineage onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'drops' && <DropPlanner onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'detail' && selectedConceptId && (
+            <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
+          )}
+        </ErrorBoundary>
       </main>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
