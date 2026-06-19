@@ -14,10 +14,13 @@ import {
  */
 export function guessCoilSize(text: string | undefined): CoilSize | undefined {
   if (!text) return undefined;
-  const t = text.toLowerCase();
-  if (/\b(pipe|chillum|one[- ]?hitter|taster|bat|straw|nectar)\b/.test(t)) return 'pipe';
+  // Strip the "Freeze Pipe" brand name first — otherwise the word "pipe" in
+  // it would misclassify every product (incl. bongs) as a fast hand pipe.
+  const t = text.toLowerCase().replace(/freeze\s*pipe/g, ' ');
+  // Specific piece types win over the generic "pipe" keyword.
+  if (/\b(mini|small|coil|chiller|bubbler|dna|glycerin)\b/.test(t)) return 'small_coil';
   if (/\b(xl|x-large|extra[- ]large|big|large|beaker|bong|tube|rig|recycler|gbt)\b/.test(t)) return 'big_coil';
-  if (/\b(mini|small|coil|chiller|bubbler|freeze ?pipe|dna)\b/.test(t)) return 'small_coil';
+  if (/\b(pipe|chillum|one[- ]?hitter|taster|bat|straw|nectar)\b/.test(t)) return 'pipe';
   return undefined;
 }
 
