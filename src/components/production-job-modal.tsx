@@ -7,10 +7,12 @@ import { useToast } from './toast';
 import {
   ProductionJob,
   ProductionComplexity,
+  CoilSize,
   PriorityLevel,
   COMPLEXITY_LABELS,
+  COIL_SIZE_LABELS,
 } from '@/lib/types';
-import { estimateJobMinutes, fmtMinutes } from '@/lib/production';
+import { estimateJobMinutes, fmtMinutes, guessCoilSize } from '@/lib/production';
 
 /**
  * Create / edit a manual production job. Shows the live deterministic time
@@ -47,7 +49,13 @@ export function ProductionJobModal({
     revenueValue: job?.revenueValue || 0,
     inventoryAvailable: job?.inventoryAvailable ?? true,
     designName: job?.designName || '',
+    textName: job?.textName || '',
+    coilSize: job?.coilSize,
+    hasText: job?.hasText ?? false,
+    hasDesign: job?.hasDesign ?? true,
     customerName: job?.customerName || '',
+    customerEmail: job?.customerEmail || '',
+    customerPhone: job?.customerPhone || '',
     tags: job?.tags || [],
     notes: job?.notes || '',
     designNotes: job?.designNotes || '',
@@ -190,18 +198,22 @@ export function ProductionJobModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs text-muted mb-1">Source</label>
               <Select value={form.sourceType || 'manual'} onChange={(v) => set('sourceType', v as ProductionJob['sourceType'])} options={[
                 { value: 'manual', label: 'Manual' },
                 { value: 'workflow', label: 'Design Studio' },
                 { value: 'shipstation', label: 'ShipStation' },
-              ]} />
+              ]} className="w-full" />
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Design Name</label>
-              <input value={form.designName || ''} onChange={(e) => set('designName', e.target.value)} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              <input value={form.designName || ''} onChange={(e) => set('designName', e.target.value)} placeholder="e.g. Skull Dad" className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Text Name</label>
+              <input value={form.textName || ''} onChange={(e) => set('textName', e.target.value)} placeholder="Name to etch" className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Customer</label>
@@ -209,13 +221,51 @@ export function ProductionJobModal({
             </div>
           </div>
 
+          {/* Customer info — populated automatically on ShipStation import. */}
+          <details className="bg-background/50 border border-border rounded-lg" open={!!(form.customerEmail || form.customerPhone || form.orderDate)}>
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold select-none">Customer Info</summary>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 pt-0">
+              <div>
+                <label className="block text-[10px] text-muted mb-1">Email</label>
+                <input value={form.customerEmail || ''} onChange={(e) => set('customerEmail', e.target.value)} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted mb-1">Phone</label>
+                <input value={form.customerPhone || ''} onChange={(e) => set('customerPhone', e.target.value)} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted mb-1">Order placed</label>
+                <input type="date" value={form.orderDate || ''} onChange={(e) => set('orderDate', e.target.value)} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+            </div>
+          </details>
+
           {/* Complexity drivers */}
           <div className="bg-background/50 border border-border rounded-lg p-3 space-y-3">
-            <div className="text-xs font-semibold">Complexity & Time Drivers</div>
+            <div className="text-xs font-semibold">Complexity &amp; Time Drivers</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
+                <label className="block text-[10px] text-muted mb-1">Coil / Piece</label>
+                <Select
+                  value={form.coilSize || ''}
+                  onChange={(v) => set('coilSize', (v || undefined) as CoilSize | undefined)}
+                  placeholder="Auto from SKU"
+                  options={[
+                    { value: 'pipe', label: `${COIL_SIZE_LABELS.pipe} (fastest)` },
+                    { value: 'small_coil', label: `${COIL_SIZE_LABELS.small_coil} (60-90m)` },
+                    { value: 'big_coil', label: `${COIL_SIZE_LABELS.big_coil} (90-120m)` },
+                  ]}
+                  className="w-full"
+                />
+                {!form.coilSize && guessCoilSize(`${form.productType || ''} ${form.sku || ''}`) && (
+                  <button type="button" onClick={() => set('coilSize', guessCoilSize(`${form.productType || ''} ${form.sku || ''}`))} className="text-[9px] text-accent hover:underline mt-0.5">
+                    Use {COIL_SIZE_LABELS[guessCoilSize(`${form.productType || ''} ${form.sku || ''}`)!]} (from SKU)
+                  </button>
+                )}
+              </div>
+              <div>
                 <label className="block text-[10px] text-muted mb-1">Engraving Complexity</label>
-                <Select value={form.complexity || 'medium'} onChange={(v) => set('complexity', v as ProductionComplexity)} options={complexityOpts} />
+                <Select value={form.complexity || 'medium'} onChange={(v) => set('complexity', v as ProductionComplexity)} options={complexityOpts} className="w-full" />
               </div>
               <div>
                 <label className="block text-[10px] text-muted mb-1">Setup Complexity</label>
@@ -234,10 +284,20 @@ export function ProductionJobModal({
                 <input type="number" min={1} value={form.etchingZones || 1} onChange={(e) => set('etchingZones', Math.max(1, Number(e.target.value)))} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
               </div>
             </div>
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <input type="checkbox" checked={!!form.repeatDesign} onChange={(e) => set('repeatDesign', e.target.checked)} className="accent-accent" />
-              Repeat design (setup already known — schedules faster)
-            </label>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!!form.hasDesign} onChange={(e) => set('hasDesign', e.target.checked)} className="accent-accent" />
+                Graphic design
+              </label>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!!form.hasText} onChange={(e) => set('hasText', e.target.checked)} className="accent-accent" />
+                Text / name etch
+              </label>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!!form.repeatDesign} onChange={(e) => set('repeatDesign', e.target.checked)} className="accent-accent" />
+                Repeat design (setup known — faster)
+              </label>
+            </div>
 
             {/* Estimate readout */}
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">

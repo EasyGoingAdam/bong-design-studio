@@ -1,9 +1,25 @@
 import {
   ProductionJob,
   ProductionComplexity,
+  CoilSize,
   Machine,
   COMPLEXITY_BASE_MINUTES,
+  COIL_SIZE_BASE_MINUTES,
 } from './types';
+
+/**
+ * Best-effort guess of the piece type from an SKU / product name so the
+ * estimate has a sensible default before anyone picks a coil size.
+ * Pipes etch fastest, big/XL coils slowest.
+ */
+export function guessCoilSize(text: string | undefined): CoilSize | undefined {
+  if (!text) return undefined;
+  const t = text.toLowerCase();
+  if (/\b(pipe|chillum|one[- ]?hitter|taster|bat|straw|nectar)\b/.test(t)) return 'pipe';
+  if (/\b(xl|x-large|extra[- ]large|big|large|beaker|bong|tube|rig|recycler|gbt)\b/.test(t)) return 'big_coil';
+  if (/\b(mini|small|coil|chiller|bubbler|freeze ?pipe|dna)\b/.test(t)) return 'small_coil';
+  return undefined;
+}
 
 /**
  * Production planning helpers — pure functions, safe on client and server.
@@ -51,9 +67,26 @@ export function estimateJobMinutes(job: Partial<ProductionJob>): {
   const complexity = (job.complexity || 'medium') as ProductionComplexity;
   const qty = Math.max(1, job.quantity || 1);
 
-  // Run: base per piece × quantity.
-  const perPieceRun = COMPLEXITY_BASE_MINUTES[complexity] ?? 60;
-  const run = perPieceRun * qty;
+  // Run time: piece type (coil size) is the dominant driver when known —
+  // pipes fastest, big coils slowest. Complexity then nudges ±, so a small
+  // coil lands ~60-90 across low→high and a big coil ~90-120. Falls back to
+  // the complexity baseline when no coil size is set.
+  const coilBase = job.coilSize ? COIL_SIZE_BASE_MINUTES[job.coilSize] : undefined;
+  const complexityFactor: Record<ProductionComplexity, number> = {
+    low: 0.85, medium: 1.0, high: 1.15, very_high: 1.3,
+  };
+  // Text vs design content: a text-only name etch is much quicker than a full
+  // graphic; doing both adds time. Default (neither flagged) leaves it as-is.
+  const hasText = job.hasText ?? false;
+  const hasDesign = job.hasDesign ?? true;
+  const contentFactor =
+    hasText && hasDesign ? 1.15
+    : hasText && !hasDesign ? 0.55
+    : 1.0;
+  const perPieceRun = coilBase != null
+    ? coilBase * complexityFactor[complexity] * contentFactor
+    : (COMPLEXITY_BASE_MINUTES[complexity] ?? 60) * contentFactor;
+  const run = Math.round(perPieceRun * qty);
 
   // Setup: one-time fixturing. Harder setup/alignment costs more; repeats
   // are cheaper because the jig is already dialed in.

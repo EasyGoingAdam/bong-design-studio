@@ -92,10 +92,16 @@ export function ManufacturingBoard() {
   const completed = dayJobs.filter((j) => j.status === 'completed');
   const held = dayJobs.filter((j) => j.status === 'held');
 
+  // Auto-sort within a machine column: started jobs float to the top, then
+  // everything else shortest estimated time first (quick wins first).
   const jobsByMachine = (mid: string) =>
     dayJobs
       .filter((j) => j.machineId === mid && ['scheduled', 'in_progress', 'paused', 'rework'].includes(j.status))
-      .sort((a, b) => a.scheduledPosition - b.scheduledPosition);
+      .sort((a, b) => {
+        const rank = (j: ProductionJob) => (j.status === 'in_progress' ? 0 : 1);
+        if (rank(a) !== rank(b)) return rank(a) - rank(b);
+        return jobTotalMinutes(a) - jobTotalMinutes(b);
+      });
 
   // Daily summary.
   const summary = useMemo(() => {
@@ -126,7 +132,9 @@ export function ManufacturingBoard() {
     const totalDailyMin = activeMachines.reduce((s, m) => s + (m.dailyHours || 8) * 60, 0) || 960;
     return Array.from({ length: 7 }, (_, i) => {
       const date = addDays(todayKey(), i);
-      const jobs = productionJobs.filter((j) => j.scheduledDate === date && j.status !== 'held');
+      // Place by scheduled date, falling back to due date so orders show on
+      // the day they're due even before they're committed to a machine.
+      const jobs = productionJobs.filter((j) => (j.scheduledDate || j.dueDate) === date && j.status !== 'held');
       const minutes = jobs.reduce((s, j) => s + jobTotalMinutes(j), 0);
       return {
         date, pieces: totalPieces(jobs), minutes, capacity: totalDailyMin,
@@ -162,7 +170,22 @@ export function ManufacturingBoard() {
 
     const dest = destination.droppableId;
     const patch: Record<string, unknown> = { scheduledPosition: destination.index };
-    if (dest === 'backlog') {
+    if (dest.startsWith('day:')) {
+      // Dropped on a calendar day box → schedule for that date. Keep the
+      // machine if it has one; otherwise assign the least-loaded machine so
+      // the job stays visible/actionable on that day.
+      const date = dest.slice(4);
+      const job = productionJobs.find((j) => j.id === draggableId);
+      patch.scheduledDate = date;
+      if (!job?.machineId && activeMachines.length) {
+        const onDay = productionJobs.filter((j) => j.scheduledDate === date && j.status !== 'held');
+        const least = activeMachines
+          .map((m) => ({ id: m.id, min: computeMachineLoad(m, onDay).minutes }))
+          .sort((a, b) => a.min - b.min)[0];
+        patch.machineId = least.id;
+      }
+      if (job?.status === 'backlog' || job?.status === 'held') patch.status = 'scheduled';
+    } else if (dest === 'backlog') {
       patch.scheduledDate = null; patch.machineId = null; patch.status = 'backlog';
     } else if (dest === 'held') {
       patch.scheduledDate = viewedDate; patch.status = 'held';
@@ -337,7 +360,8 @@ export function ManufacturingBoard() {
       productType: c.collection || '',
       complexity: complexity as ProductionJob['complexity'],
       priority: c.priority,
-      tags: c.tags,
+      // Design Studio pieces are bespoke — always tag "One of Ones".
+      tags: Array.from(new Set([...(c.tags || []), 'One of Ones'])),
       designNotes: c.manufacturingNotes || c.description || '',
       quantity: 1,
     });
@@ -480,24 +504,35 @@ export function ManufacturingBoard() {
         </div>
       )}
 
-      {/* 7-day capacity forecast */}
-      <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
-        {forecast.map((f) => {
-          const hrs = (f.minutes / 60).toFixed(1);
-          const cap = (f.capacity / 60).toFixed(0);
-          const isView = f.date === viewedDate;
-          return (
-            <button key={f.date} onClick={() => setViewedDate(f.date)} className={`shrink-0 text-left px-2.5 py-1.5 rounded-lg border text-[11px] ${isView ? 'border-accent bg-accent/5' : 'border-border hover:border-foreground'} ${f.overBy > 0 ? 'ring-1 ring-red-300' : ''}`}>
-              <div className="font-medium">{f.date === todayKey() ? 'Today' : (() => { const [y, m, d] = f.date.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }); })()}</div>
-              <div className="text-muted">{f.pieces} pcs · {hrs}/{cap}h</div>
-              {f.overBy > 0 && <div className="text-red-600">over {fmtMinutes(f.overBy)}</div>}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Board */}
       <DragDropContext onDragEnd={onDragEnd}>
+        {/* 7-day forecast — click to view a day, or drag a job onto a day to
+            schedule it there (least-loaded machine auto-assigned if none). */}
+        <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
+          {forecast.map((f) => {
+            const hrs = (f.minutes / 60).toFixed(1);
+            const cap = (f.capacity / 60).toFixed(0);
+            const isView = f.date === viewedDate;
+            return (
+              <Droppable droppableId={`day:${f.date}`} key={f.date} direction="horizontal">
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    onClick={() => setViewedDate(f.date)}
+                    className={`shrink-0 text-left px-2.5 py-1.5 rounded-lg border text-[11px] cursor-pointer transition-colors ${isView ? 'border-accent bg-accent/5' : 'border-border hover:border-foreground'} ${f.overBy > 0 ? 'ring-1 ring-red-300' : ''} ${snapshot.isDraggingOver ? 'bg-accent/15 border-accent' : ''}`}
+                  >
+                    <div className="font-medium">{f.date === todayKey() ? 'Today' : (() => { const [y, m, d] = f.date.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }); })()}</div>
+                    <div className="text-muted">{f.pieces} pcs · {hrs}/{cap}h</div>
+                    {f.overBy > 0 && <div className="text-red-600">over {fmtMinutes(f.overBy)}</div>}
+                    <span className="hidden">{provided.placeholder}</span>
+                  </div>
+                )}
+              </Droppable>
+            );
+          })}
+        </div>
+
+        {/* Board */}
         <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 420px)' }}>
           <Column droppableId="backlog" title="Backlog" count={backlog.length} accent="border-t-slate-400">
             {backlog.map((j, i) => (
@@ -656,7 +691,7 @@ function JobCard({ job, index, machines, locked, isAdmin, compact, onEdit, onDel
                 {job.rush && <span className="text-[9px] bg-red-100 text-red-700 px-1 rounded font-bold shrink-0">RUSH</span>}
               </div>
               <div className="text-[10px] text-muted truncate">
-                {job.productType || '—'}{job.quantity > 1 ? ` ×${job.quantity}` : ''}{job.designName ? ` · ${job.designName}` : ''}
+                {job.productType || '—'}{job.quantity > 1 ? ` ×${job.quantity}` : ''}{job.designName ? ` · ${job.designName}` : ''}{job.textName ? ` · “${job.textName}”` : ''}
               </div>
             </div>
           </div>

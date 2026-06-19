@@ -274,6 +274,8 @@ export const KANBAN_COLUMNS: ConceptStatus[] = [
 
 export type ProductionComplexity = 'low' | 'medium' | 'high' | 'very_high';
 export type SetupComplexity = 'low' | 'medium' | 'high';
+/** Which piece is being etched — the dominant driver of run time. */
+export type CoilSize = 'pipe' | 'small_coil' | 'big_coil';
 export type ProductionJobStatus =
   | 'backlog'
   | 'scheduled'
@@ -337,8 +339,17 @@ export interface ProductionJob {
   revenueValue: number;
   inventoryAvailable: boolean;
   designName: string;
+  /** Personalized name text to etch (separate from the design). */
+  textName: string;
+  /** Which piece — drives run-time estimate. Optional; falls back to complexity. */
+  coilSize?: CoilSize;
+  /** Whether the etch includes text and/or a graphic design — affects time. */
+  hasText: boolean;
+  hasDesign: boolean;
   designImageUrl: string;
   customerName: string;
+  customerEmail: string;
+  customerPhone: string;
   tags: string[];
   notes: string;
   designNotes: string;
@@ -418,6 +429,23 @@ export const COMPLEXITY_BASE_MINUTES: Record<ProductionComplexity, number> = {
   medium: 60,
   high: 90,
   very_high: 120,
+};
+
+export const COIL_SIZE_LABELS: Record<CoilSize, string> = {
+  pipe: 'Pipe',
+  small_coil: 'Small Coil',
+  big_coil: 'Big Coil',
+};
+
+/**
+ * Center-of-range run minutes per piece type — the dominant run-time driver.
+ * Pipes etch fastest; small coils ~60-90; big coils ~90-120. Complexity then
+ * nudges this ±, so e.g. small_coil spans ~64-86 across low→high.
+ */
+export const COIL_SIZE_BASE_MINUTES: Record<CoilSize, number> = {
+  pipe: 40,
+  small_coil: 75,
+  big_coil: 105,
 };
 
 /** Override reasons logged when a locked schedule is changed. */

@@ -26,11 +26,14 @@ export function ProductionCalendar({ onPickDay }: { onPickDay: (date: string) =>
   const loadByDay = useMemo(() => {
     const map = new Map<string, { pieces: number; minutes: number }>();
     for (const j of productionJobs) {
-      if (!j.scheduledDate || j.status === 'held') continue;
-      const cur = map.get(j.scheduledDate) || { pieces: 0, minutes: 0 };
+      // Place by scheduled date, else due date — so orders land on the day
+      // they're due even before they're committed to a machine.
+      const day = j.scheduledDate || j.dueDate;
+      if (!day || j.status === 'held') continue;
+      const cur = map.get(day) || { pieces: 0, minutes: 0 };
       cur.pieces += Math.max(1, j.quantity || 1);
       cur.minutes += jobTotalMinutes(j);
-      map.set(j.scheduledDate, cur);
+      map.set(day, cur);
     }
     return map;
   }, [productionJobs]);

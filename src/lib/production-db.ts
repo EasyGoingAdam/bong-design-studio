@@ -66,8 +66,14 @@ export function dbJobToFrontend(r: Record<string, unknown>): ProductionJob {
     revenueValue: Number(r.revenue_value ?? 0),
     inventoryAvailable: (r.inventory_available as boolean) ?? true,
     designName: (r.design_name as string) ?? '',
+    textName: (r.text_name as string) ?? '',
+    coilSize: (r.coil_size as ProductionJob['coilSize']) ?? undefined,
+    hasText: (r.has_text as boolean) ?? false,
+    hasDesign: (r.has_design as boolean) ?? true,
     designImageUrl: (r.design_image_url as string) ?? '',
     customerName: (r.customer_name as string) ?? '',
+    customerEmail: (r.customer_email as string) ?? '',
+    customerPhone: (r.customer_phone as string) ?? '',
     tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
     notes: (r.notes as string) ?? '',
     designNotes: (r.design_notes as string) ?? '',
@@ -144,8 +150,14 @@ export function jobToDbRow(j: Partial<ProductionJob>): Record<string, unknown> {
   set('revenue_value', j.revenueValue);
   set('inventory_available', j.inventoryAvailable);
   set('design_name', j.designName);
+  set('text_name', j.textName);
+  set('coil_size', j.coilSize);
+  set('has_text', j.hasText);
+  set('has_design', j.hasDesign);
   set('design_image_url', j.designImageUrl);
   set('customer_name', j.customerName);
+  set('customer_email', j.customerEmail);
+  set('customer_phone', j.customerPhone);
   set('tags', j.tags);
   set('notes', j.notes);
   set('design_notes', j.designNotes);

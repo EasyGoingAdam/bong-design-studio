@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase';
 import { ProductionJob } from './types';
+import { guessCoilSize } from './production';
 
 /**
  * ShipStation integration (v2 API — api.shipstation.com, API-Key auth).
@@ -61,10 +62,48 @@ interface SSShipment {
   amount_paid?: { amount?: number };
   notes_from_buyer?: string | null;
   internal_notes?: string | null;
-  ship_to?: { name?: string };
+  ship_to?: { name?: string; email?: string; phone?: string };
   tags?: unknown;
   tag_ids?: number[] | null;
-  items?: { sku?: string; name?: string; quantity?: number; image_url?: string }[];
+  items?: SSItem[];
+}
+
+interface SSItem {
+  sku?: string;
+  name?: string;
+  quantity?: number;
+  image_url?: string;
+  unit_price?: number;
+}
+
+/**
+ * Pick the item that's actually the customized/etched piece. The first line
+ * on an order is frequently an accessory (keychain, glycerin bowl, insurance
+ * adjustment), so we score by how "coil/pipe-like" each line is and ignore
+ * obvious non-etch add-ons, with price as a tiebreak.
+ */
+const NON_ETCH = /shiptection|adjustment|insurance|warranty|discount|keychain|debowler|sticker|grinder|lighter|\btool\b|\btip\b|cleaning|brush|\bcase\b|\bbag\b/i;
+function scoreItem(it: SSItem): number {
+  const text = `${it.name || ''} ${it.sku || ''}`.toLowerCase();
+  const price = it.unit_price ?? 0;
+  if (price < 0 || NON_ETCH.test(text)) return -Infinity;
+  let kw = 0;
+  if (/coil/.test(text)) kw = 100;
+  else if (/freeze ?pipe|chiller|\bdna\b/.test(text)) kw = 90;
+  else if (/bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum/.test(text)) kw = 60;
+  // Keyword dominates; unit price breaks ties between similar items.
+  return kw * 1000 + price;
+}
+function chooseCustomItem(items: SSItem[]): SSItem | undefined {
+  if (!items.length) return undefined;
+  let best: SSItem | undefined;
+  let bestScore = -Infinity;
+  for (const it of items) {
+    const s = scoreItem(it);
+    if (s > bestScore) { bestScore = s; best = it; }
+  }
+  // If everything was excluded, fall back to the first line.
+  return bestScore === -Infinity ? items[0] : best;
 }
 
 function tagNames(s: SSShipment, tagMap: Map<number, string>): string[] {
@@ -90,12 +129,15 @@ function tagNames(s: SSShipment, tagMap: Map<number, string>): string[] {
 /** Map one ShipStation shipment to a production-job draft. */
 export function mapShipmentToDraft(s: SSShipment, tagMap: Map<number, string>): Partial<ProductionJob> {
   const items = s.items || [];
-  const first = items[0];
-  const qty = items.reduce((n, it) => n + Math.max(1, it.quantity || 1), 0) || 1;
+  // The etched piece — NOT necessarily items[0] (often an accessory).
+  const coil = chooseCustomItem(items);
+  const otherCount = items.filter((it) => it !== coil).length;
   const names = tagNames(s, tagMap);
   const rush = names.some((n) => /rush|expedite|priority|prime/i.test(n)) ||
     /express|priority|overnight/i.test(s.service_code || '');
-  const label = first?.name ? `${first.name}${items.length > 1 ? ` +${items.length - 1}` : ''}` : 'ShipStation order';
+  const label = coil?.name ? `${coil.name}${otherCount ? ` +${otherCount}` : ''}` : 'ShipStation order';
+  // Accessories/add-ons captured in notes so the operator still sees them.
+  const accessories = items.filter((it) => it !== coil && it.name).map((it) => `${it.name}${it.sku ? ` (${it.sku})` : ''}`);
 
   return {
     title: `#${s.shipment_number || s.external_order_id || s.shipment_id} — ${label}`.slice(0, 120),
@@ -103,17 +145,27 @@ export function mapShipmentToDraft(s: SSShipment, tagMap: Map<number, string>): 
     shipstationOrderId: s.shipment_id,
     orderId: s.shipment_number || '',
     customerName: s.ship_to?.name || '',
-    productType: first?.name || '',
-    sku: items.map((it) => it.sku).filter(Boolean).join(', '),
-    quantity: qty,
-    designImageUrl: first?.image_url || '',
+    customerEmail: s.ship_to?.email || '',
+    customerPhone: s.ship_to?.phone || '',
+    // Custom coil item drives product/SKU/qty/coil-size, not the first line.
+    productType: coil?.name || '',
+    sku: coil?.sku || '',
+    quantity: Math.max(1, coil?.quantity || 1),
+    coilSize: guessCoilSize(`${coil?.name || ''} ${coil?.sku || ''}`),
+    hasDesign: true,
+    hasText: false,
+    designImageUrl: coil?.image_url || '',
     revenueValue: Math.round(((s.amount_paid?.amount ?? 0)) * 100) / 100,
     shipByDate: dateOnly(s.ship_by_date) || dateOnly(s.deliver_by_date) || dateOnly(s.hold_until_date),
     orderDate: dateOnly(s.created_at),
     rush,
     priority: rush ? 'high' : 'medium',
     tags: Array.from(new Set([...names, 'shipstation'])),
-    notes: [s.notes_from_buyer, s.internal_notes].filter(Boolean).join(' · '),
+    notes: [
+      s.notes_from_buyer,
+      s.internal_notes,
+      accessories.length ? `Also on order: ${accessories.join(', ')}` : '',
+    ].filter(Boolean).join(' · '),
     complexity: 'medium',
     status: 'backlog',
     inventoryAvailable: true,
