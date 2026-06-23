@@ -7,6 +7,7 @@ import { useToast } from './toast';
 import { ProductionJobModal } from './production-job-modal';
 import { ProductionReports } from './production-reports';
 import { ProductionCalendar } from './production-calendar';
+import { ProductionTimeline } from './production-timeline';
 import { ProductionSettingsModal } from './production-settings-modal';
 import { ProductionCloseoutModal } from './production-closeout-modal';
 import { ProductionShipstationModal } from './production-shipstation-modal';
@@ -60,7 +61,7 @@ export function ManufacturingBoard() {
   const [aiBusy, setAiBusy] = useState<'schedule' | 'review' | null>(null);
   const [aiReview, setAiReview] = useState<{ approved_to_lock: boolean; issues: string[]; recommended_changes: string[] } | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [view, setView] = useState<'board' | 'calendar' | 'reports'>('board');
+  const [view, setView] = useState<'board' | 'timeline' | 'calendar' | 'reports'>('board');
   const [showSettings, setShowSettings] = useState(false);
   const [showCloseout, setShowCloseout] = useState(false);
   const [showShipstation, setShowShipstation] = useState(false);
@@ -421,11 +422,12 @@ export function ManufacturingBoard() {
           </div>
           <div className="inline-flex rounded-lg border border-border overflow-hidden">
             <button onClick={() => setView('board')} className={`px-3 py-1.5 text-sm ${view === 'board' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Board</button>
+            <button onClick={() => setView('timeline')} className={`px-3 py-1.5 text-sm border-l border-border ${view === 'timeline' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Timeline</button>
             <button onClick={() => setView('calendar')} className={`px-3 py-1.5 text-sm border-l border-border ${view === 'calendar' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Calendar</button>
             <button onClick={() => setView('reports')} className={`px-3 py-1.5 text-sm border-l border-border ${view === 'reports' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Reports</button>
           </div>
         </div>
-        {view === 'board' && (
+        {(view === 'board' || view === 'timeline') && (
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => setViewedDate(addDays(viewedDate, -1))} className="px-2 py-1.5 text-sm border border-border rounded-lg hover:border-foreground">←</button>
           <button onClick={() => setViewedDate(todayKey())} className={`px-3 py-1.5 text-sm rounded-lg border ${viewedDate === todayKey() ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'}`}>Today</button>
@@ -442,6 +444,17 @@ export function ManufacturingBoard() {
 
       {view === 'calendar' && (
         <ProductionCalendar onPickDay={(d) => { setViewedDate(d); setView('board'); }} />
+      )}
+
+      {view === 'timeline' && (
+        <ProductionTimeline
+          date={viewedDate}
+          machines={activeMachines}
+          jobs={dayJobs}
+          workdayStart={productionSettings.workdayStart}
+          workdayMinutes={workdayHours(productionSettings) * 60}
+          onEdit={openEdit}
+        />
       )}
 
       {view === 'board' && (
