@@ -250,6 +250,7 @@ export function ManufacturingBoard() {
     updateProductionJob(j.id, {
       status: 'paused',
       accumulatedMinutes: (j.accumulatedMinutes || 0) + minutesSince(j.actualStartTime),
+      pauseCount: (j.pauseCount || 0) + 1,
     });
 
   const completeJob = (j: ProductionJob) => {

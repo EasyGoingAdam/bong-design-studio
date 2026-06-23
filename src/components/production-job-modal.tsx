@@ -26,7 +26,7 @@ export function ProductionJobModal({
   job?: ProductionJob;
   onClose: () => void;
 }) {
-  const { addProductionJob, updateProductionJob, openAIKey } = useAppStore();
+  const { addProductionJob, updateProductionJob, openAIKey, productionSettings } = useAppStore();
   const { toast } = useToast();
   const editing = !!job;
 
@@ -56,6 +56,10 @@ export function ProductionJobModal({
     customerName: job?.customerName || '',
     customerEmail: job?.customerEmail || '',
     customerPhone: job?.customerPhone || '',
+    material: job?.material || '',
+    machineSettings: job?.machineSettings || '',
+    qcResult: job?.qcResult || '',
+    qcNotes: job?.qcNotes || '',
     tags: job?.tags || [],
     notes: job?.notes || '',
     designNotes: job?.designNotes || '',
@@ -79,7 +83,10 @@ export function ProductionJobModal({
 
   // Live deterministic estimate (the anchor). Used unless a manual override
   // or an AI estimate has set explicit minutes.
-  const computed = useMemo(() => estimateJobMinutes(form), [form]);
+  const computed = useMemo(
+    () => estimateJobMinutes(form, { coilMinutes: productionSettings.coilSizeMinutes }),
+    [form, productionSettings.coilSizeMinutes],
+  );
   const effectiveTotal =
     manualEstimate && form.estimatedTotalMinutes
       ? form.estimatedTotalMinutes
@@ -362,6 +369,33 @@ export function ProductionJobModal({
           <div>
             <label className="block text-xs text-muted mb-1">Tags (comma separated)</label>
             <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="Father's Day, Deal, Custom" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent" />
+          </div>
+
+          {/* Production details — captured for repeatability + future data. */}
+          <div className="bg-background/50 border border-border rounded-lg p-3 space-y-3">
+            <div className="text-xs font-semibold">Production Details</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-muted mb-1">Material / blank</label>
+                <input value={form.material || ''} onChange={(e) => set('material', e.target.value)} placeholder="e.g. clear glass beaker" className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted mb-1">Laser settings (power / speed / passes)</label>
+                <input value={form.machineSettings || ''} onChange={(e) => set('machineSettings', e.target.value)} placeholder="e.g. 60% / 300mm/s / 2 passes" className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] text-muted mb-1">QC result</label>
+                <Select value={form.qcResult || ''} onChange={(v) => set('qcResult', v as ProductionJob['qcResult'])} placeholder="Not checked" options={[
+                  { value: 'pass', label: 'Pass' }, { value: 'fail', label: 'Fail' },
+                ]} className="w-full" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[10px] text-muted mb-1">QC notes</label>
+                <input value={form.qcNotes || ''} onChange={(e) => set('qcNotes', e.target.value)} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

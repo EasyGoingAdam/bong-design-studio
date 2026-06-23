@@ -3,17 +3,24 @@
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
-import { ProductionSettings, workdayHours, DEFAULT_PRODUCTION_SETTINGS } from '@/lib/types';
+import { ProductionSettings, CoilSize, COIL_SIZE_LABELS, workdayHours, DEFAULT_PRODUCTION_SETTINGS } from '@/lib/types';
 
 /**
  * Admin panel for the AI production brain. Exposes the knobs that the
- * scheduler/estimator use — model, workday window, buffer, and the
- * priority weights — instead of hardcoding them.
+ * scheduler/estimator use — model, workday window, buffer, priority weights,
+ * per-piece run-time, and the machine roster — instead of hardcoding them.
  */
 export function ProductionSettingsModal({ onClose }: { onClose: () => void }) {
-  const { productionSettings, setProductionSettings } = useAppStore();
+  const { productionSettings, setProductionSettings, machines, updateMachine } = useAppStore();
   const { toast } = useToast();
-  const [form, setForm] = useState<ProductionSettings>({ ...productionSettings });
+  const [form, setForm] = useState<ProductionSettings>({
+    ...DEFAULT_PRODUCTION_SETTINGS,
+    ...productionSettings,
+    coilSizeMinutes: { ...DEFAULT_PRODUCTION_SETTINGS.coilSizeMinutes, ...(productionSettings.coilSizeMinutes || {}) },
+  });
+
+  const setCoilMin = (k: CoilSize, v: number) =>
+    setForm((f) => ({ ...f, coilSizeMinutes: { ...f.coilSizeMinutes, [k]: Math.max(1, v) } }));
 
   const set = <K extends keyof ProductionSettings>(k: K, v: ProductionSettings[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -98,6 +105,50 @@ export function ProductionSettingsModal({ onClose }: { onClose: () => void }) {
             <Weight label="Rush-order boost" k="rushBoost" hint="How strongly rush orders float to the top." />
             <Weight label="Complexity spreading" k="complexityPenalty" hint="How hard to avoid stacking high-complexity jobs back-to-back." />
             <Weight label="Testing-job priority" k="testingPriority" hint="How much to favor testing/internal jobs vs customer orders." />
+          </div>
+
+          {/* Tunable per-piece run minutes (center of range). */}
+          <div className="border-t border-border pt-3 space-y-2">
+            <div className="text-xs font-semibold">Run time per piece (minutes)</div>
+            <p className="text-[10px] text-muted -mt-1">Center of range; engraving complexity then nudges ± and text/design adjusts.</p>
+            <div className="grid grid-cols-3 gap-3">
+              {(['pipe', 'small_coil', 'big_coil'] as CoilSize[]).map((k) => (
+                <div key={k}>
+                  <label className="block text-[10px] text-muted mb-1">{COIL_SIZE_LABELS[k]}</label>
+                  <input type="number" min={1} max={480} value={form.coilSizeMinutes[k]} onChange={(e) => setCoilMin(k, Number(e.target.value))} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Machine roster — edit hours/target/active inline (saves immediately). */}
+          <div className="border-t border-border pt-3 space-y-2">
+            <div className="text-xs font-semibold">Machines</div>
+            <p className="text-[10px] text-muted -mt-1">Edits save immediately and drive capacity, utilization, and the timeline.</p>
+            <div className="space-y-2">
+              {machines.map((m) => (
+                <div key={m.id} className="flex flex-wrap items-center gap-2 bg-background border border-border rounded-lg p-2">
+                  <input
+                    value={m.name}
+                    onChange={(e) => updateMachine(m.id, { name: e.target.value })}
+                    className="flex-1 min-w-[120px] bg-surface border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+                  />
+                  <label className="text-[10px] text-muted flex items-center gap-1">
+                    Hrs
+                    <input type="number" min={1} max={24} step={0.5} value={m.dailyHours} onChange={(e) => updateMachine(m.id, { dailyHours: Math.max(1, Number(e.target.value)) })} className="w-14 bg-surface border border-border rounded px-1.5 py-1 text-sm focus:outline-none focus:border-accent" />
+                  </label>
+                  <label className="text-[10px] text-muted flex items-center gap-1">
+                    Target
+                    <input type="number" min={1} max={50} value={m.dailyPieceTarget} onChange={(e) => updateMachine(m.id, { dailyPieceTarget: Math.max(1, Number(e.target.value)) })} className="w-14 bg-surface border border-border rounded px-1.5 py-1 text-sm focus:outline-none focus:border-accent" />
+                  </label>
+                  <label className="text-[10px] flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" checked={m.active} onChange={(e) => updateMachine(m.id, { active: e.target.checked })} className="accent-accent" />
+                    Active
+                  </label>
+                </div>
+              ))}
+              {machines.length === 0 && <p className="text-xs text-muted">No machines loaded.</p>}
+            </div>
           </div>
         </div>
 

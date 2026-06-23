@@ -4,17 +4,18 @@ import { useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { fmtMinutes } from '@/lib/production';
 import { computeProductionReport, reportRange } from '@/lib/production-reports';
+import { ProductionDailyReport } from './production-daily-report';
 
 /**
  * Production reporting / KPI dashboard. Answers: did we make what we were
- * supposed to make? Daily / weekly / monthly views computed from the job set
- * already in the store.
+ * supposed to make? Daily / weekly / monthly rollups + a detailed,
+ * printable/exportable per-day report.
  */
 export function ProductionReports() {
   const { productionJobs, machines } = useAppStore();
-  const [preset, setPreset] = useState<'today' | 'week' | 'month'>('week');
+  const [preset, setPreset] = useState<'today' | 'week' | 'month' | 'daily'>('week');
 
-  const range = useMemo(() => reportRange(preset), [preset]);
+  const range = useMemo(() => reportRange(preset === 'daily' ? 'today' : preset), [preset]);
   const report = useMemo(
     () => computeProductionReport(productionJobs, machines, range.fromKey, range.toKey),
     [productionJobs, machines, range],
@@ -24,20 +25,30 @@ export function ProductionReports() {
     ? `+${report.avgDelayMinutes}m over est`
     : report.avgDelayMinutes < 0 ? `${report.avgDelayMinutes}m under est` : 'on estimate';
 
+  const TABS: { id: typeof preset; label: string }[] = [
+    { id: 'today', label: 'Today' },
+    { id: 'week', label: 'Last 7 days' },
+    { id: 'month', label: 'This month' },
+    { id: 'daily', label: 'Daily report' },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        {(['today', 'week', 'month'] as const).map((p) => (
+      <div className="flex items-center gap-2 flex-wrap">
+        {TABS.map((t) => (
           <button
-            key={p}
-            onClick={() => setPreset(p)}
-            className={`px-3 py-1.5 text-sm rounded-lg border ${preset === p ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'}`}
+            key={t.id}
+            onClick={() => setPreset(t.id)}
+            className={`px-3 py-1.5 text-sm rounded-lg border ${preset === t.id ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'} ${t.id === 'daily' ? 'ml-1' : ''}`}
           >
-            {reportRange(p).label}
+            {t.label}
           </button>
         ))}
-        <span className="text-xs text-muted ml-1">{range.fromKey === range.toKey ? range.fromKey : `${range.fromKey} → ${range.toKey}`}</span>
+        {preset !== 'daily' && <span className="text-xs text-muted ml-1">{range.fromKey === range.toKey ? range.fromKey : `${range.fromKey} → ${range.toKey}`}</span>}
       </div>
+
+      {preset === 'daily' && <ProductionDailyReport />}
+      {preset !== 'daily' && (<>
 
       {/* Headline KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -116,6 +127,7 @@ export function ProductionReports() {
         Reporting reads completed-job actuals. Operator stats populate once jobs are completed with an assigned operator;
         on-time % counts only jobs that had a due date.
       </p>
+      </>)}
     </div>
   );
 }

@@ -61,7 +61,10 @@ export function addDays(dateKey: string, n: number): string {
  *    discounted for repeat designs (fixturing already known).
  *  - Finish/inspection is a flat per-piece check.
  */
-export function estimateJobMinutes(job: Partial<ProductionJob>): {
+export function estimateJobMinutes(
+  job: Partial<ProductionJob>,
+  opts?: { coilMinutes?: Record<CoilSize, number> },
+): {
   setup: number;
   run: number;
   finish: number;
@@ -73,8 +76,10 @@ export function estimateJobMinutes(job: Partial<ProductionJob>): {
   // Run time: piece type (coil size) is the dominant driver when known —
   // pipes fastest, big coils slowest. Complexity then nudges ±, so a small
   // coil lands ~60-90 across low→high and a big coil ~90-120. Falls back to
-  // the complexity baseline when no coil size is set.
-  const coilBase = job.coilSize ? COIL_SIZE_BASE_MINUTES[job.coilSize] : undefined;
+  // the complexity baseline when no coil size is set. Per-piece minutes are
+  // tunable via opts.coilMinutes (admin settings).
+  const coilTable = opts?.coilMinutes || COIL_SIZE_BASE_MINUTES;
+  const coilBase = job.coilSize ? coilTable[job.coilSize] : undefined;
   const complexityFactor: Record<ProductionComplexity, number> = {
     low: 0.85, medium: 1.0, high: 1.15, very_high: 1.3,
   };

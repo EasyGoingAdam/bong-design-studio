@@ -88,6 +88,9 @@ interface AppState {
   closeOutDay: (date: string, closeout: ProductionCloseout) => Promise<void>;
   reopenDay: (date: string) => Promise<void>;
   importProductionJobs: (drafts: Partial<ProductionJob>[]) => Promise<number>;
+  updateMachine: (id: string, patch: Partial<Machine>) => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  saveDailyReport: (date: string, data: any) => Promise<boolean>;
 }
 
 
@@ -663,6 +666,37 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const next = { ...get().productionSettings, ...patch };
     set({ productionSettings: next });
     saveSetting('production_settings', JSON.stringify(next));
+  },
+
+  updateMachine: async (id, patch) => {
+    set((state) => ({ machines: state.machines.map((m) => (m.id === id ? { ...m, ...patch } : m)) }));
+    try {
+      const res = await fetch(`/api/production/machines/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        const fresh = (await res.json()) as Machine;
+        set((state) => ({ machines: state.machines.map((m) => (m.id === id ? fresh : m)) }));
+      }
+    } catch (err) {
+      console.error('Failed to update machine:', err);
+    }
+  },
+
+  saveDailyReport: async (date, data) => {
+    try {
+      const res = await fetch('/api/production/daily-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, data, createdBy: get().currentUser.name }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('Failed to save daily report:', err);
+      return false;
+    }
   },
 
   closeOutDay: async (date, closeout) => {

@@ -83,6 +83,11 @@ export function dbJobToFrontend(r: Record<string, unknown>): ProductionJob {
     quantityFailed: (r.quantity_failed as number) ?? 0,
     reworkReason: (r.rework_reason as string) ?? '',
     scrapCount: (r.scrap_count as number) ?? 0,
+    material: (r.material as string) ?? '',
+    machineSettings: (r.machine_settings as string) ?? '',
+    qcResult: ((r.qc_result as string) ?? '') as ProductionJob['qcResult'],
+    qcNotes: (r.qc_notes as string) ?? '',
+    pauseCount: (r.pause_count as number) ?? 0,
     aiConfidence: r.ai_confidence != null ? Number(r.ai_confidence) : undefined,
     aiReasoning: (r.ai_reasoning as string) ?? '',
     createdAt: (r.created_at as string) ?? '',
@@ -167,6 +172,11 @@ export function jobToDbRow(j: Partial<ProductionJob>): Record<string, unknown> {
   set('quantity_failed', j.quantityFailed);
   set('rework_reason', j.reworkReason);
   set('scrap_count', j.scrapCount);
+  set('material', j.material);
+  set('machine_settings', j.machineSettings);
+  set('qc_result', j.qcResult);
+  set('qc_notes', j.qcNotes);
+  set('pause_count', j.pauseCount);
   set('ai_confidence', j.aiConfidence);
   set('ai_reasoning', j.aiReasoning);
   return map;

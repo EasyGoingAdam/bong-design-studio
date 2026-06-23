@@ -359,8 +359,27 @@ export interface ProductionJob {
   quantityFailed: number;
   reworkReason: string;
   scrapCount: number;
+  /** Material / blank used (e.g. "clear glass beaker"). */
+  material: string;
+  /** Laser settings used — power / speed / passes notes for repeatability. */
+  machineSettings: string;
+  /** Quality check outcome on completion. */
+  qcResult: '' | 'pass' | 'fail';
+  qcNotes: string;
+  /** How many times the job was paused — surfaces interruption patterns. */
+  pauseCount: number;
   aiConfidence?: number;
   aiReasoning: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductionDailyReport {
+  id: string;
+  date: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -476,6 +495,8 @@ export interface ProductionSettings {
   complexityPenalty: number; // 1-5 — how hard to avoid stacking hard jobs
   testingPriority: number;   // 1-5 — how much to favor testing/internal jobs
   rushBoost: number;         // 1-5 — how strongly rush orders float up
+  /** Tunable per-piece run minutes (center of range) used by the estimator. */
+  coilSizeMinutes: Record<CoilSize, number>;
 }
 
 export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
@@ -490,6 +511,7 @@ export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
   complexityPenalty: 3,
   testingPriority: 1,
   rushBoost: 5,
+  coilSizeMinutes: { pipe: 40, small_coil: 75, big_coil: 105 },
 };
 
 /** Workday length in hours derived from start/end ('HH:MM'). */
