@@ -92,6 +92,37 @@ export function ManufacturingBoard() {
   const completed = dayJobs.filter((j) => j.status === 'completed');
   const held = dayJobs.filter((j) => j.status === 'held');
 
+  // Backlog filters — the queue gets large (ShipStation pulls dozens), so
+  // let the operator narrow by text, source, coil size, rush, and tag.
+  const [blSearch, setBlSearch] = useState('');
+  const [blSource, setBlSource] = useState<'all' | ProductionJob['sourceType']>('all');
+  const [blCoil, setBlCoil] = useState<'all' | NonNullable<ProductionJob['coilSize']>>('all');
+  const [blRush, setBlRush] = useState(false);
+  const [blTag, setBlTag] = useState('');
+
+  const backlogTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const j of backlog) for (const t of j.tags || []) set.add(t);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [backlog]);
+
+  const filteredBacklog = useMemo(() => {
+    const q = blSearch.trim().toLowerCase();
+    return backlog.filter((j) => {
+      if (blSource !== 'all' && j.sourceType !== blSource) return false;
+      if (blCoil !== 'all' && j.coilSize !== blCoil) return false;
+      if (blRush && !j.rush) return false;
+      if (blTag && !(j.tags || []).includes(blTag)) return false;
+      if (q) {
+        const hay = [j.title, j.customerName, j.sku, j.designName, j.textName, j.productType, (j.tags || []).join(' ')]
+          .join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [backlog, blSearch, blSource, blCoil, blRush, blTag]);
+  const blActive = blSearch.trim() || blSource !== 'all' || blCoil !== 'all' || blRush || blTag;
+
   // Auto-sort within a machine column: started jobs float to the top, then
   // everything else shortest estimated time first (quick wins first).
   const jobsByMachine = (mid: string) =>
@@ -532,13 +563,48 @@ export function ManufacturingBoard() {
           })}
         </div>
 
+        {/* Backlog filter bar */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input
+            value={blSearch}
+            onChange={(e) => setBlSearch(e.target.value)}
+            placeholder="Filter backlog — order, customer, SKU, design, tag…"
+            className="flex-1 min-w-[200px] bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+          />
+          <select value={blSource} onChange={(e) => setBlSource(e.target.value as typeof blSource)} className="bg-background border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent">
+            <option value="all">All sources</option>
+            <option value="shipstation">ShipStation</option>
+            <option value="workflow">Design Studio</option>
+            <option value="manual">Manual</option>
+          </select>
+          <select value={blCoil} onChange={(e) => setBlCoil(e.target.value as typeof blCoil)} className="bg-background border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent">
+            <option value="all">Any piece</option>
+            <option value="pipe">Pipe</option>
+            <option value="small_coil">Small coil</option>
+            <option value="big_coil">Big coil</option>
+          </select>
+          {backlogTags.length > 0 && (
+            <select value={blTag} onChange={(e) => setBlTag(e.target.value)} className="bg-background border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-accent max-w-[160px]">
+              <option value="">Any tag</option>
+              {backlogTags.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+          <button onClick={() => setBlRush((v) => !v)} className={`px-3 py-1.5 text-sm rounded-lg border ${blRush ? 'bg-red-50 border-red-300 text-red-700' : 'border-border hover:border-foreground'}`}>Rush only</button>
+          {blActive && (
+            <button onClick={() => { setBlSearch(''); setBlSource('all'); setBlCoil('all'); setBlRush(false); setBlTag(''); }} className="px-3 py-1.5 text-sm text-muted hover:text-foreground">Clear</button>
+          )}
+        </div>
+
         {/* Board */}
-        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 420px)' }}>
-          <Column droppableId="backlog" title="Backlog" count={backlog.length} accent="border-t-slate-400">
-            {backlog.map((j, i) => (
+        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 'calc(100vh - 460px)' }}>
+          <Column droppableId="backlog" title="Backlog" count={blActive ? filteredBacklog.length : backlog.length} subtitle={blActive ? `${filteredBacklog.length} of ${backlog.length}` : undefined} accent="border-t-slate-400">
+            {filteredBacklog.map((j, i) => (
               <JobCard key={j.id} job={j} index={i} machines={machines} locked={locked} isAdmin={isAdmin}
                 onEdit={openEdit} onDelete={(id) => setDeleteId(id)} onStart={startJob} onPause={pauseJob} onComplete={completeJob} onHold={holdJob} onRework={reworkJob} showWhy />
             ))}
+            {blActive && filteredBacklog.length === 0 && backlog.length > 0 && (
+              <div className="text-center text-[11px] text-muted py-6">No backlog jobs match the filter.</div>
+            )}
           </Column>
 
           {activeMachines.map((m) => (
