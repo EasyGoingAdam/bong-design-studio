@@ -28,6 +28,7 @@ import { ConceptLineage } from './concept-lineage';
 import { DropPlanner } from './drop-planner';
 import { ToastProvider } from './toast';
 import { ErrorBoundary } from './error-boundary';
+import { installAuthFetch } from '@/lib/auth-fetch';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
 
@@ -132,6 +133,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Attach the Supabase token to every /api request so the server-side
+    // auth middleware can authenticate calls. Install before any fetch runs.
+    installAuthFetch();
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
