@@ -478,9 +478,11 @@ function FilterChip({
 
 function DesignCard({ design: d, onOpen }: { design: CfpDesign; onOpen: () => void }) {
   const meta = CFP_STATUS_META[d.status];
-  const heroUrl = d.selectedVersion?.downloadUrls.png
-    || d.selectedVersion?.downloadUrls.jpeg
-    || d.allVersions[0]?.downloadUrls.png;
+  // Use our authenticated proxy, NOT the upstream downloadUrls — the CFP API
+  // returns internal URLs (e.g. https://localhost:8080/...) the browser can't
+  // load. The proxy streams the bytes via /api/cfp/designs/{id}/files/...
+  const ver = d.selectedVersion?.versionNumber ?? d.allVersions[0]?.versionNumber;
+  const heroUrl = ver != null ? `/api/cfp/designs/${d.id}/files/v${ver}/png` : '';
   const isNew = d.status === 'new';
 
   return (
