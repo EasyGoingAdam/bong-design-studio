@@ -17,8 +17,22 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PREFIXES = ['/api/health', '/api/preview', '/api/incoming', '/api/webhooks'];
 
+// Binary assets the browser loads DIRECTLY via <img src>, <a download>, or a
+// navigation — these can't carry a Bearer header, so the token wrapper can't
+// authenticate them and they'd 401 (breaking the customer-designs portal).
+// They're keyed by unguessable UUIDs. Follow-up: switch to short-lived signed
+// URLs so these don't rely on URL secrecy.
+const PUBLIC_PATTERNS = [
+  /^\/api\/cfp\/designs\/[^/]+\/files\//,   // design preview/file images
+  /^\/api\/cfp\/designs\/[^/]+\/zip$/,      // per-design zip download
+  /^\/api\/cfp\/designs\.csv$/,             // CSV export (window.location nav)
+];
+
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  return (
+    PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/')) ||
+    PUBLIC_PATTERNS.some((re) => re.test(pathname))
+  );
 }
 
 const unauthorized = () =>
