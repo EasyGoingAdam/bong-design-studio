@@ -6,11 +6,24 @@ import { supabase } from './supabase';
  * server-side proxy authenticate every API call without having to thread
  * a header through dozens of existing fetch() call sites.
  *
+ * Token source: a synchronously-cached token (set by app-shell from the auth
+ * session/refresh events BEFORE the first API calls fire) with a getSession()
+ * fallback. The cache removes the startup race where the very first calls
+ * (/api/settings, /api/auth/users) ran before getSession() resolved, which
+ * left the OpenAI key + user identity unloaded (falling back to a sample user).
+ *
  * Safe by construction: only relative "/api/..." (or same-origin /api) string
  * URLs are touched; Supabase's own absolute calls and any third-party fetch
  * pass through untouched. On any error or missing session it falls through to
  * the original fetch (the request still runs; the server may 401).
  */
+
+// Synchronously-readable token, kept fresh by setAuthToken() on every auth event.
+let cachedToken: string | null = null;
+export function setAuthToken(token: string | null) {
+  cachedToken = token || null;
+}
+
 export function installAuthFetch() {
   if (typeof window === 'undefined') return;
   const w = window as unknown as { __authFetchInstalled?: boolean };
@@ -31,8 +44,16 @@ export function installAuthFetch() {
         url.startsWith('/api/') || url.startsWith(`${window.location.origin}/api/`);
 
       if (sameOriginApi) {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
+        // Prefer the synchronously-cached token (set before startup calls);
+        // fall back to getSession() if it hasn't been primed yet.
+        let token = cachedToken;
+        if (!token) {
+          try {
+            const { data } = await supabase.auth.getSession();
+            token = data.session?.access_token ?? null;
+            if (token) cachedToken = token;
+          } catch { /* fall through */ }
+        }
         if (token) {
           if (input instanceof Request) {
             const headers = new Headers(input.headers);

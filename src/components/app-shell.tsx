@@ -28,7 +28,7 @@ import { ConceptLineage } from './concept-lineage';
 import { DropPlanner } from './drop-planner';
 import { ToastProvider } from './toast';
 import { ErrorBoundary } from './error-boundary';
-import { installAuthFetch } from '@/lib/auth-fetch';
+import { installAuthFetch, setAuthToken } from '@/lib/auth-fetch';
 
 type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
 
@@ -139,6 +139,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        // Prime the API token BEFORE the first authenticated fetches fire.
+        setAuthToken(session.access_token);
         setAuthenticated(true);
         setAuthUser(session.user.id, session.user.email || '');
         initialize();
@@ -146,9 +148,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setAuthChecked(true);
     });
 
-    // Listen for auth changes
+    // Listen for auth changes — keep the cached token fresh across refreshes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      setAuthToken(session?.access_token ?? null);
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         setAuthenticated(true);
         setAuthUser(session.user.id, session.user.email || '');
         initialize();
