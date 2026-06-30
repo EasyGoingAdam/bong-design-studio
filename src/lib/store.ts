@@ -346,6 +346,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
         // left the optimistic UI claiming success while the DB kept old data.
         const body = await res.json().catch(() => ({}));
         console.error(`Failed to persist concept update (${res.status}):`, body.error || body);
+      } else {
+        // Reconcile with the server's canonical row so the optimistic copy
+        // can't silently diverge from what was actually persisted.
+        const fresh = await res.json().catch(() => null);
+        if (fresh && fresh.id) {
+          set((state) => ({
+            concepts: state.concepts.map((c) => (c.id === id ? (fresh as Concept) : c)),
+          }));
+        }
       }
     } catch (err) {
       console.error('Failed to update concept:', err);

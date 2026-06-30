@@ -1,5 +1,5 @@
 import { ProductionJob, Machine } from './types';
-import { jobTotalMinutes, daysUntil, addDays, todayKey, toDateKey } from './production';
+import { jobTotalMinutes, daysUntil, addDays, todayKey } from './production';
 
 /**
  * Production reporting — pure analytics over the job set. Answers the core
@@ -88,7 +88,10 @@ export function computeProductionReport(
   const dueDated = completed.filter((j) => j.dueDate);
   const onTime = dueDated.filter((j) => {
     if (!j.actualEndTime) return false;
-    const endKey = toDateKey(new Date(j.actualEndTime));
+    // Compare the completion DATE to the due date. Use the ISO date prefix
+    // (not a local-time conversion) so a late-night finish isn't pushed to
+    // the next day by the viewer's timezone.
+    const endKey = j.actualEndTime.slice(0, 10);
     return endKey <= (j.dueDate as string);
   });
 
@@ -141,7 +144,8 @@ export function computeProductionReport(
     jobsCompleted: completed.length,
     estMinutes,
     actualMinutes,
-    avgEstMinutes: completed.length ? Math.round(estMinutes / Math.max(1, active.length)) : 0,
+    // Average over COMPLETED jobs for both, so avg-est vs avg-actual compare.
+    avgEstMinutes: completed.length ? Math.round(completed.reduce((s, j) => s + jobTotalMinutes(j), 0) / completed.length) : 0,
     avgActualMinutes: completed.length ? Math.round(actualMinutes / completed.length) : 0,
     avgDelayMinutes: avgDelay,
     onTimeJobs: onTime.length,
