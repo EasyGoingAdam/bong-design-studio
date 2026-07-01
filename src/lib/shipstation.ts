@@ -82,7 +82,7 @@ interface SSItem {
  * adjustment), so we score by how "coil/pipe-like" each line is and ignore
  * obvious non-etch add-ons, with price as a tiebreak.
  */
-const NON_ETCH = /shiptection|adjustment|insurance|warranty|discount|keychain|debowler|sticker|grinder|lighter|\btool\b|\btip\b|cleaning|brush|\bcase\b|\bbag\b/i;
+const NON_ETCH = /shiptection|adjustment|insurance|warranty|discount|keychain|debowler|sticker|grinder|lighter|\btool\b|\btip\b|cleaning|brush|\bcase\b|\bbag\b|\binsert\b|\bscreen\b|torch|\bstand\b|holder|banger|carb ?cap|\bbowl\b|downstem|ash ?catcher|adapter|\bo-?ring\b/i;
 function scoreItem(it: SSItem): number {
   const text = `${it.name || ''} ${it.sku || ''}`.toLowerCase();
   const price = it.unit_price ?? 0;

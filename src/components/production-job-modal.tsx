@@ -87,8 +87,10 @@ export function ProductionJobModal({
     () => estimateJobMinutes(form, { coilMinutes: productionSettings.coilSizeMinutes }),
     [form, productionSettings.coilSizeMinutes],
   );
+  // Note: != null (not truthiness) so a deliberate manual "0 minutes" —
+  // e.g. a no-op/administrative job — isn't silently ignored.
   const effectiveTotal =
-    manualEstimate && form.estimatedTotalMinutes
+    manualEstimate && form.estimatedTotalMinutes != null
       ? form.estimatedTotalMinutes
       : form.aiReasoning && form.estimatedTotalMinutes
         ? form.estimatedTotalMinutes

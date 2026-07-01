@@ -431,7 +431,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(comment),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   addApproval: (conceptId, action, notes, fromStage, toStage) => {
@@ -455,7 +455,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(log),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   addVersion: (conceptId, version) => {
@@ -481,7 +481,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ver),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   addAIGeneration: (conceptId, record) => {
@@ -509,7 +509,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(gen),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   updateManufacturing: (conceptId, record) => {
@@ -527,7 +527,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conceptId, ...record }),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   addTemplate: (partial) => {
@@ -545,7 +545,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(template),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   updateTemplate: (id, updates) => {
@@ -558,7 +558,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(template),
-      }).catch(console.error);
+      }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
     }
   },
 
@@ -568,7 +568,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
-    }).catch(console.error);
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
   },
 
   setOpenAIKey: (key) => {

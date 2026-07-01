@@ -1027,7 +1027,7 @@ export function AIGeneration({ onOpenConcept }: { onOpenConcept: (id: string) =>
                   <details className="text-[10px] text-muted">
                     <summary className="cursor-pointer">Subjects generated</summary>
                     <ul className="mt-1 pl-3 list-disc">
-                      {stampSubjects.map((s, i) => <li key={i}>{s}</li>)}
+                      {stampSubjects.map((s, i) => <li key={`${s}-${i}`}>{s}</li>)}
                     </ul>
                   </details>
                 )}
