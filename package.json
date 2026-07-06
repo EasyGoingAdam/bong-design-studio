@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "data:pull": "node scripts/pull-data.mjs",
+    "data:push": "node scripts/push-data.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

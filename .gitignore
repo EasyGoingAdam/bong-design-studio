@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local data snapshot: JSON is committed, downloaded image bytes are not
+/data/storage/
+
 # vercel
 .vercel
 
