@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { ProductionSettings, CoilSize, COIL_SIZE_LABELS, workdayHours, DEFAULT_PRODUCTION_SETTINGS } from '@/lib/types';
@@ -11,8 +11,29 @@ import { ProductionSettings, CoilSize, COIL_SIZE_LABELS, workdayHours, DEFAULT_P
  * per-piece run-time, and the machine roster — instead of hardcoding them.
  */
 export function ProductionSettingsModal({ onClose }: { onClose: () => void }) {
-  const { productionSettings, setProductionSettings, machines, updateMachine } = useAppStore();
+  const { productionSettings, setProductionSettings, machines, updateMachine, addMachine, productionJobs } = useAppStore();
   const { toast } = useToast();
+
+  // Estimates that learn: average ACTUAL per-piece minutes from completed
+  // jobs, per piece type — shown beside the tunable inputs so the numbers
+  // can be corrected toward reality as history accumulates.
+  const historicalAvg = useMemo(() => {
+    const acc: Partial<Record<CoilSize, { min: number; pieces: number }>> = {};
+    for (const j of productionJobs) {
+      if (j.status !== 'completed' || !j.coilSize || !j.actualTotalMinutes) continue;
+      const pieces = Math.max(1, j.quantityCompleted || j.quantity || 1);
+      const cur = acc[j.coilSize] || { min: 0, pieces: 0 };
+      cur.min += j.actualTotalMinutes;
+      cur.pieces += pieces;
+      acc[j.coilSize] = cur;
+    }
+    const out: Partial<Record<CoilSize, { avg: number; pieces: number }>> = {};
+    for (const k of Object.keys(acc) as CoilSize[]) {
+      const a = acc[k]!;
+      if (a.pieces > 0) out[k] = { avg: Math.round(a.min / a.pieces), pieces: a.pieces };
+    }
+    return out;
+  }, [productionJobs]);
   const [form, setForm] = useState<ProductionSettings>({
     ...DEFAULT_PRODUCTION_SETTINGS,
     ...productionSettings,
@@ -112,12 +133,25 @@ export function ProductionSettingsModal({ onClose }: { onClose: () => void }) {
             <div className="text-xs font-semibold">Run time per piece (minutes)</div>
             <p className="text-[10px] text-muted -mt-1">Center of range; engraving complexity then nudges ± and text/design adjusts.</p>
             <div className="grid grid-cols-3 gap-3">
-              {(['pipe', 'small_coil', 'big_coil'] as CoilSize[]).map((k) => (
-                <div key={k}>
-                  <label className="block text-[10px] text-muted mb-1">{COIL_SIZE_LABELS[k]}</label>
-                  <input type="number" min={1} max={480} value={form.coilSizeMinutes[k]} onChange={(e) => setCoilMin(k, Number(e.target.value))} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
-                </div>
-              ))}
+              {(['pipe', 'small_coil', 'big_coil'] as CoilSize[]).map((k) => {
+                const hist = historicalAvg[k];
+                return (
+                  <div key={k}>
+                    <label className="block text-[10px] text-muted mb-1">{COIL_SIZE_LABELS[k]}</label>
+                    <input type="number" min={1} max={480} value={form.coilSizeMinutes[k]} onChange={(e) => setCoilMin(k, Number(e.target.value))} className="w-full bg-background border border-border rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-accent" />
+                    {hist && (
+                      <button
+                        type="button"
+                        onClick={() => setCoilMin(k, hist.avg)}
+                        className="mt-0.5 text-[9px] text-accent hover:underline text-left"
+                        title={`Average actual across ${hist.pieces} completed piece(s)`}
+                      >
+                        actuals avg {hist.avg}m ({hist.pieces} pcs) — apply
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -148,6 +182,13 @@ export function ProductionSettingsModal({ onClose }: { onClose: () => void }) {
                 </div>
               ))}
               {machines.length === 0 && <p className="text-xs text-muted">No machines loaded.</p>}
+              <button
+                type="button"
+                onClick={() => { addMachine(); toast('Machine added — it now has its own board column', 'success'); }}
+                className="text-xs px-3 py-1.5 border border-dashed border-border rounded-lg text-muted hover:text-foreground hover:border-foreground"
+              >
+                + Add laser machine
+              </button>
             </div>
           </div>
         </div>

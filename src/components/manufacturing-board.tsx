@@ -16,8 +16,10 @@ import { workdayHours } from '@/lib/types';
 import {
   ProductionJob,
   Machine,
+  CoilSize,
   PRODUCTION_STATUS_LABELS,
   COMPLEXITY_LABELS,
+  COIL_SIZE_LABELS,
   OVERRIDE_REASONS,
   REWORK_REASONS,
 } from '@/lib/types';
@@ -153,6 +155,118 @@ export function ManufacturingBoard() {
       behind: completedPieces < targetPieces,
     };
   }, [dayJobs, completed, activeMachines]);
+
+  /* ── Production-control computations (Manufacturing V2) ────────────────
+   * Dashboard numbers, per-machine live meta, batch suggestions, and the
+   * operator's "next up" recommendation. All deterministic + derived from
+   * the job set — the AI scheduler stays the deep planner; these answer
+   * the moment-to-moment "what's happening / what's next" questions.
+   */
+
+  // Remaining estimated minutes for one unfinished job (credits accumulated
+  // work on in-progress/paused jobs so finish times stay honest).
+  const remainingMinutes = (j: ProductionJob) =>
+    Math.max(5, jobTotalMinutes(j) - (j.accumulatedMinutes || 0));
+
+  const dashboard = useMemo(() => {
+    const inProduction = dayJobs.filter((j) => j.status === 'in_progress');
+    const queued = dayJobs.filter((j) => ['scheduled', 'paused', 'rework'].includes(j.status));
+    const remainingMin = [...inProduction, ...queued].reduce((s, j) => s + remainingMinutes(j), 0);
+    // Deadline radar: due/shipping within 2 days and not completed — wherever it lives.
+    const soon = productionJobs.filter((j) => {
+      if (j.status === 'completed') return false;
+      const d = daysUntil(j.dueDate) ?? daysUntil(j.shipByDate);
+      return d !== null && d <= 1;
+    });
+    // Bottleneck: one machine overloaded while another has meaningful slack.
+    const loads = activeMachines.map((m) => computeMachineLoad(m, dayJobs));
+    const over = loads.find((l) => l.overloaded);
+    const idle = loads.find((l) => l.utilizationPct < 60);
+    const bottleneck = over && idle && over.machine.id !== idle.machine.id
+      ? `${over.machine.name} is overloaded while ${idle.machine.name} has slack — rebalance the queue.`
+      : null;
+    return {
+      waiting: backlog.length,
+      inProduction: inProduction.length,
+      completedToday: completed.length,
+      remainingMin,
+      deadlineSoon: soon,
+      bottleneck,
+    };
+  }, [dayJobs, backlog, completed, productionJobs, activeMachines]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Live meta for a machine column header: status · queue · finish time. */
+  const machineMeta = (mid: string) => {
+    const queue = jobsByMachine(mid);
+    const running = queue.some((j) => j.status === 'in_progress');
+    const remainMin = queue.reduce((s, j) => s + remainingMinutes(j), 0);
+    const finish = queue.length
+      ? new Date(Date.now() + remainMin * 60000).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      : null;
+    return { queue: queue.length, running, remainMin, finish };
+  };
+
+  // Batch suggestions: backlog jobs sharing the same piece + product share a
+  // fixture/setup — running them back-to-back kills repeat setup time.
+  const batchGroups = useMemo(() => {
+    const map = new Map<string, ProductionJob[]>();
+    for (const j of backlog) {
+      if (!j.inventoryAvailable) continue;
+      const key = `${j.coilSize || 'unknown'}|${(j.productType || '').toLowerCase().trim()}`;
+      if (!j.coilSize && !j.productType) continue;
+      map.set(key, [...(map.get(key) || []), j]);
+    }
+    return Array.from(map.entries())
+      .filter(([, js]) => js.length >= 2)
+      .map(([key, js]) => ({
+        key,
+        label: js[0].productType || COIL_SIZE_LABELS[js[0].coilSize as CoilSize] || 'similar pieces',
+        coilSize: js[0].coilSize,
+        jobs: js,
+        minutes: js.reduce((s, j) => s + jobTotalMinutes(j), 0),
+      }))
+      .sort((a, b) => b.jobs.length - a.jobs.length)
+      .slice(0, 3);
+  }, [backlog]);
+
+  const scheduleBatch = async (jobs: ProductionJob[]) => {
+    if (locked && !isAdmin) { toast('Schedule is locked — only an admin can change it.', 'error'); return; }
+    // Whole batch goes to ONE machine (that's the point — shared setup).
+    const least = activeMachines
+      .map((m) => ({ id: m.id, min: computeMachineLoad(m, dayJobs).minutes }))
+      .sort((a, b) => a.min - b.min)[0];
+    if (!least) return;
+    for (const j of jobs) {
+      await updateProductionJob(j.id, {
+        machineId: least.id, scheduledDate: viewedDate, status: 'scheduled',
+      });
+    }
+    const name = activeMachines.find((m) => m.id === least.id)?.name || 'machine';
+    toast(`Batched ${jobs.length} jobs onto ${name} — one setup, shared fixture.`, 'success');
+  };
+
+  /** Operator "next up": the job to start next on a machine, with the why. */
+  const nextUp = (mid: string): { job: ProductionJob; reason: string } | null => {
+    const queue = jobsByMachine(mid);
+    if (queue.some((j) => j.status === 'in_progress')) return null; // busy
+    const candidates = queue.filter((j) => j.status !== 'in_progress');
+    if (!candidates.length) return null;
+    const scored = candidates
+      .map((j) => {
+        const due = daysUntil(j.dueDate) ?? daysUntil(j.shipByDate);
+        let score = 0;
+        const reasons: string[] = [];
+        if (j.rush) { score -= 1000; reasons.push('rush order'); }
+        if (due !== null && due <= 0) { score -= 500; reasons.push(due < 0 ? 'past due' : 'due today'); }
+        else if (due === 1) { score -= 250; reasons.push('ships tomorrow'); }
+        if (j.status === 'rework') { score -= 100; reasons.push('rework — customer waiting'); }
+        score += jobTotalMinutes(j) / 10; // gentle shortest-first tiebreak
+        if (!reasons.length) reasons.push(`shortest job in queue (${fmtMinutes(jobTotalMinutes(j))})`);
+        return { job: j, score, reason: reasons.join(' · ') };
+      })
+      .sort((a, b) => a.score - b.score);
+    return scored[0];
+  };
 
   const warnings = useMemo(
     () => computeScheduleWarnings(activeMachines, dayJobs, backlog, viewedDate),
@@ -524,10 +638,13 @@ export function ManufacturingBoard() {
         </div>
       )}
 
-      {/* Daily summary dashboard */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
-        <Stat label="Scheduled" value={`${summary.scheduledPieces} pcs`} sub={`target ${summary.targetPieces}`} tone={summary.scheduledPieces < summary.targetPieces ? 'warn' : 'ok'} />
-        <Stat label="Completed" value={`${summary.completedPieces} pcs`} sub={summary.behind ? 'behind' : 'on track'} tone={summary.behind ? 'warn' : 'ok'} />
+      {/* Production dashboard — the control-center numbers first: what's
+          waiting, what's running, what's done, and how much work is left. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-2">
+        <Stat label="Waiting" value={`${dashboard.waiting}`} sub="in backlog" tone={dashboard.waiting > 0 ? 'neutral' : 'ok'} />
+        <Stat label="In production" value={`${dashboard.inProduction}`} sub={`${summary.unfinished} open today`} tone={dashboard.inProduction > 0 ? 'ok' : 'neutral'} />
+        <Stat label="Completed" value={`${summary.completedPieces} pcs`} sub={summary.behind ? `target ${summary.targetPieces} — behind` : 'on track'} tone={summary.behind ? 'warn' : 'ok'} />
+        <Stat label="Hours left" value={fmtMinutes(dashboard.remainingMin)} sub="est. remaining" tone={dashboard.remainingMin > 0 ? 'neutral' : 'ok'} />
         {activeMachines.map((m) => {
           const load = computeMachineLoad(m, dayJobs);
           const done = completed.filter((j) => j.machineId === m.id).reduce((s, j) => s + (j.quantityCompleted || j.quantity), 0);
@@ -535,8 +652,46 @@ export function ManufacturingBoard() {
         })}
         <Stat label="Est / Actual" value={fmtMinutes(summary.estMinutes)} sub={`act ${fmtMinutes(summary.actualMinutes)}`} />
         <Stat label="Revenue" value={`$${Math.round(summary.revenueCompleted)}`} sub={`of $${Math.round(summary.revenueScheduled)}`} />
-        <Stat label="Rework" value={`${summary.reworkCount}`} sub={`${summary.unfinished} unfinished`} tone={summary.reworkCount > 0 ? 'warn' : 'ok'} />
       </div>
+
+      {/* Priority alerts: deadlines within 24h + machine imbalance. */}
+      {(dashboard.deadlineSoon.length > 0 || dashboard.bottleneck) && (
+        <div className="mb-3 space-y-1">
+          {dashboard.deadlineSoon.slice(0, 4).map((j) => {
+            const d = daysUntil(j.dueDate) ?? daysUntil(j.shipByDate);
+            const when = d !== null && d < 0 ? `${-d}d overdue` : d === 0 ? 'due TODAY' : 'due tomorrow';
+            const where = j.scheduledDate ? '' : ' — still in backlog';
+            return (
+              <div key={j.id} className="text-xs px-3 py-1.5 rounded-lg border bg-red-50 border-red-200 text-red-700 flex items-center justify-between gap-2">
+                <span>🔥 “{j.title}” {when}{where}</span>
+                <button onClick={() => openEdit(j)} className="underline shrink-0 hover:no-underline">open</button>
+              </div>
+            );
+          })}
+          {dashboard.bottleneck && (
+            <div className="text-xs px-3 py-1.5 rounded-lg border bg-amber-50 border-amber-200 text-amber-800">
+              ⚖ {dashboard.bottleneck}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Batch opportunities — same piece/product = shared setup. */}
+      {batchGroups.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-muted">Batch &amp; save setup:</span>
+          {batchGroups.map((g) => (
+            <button
+              key={g.key}
+              onClick={() => scheduleBatch(g.jobs)}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-800 hover:border-purple-400 transition-colors"
+              title={g.jobs.map((j) => j.title).join('\n')}
+            >
+              {g.jobs.length}× {g.label}{g.coilSize ? ` (${COIL_SIZE_LABELS[g.coilSize as CoilSize]})` : ''} · {fmtMinutes(g.minutes)} — schedule together
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Warnings */}
       {warnings.length > 0 && (
@@ -621,15 +776,40 @@ export function ManufacturingBoard() {
             )}
           </Column>
 
-          {activeMachines.map((m) => (
-            <Column key={m.id} droppableId={m.id} title={m.name} count={jobsByMachine(m.id).length} accent="border-t-accent"
-              subtitle={`${computeMachineLoad(m, dayJobs).utilizationPct}% · ${fmtMinutes(computeMachineLoad(m, dayJobs).minutes)}`}>
-              {jobsByMachine(m.id).map((j, i) => (
-                <JobCard key={j.id} job={j} index={i} machines={machines} locked={locked} isAdmin={isAdmin}
-                  onEdit={openEdit} onDelete={(id) => setDeleteId(id)} onStart={startJob} onPause={pauseJob} onComplete={completeJob} onHold={holdJob} onRework={reworkJob} />
-              ))}
-            </Column>
-          ))}
+          {activeMachines.map((m) => {
+            const meta = machineMeta(m.id);
+            const load = computeMachineLoad(m, dayJobs);
+            const rec = nextUp(m.id);
+            return (
+              <Column
+                key={m.id}
+                droppableId={m.id}
+                title={m.name}
+                count={meta.queue}
+                accent="border-t-accent"
+                subtitle={
+                  `${meta.running ? '● running' : meta.queue ? '○ idle — queue ready' : '○ idle'}` +
+                  ` · ${load.utilizationPct}%` +
+                  (meta.finish ? ` · done ~${meta.finish}` : '')
+                }
+              >
+                {/* Operator "next up" — what to start and WHY. */}
+                {rec && !locked && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-[11px] text-emerald-900">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold truncate" title={rec.job.title}>▶ Next: {rec.job.title}</span>
+                      <button onClick={() => startJob(rec.job)} className="shrink-0 px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium">Start</button>
+                    </div>
+                    <div className="text-[10px] text-emerald-700 mt-0.5">{rec.reason}</div>
+                  </div>
+                )}
+                {jobsByMachine(m.id).map((j, i) => (
+                  <JobCard key={j.id} job={j} index={i} machines={machines} locked={locked} isAdmin={isAdmin}
+                    onEdit={openEdit} onDelete={(id) => setDeleteId(id)} onStart={startJob} onPause={pauseJob} onComplete={completeJob} onHold={holdJob} onRework={reworkJob} />
+                ))}
+              </Column>
+            );
+          })}
 
           <Column droppableId="held" title="Held / Problem" count={held.length} accent="border-t-red-400">
             {held.map((j, i) => (

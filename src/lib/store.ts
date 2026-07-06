@@ -89,6 +89,7 @@ interface AppState {
   reopenDay: (date: string) => Promise<void>;
   importProductionJobs: (drafts: Partial<ProductionJob>[]) => Promise<number>;
   updateMachine: (id: string, patch: Partial<Machine>) => Promise<void>;
+  addMachine: (name?: string) => Promise<void>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   saveDailyReport: (date: string, data: any) => Promise<boolean>;
 }
@@ -675,6 +676,22 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const next = { ...get().productionSettings, ...patch };
     set({ productionSettings: next });
     saveSetting('production_settings', JSON.stringify(next));
+  },
+
+  addMachine: async (name) => {
+    try {
+      const res = await fetch('/api/production/machines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const machine = (await res.json()) as Machine;
+        set((state) => ({ machines: [...state.machines, machine] }));
+      }
+    } catch (err) {
+      console.error('Failed to add machine:', err);
+    }
   },
 
   updateMachine: async (id, patch) => {
