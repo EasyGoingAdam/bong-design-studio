@@ -162,6 +162,7 @@ async function generateStampDirect(
     if (!imgData?.b64_json && !imgData?.url) throw new Error('No image data in OpenAI response');
     if (imgData.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
     const fetched = await fetch(imgData.url);
+    if (!fetched.ok) throw new Error(`Failed to download generated stamp (${fetched.status})`);
     const buf = await fetched.arrayBuffer();
     return `data:image/png;base64,${Buffer.from(buf).toString('base64')}`;
   };

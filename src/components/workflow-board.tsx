@@ -337,10 +337,14 @@ export function WorkflowBoard({
   };
 
   const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-    const conceptId = result.draggableId;
-    const newStatus = result.destination.droppableId as ConceptStatus;
-    moveConcept(conceptId, newStatus);
+    const { destination, source, draggableId } = result;
+    if (!destination) return;
+    // Dropping a card back in its own column is a no-op: intra-column ordering
+    // isn't persisted, so calling moveConcept + toasting "Moved to X" here just
+    // lies to the user. Only act on a real column (status) change.
+    if (destination.droppableId === source.droppableId) return;
+    const newStatus = destination.droppableId as ConceptStatus;
+    moveConcept(draggableId, newStatus);
     toast(`Moved to ${STATUS_LABELS[newStatus]}`, 'success');
   };
 

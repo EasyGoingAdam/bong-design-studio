@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// GET all settings
+// Keys the browser is allowed to read. Everything else in app_settings is
+// server-only (e.g. `shipstation_token`, read directly by the server via
+// supabaseAdmin) and must NEVER be returned to a client — otherwise this
+// endpoint dumps integration secrets to anyone with a session. The store
+// (src/lib/store.ts) consumes exactly these four keys.
+const CLIENT_READABLE_SETTINGS = new Set([
+  'openai_key',
+  'gemini_key',
+  'user_name',
+  'production_settings',
+]);
+
+// GET client-readable settings only
 export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
@@ -12,10 +24,11 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Convert array to object
+    // Convert array to object, filtered to the client allowlist so no
+    // server-only secret can leak through the response body.
     const settings: Record<string, string> = {};
     for (const row of data || []) {
-      settings[row.key] = row.value;
+      if (CLIENT_READABLE_SETTINGS.has(row.key)) settings[row.key] = row.value;
     }
 
     return NextResponse.json(settings);

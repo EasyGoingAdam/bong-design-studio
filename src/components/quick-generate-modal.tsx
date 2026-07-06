@@ -328,14 +328,14 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       const coilJob = fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
+        body: JSON.stringify({ prompt: coilPrompt, apiKey: openAIKey, geminiKey, size: coilSize, model: aiModel, quality: 'medium', complexityLevel: complexity }),
       });
       const baseJob = coilOnly
         ? Promise.resolve(null)
         : fetch('/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel: concept.specs.laserComplexity }),
+            body: JSON.stringify({ prompt: basePrompt, apiKey: openAIKey, geminiKey, size: baseSize, model: aiModel, quality: 'medium', complexityLevel: complexity }),
           });
 
       const [coilRes, baseRes] = await Promise.all([coilJob, baseJob]);
@@ -697,7 +697,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
               {designType === 'stamps' && (
                 <div className="mt-2 bg-amber-50 border border-amber-200 rounded px-2 py-2 space-y-1.5">
                   <p className="text-[10px] text-amber-900 leading-snug">
-                    Stamps mode — pick how many small graphics. AI brainstorms distinct subjects from this concept's name/tags, then generates each independently.
+                    Stamps mode — pick how many small graphics. AI brainstorms distinct subjects from this concept&apos;s name/tags, then generates each independently.
                   </p>
                   <div>
                     <label className="block text-[10px] text-amber-900 mb-1">

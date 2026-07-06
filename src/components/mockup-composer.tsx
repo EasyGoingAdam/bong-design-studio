@@ -171,6 +171,11 @@ export function MockupComposer({ concept, onClose }: Props) {
         setError(data.error || 'Render failed');
         return;
       }
+      if (!data.url) {
+        // 200 with an unexpected shape — don't persist an empty mockup URL.
+        setError('Render returned no image. Please try again.');
+        return;
+      }
       setResult(data.url);
       // Kick off auto-review — users want critique on every render
       reviewMockup(data.url);

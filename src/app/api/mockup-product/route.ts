@@ -196,6 +196,7 @@ export async function POST(request: NextRequest) {
       base64 = `data:image/png;base64,${imageData.b64_json}`;
     } else if (imageData.url) {
       const imgRes = await fetch(imageData.url);
+      if (!imgRes.ok) throw new Error(`Failed to download generated image (${imgRes.status})`);
       const imgBuffer = await imgRes.arrayBuffer();
       base64 = `data:image/png;base64,${Buffer.from(imgBuffer).toString('base64')}`;
     } else {

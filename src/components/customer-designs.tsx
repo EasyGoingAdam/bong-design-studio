@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CfpDesign,
   CfpListResponse,
@@ -46,7 +46,13 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
   // Selected design for the detail drawer
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  // Monotonic request id: a "Load more" (append) can resolve after a
+  // filter-change refetch, appending a stale page onto the fresh list. We
+  // tag each request and ignore any response that isn't the latest.
+  const reqIdRef = useRef(0);
+
   const fetchDesigns = useCallback(async (append = false) => {
+    const myReq = ++reqIdRef.current;
     if (append) setLoadingMore(true); else { setLoading(true); setError(null); }
 
     const params = new URLSearchParams();
@@ -65,6 +71,8 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
     try {
       const res = await fetch(`/api/cfp/designs?${params.toString()}`);
       const data = (await res.json().catch(() => ({}))) as Partial<CfpListResponse> & { error?: string };
+      // A newer request superseded this one — drop the stale response.
+      if (myReq !== reqIdRef.current) return;
       if (!res.ok) {
         setError(data.error || `Upstream error ${res.status}`);
         if (!append) setDesigns([]);
@@ -75,11 +83,14 @@ export function CustomerDesigns({ onOpenConcept }: { onOpenConcept: (id: string)
       setHasMore(!!data.hasMore);
       setCursor(data.nextCursor || null);
     } catch {
+      if (myReq !== reqIdRef.current) return;
       setError('Network error — could not reach CFP API');
       if (!append) setDesigns([]);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (myReq === reqIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [submittedOnly, statusFilter, colorFilter, search, cursor]);
 

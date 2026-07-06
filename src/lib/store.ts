@@ -95,6 +95,13 @@ interface AppState {
 }
 
 
+// Guards a concurrent double-boot: app-shell can call initialize() twice in
+// quick succession (getSession() + onAuthStateChange('INITIAL_SESSION')).
+// Both would pass the `initialized` guard while the fetches are still in
+// flight, firing every boot request twice. This module-level flag is set
+// synchronously so the second call bails immediately.
+let initInFlight = false;
+
 // Helper to save a setting to the server
 async function saveSetting(key: string, value: string) {
   try {
@@ -139,9 +146,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
         set({
           currentUser: {
             id: userId,
-            name: email.split('@')[0],
+            name: email.split('@')[0] || 'User',
             role: 'designer',
-            avatar: email[0].toUpperCase(),
+            // Guard against a blank/absent email — email[0] would be
+            // undefined and .toUpperCase() would throw, silently aborting
+            // the whole profile load inside the .then().
+            avatar: (email[0] || '?').toUpperCase(),
           },
         });
       }
@@ -149,8 +159,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   initialize: async () => {
-    if (get().initialized) return;
+    if (get().initialized || initInFlight) return;
+    initInFlight = true;
     set({ loading: true });
+    let booted = false;
     try {
       // Fetch concepts, templates, and settings from API in parallel
       const [conceptsRes, templatesRes, settingsRes] = await Promise.all([
@@ -206,15 +218,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
           } catch { /* keep defaults on parse error */ }
         }
       }
+      booted = true;
     } catch (err) {
       console.error('Failed to initialize from API:', err);
     } finally {
-      set({ loading: false, initialized: true });
+      // Only mark initialized on a clean boot. A transient network blip must
+      // NOT latch `initialized: true` — otherwise the app is stuck on an empty
+      // board forever and a later initialize() call no-ops instead of retrying.
+      set({ loading: false, initialized: booted });
+      initInFlight = false;
     }
 
     // Load manufacturing data in the background — never block the main
     // app boot on it, and never throw if the tables aren't migrated yet.
-    get().loadProduction();
+    if (booted) get().loadProduction();
   },
 
   refreshConcepts: async () => {
@@ -347,6 +364,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
         // left the optimistic UI claiming success while the DB kept old data.
         const body = await res.json().catch(() => ({}));
         console.error(`Failed to persist concept update (${res.status}):`, body.error || body);
+        // Roll the optimistic edit back to the pre-update row so the UI can't
+        // keep showing a change the database rejected.
+        if (current) set((state) => ({ concepts: state.concepts.map((c) => (c.id === id ? current : c)) }));
       } else {
         // Reconcile with the server's canonical row so the optimistic copy
         // can't silently diverge from what was actually persisted.
@@ -359,15 +379,25 @@ export const useAppStore = create<AppState>()((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to update concept:', err);
+      if (current) set((state) => ({ concepts: state.concepts.map((c) => (c.id === id ? current : c)) }));
     }
   },
 
   deleteConcept: async (id) => {
+    // Snapshot the row (and its index) so we can restore it if the server
+    // rejects the delete — fetch() doesn't throw on 4xx/5xx, so without this
+    // a failed DELETE looked successful until the next reload brought it back.
+    const removed = get().concepts.find((c) => c.id === id);
     set((state) => ({ concepts: state.concepts.filter((c) => c.id !== id) }));
     try {
-      await fetch(`/api/concepts/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/concepts/${id}`, { method: 'DELETE' });
+      if (!res.ok && removed) {
+        console.error(`Failed to delete concept (${res.status}) — restoring`);
+        set((state) => ({ concepts: [...state.concepts, removed] }));
+      }
     } catch (err) {
       console.error('Failed to delete concept:', err);
+      if (removed) set((state) => ({ concepts: [...state.concepts, removed] }));
     }
   },
 
@@ -564,12 +594,21 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   deleteTemplate: (id) => {
+    const removed = get().templates.find((t) => t.id === id);
     set((state) => ({ templates: state.templates.filter((t) => t.id !== id) }));
     fetch('/api/templates', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
-    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
+    }).then((r) => {
+      if (!r.ok) {
+        console.error('Fire-and-forget API write rejected:', r.status, r.url);
+        if (removed) set((state) => ({ templates: [...state.templates, removed] }));
+      }
+    }).catch((err) => {
+      console.error(err);
+      if (removed) set((state) => ({ templates: [...state.templates, removed] }));
+    });
   },
 
   setOpenAIKey: (key) => {
@@ -629,6 +668,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   updateProductionJob: async (id, patch) => {
+    // Snapshot for rollback if the server rejects the patch.
+    const prevJob = get().productionJobs.find((j) => j.id === id);
     // Optimistic update.
     set((state) => ({
       productionJobs: state.productionJobs.map((j) =>
@@ -644,6 +685,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         console.error(`Failed to persist production job update (${res.status}):`, body.error || body);
+        // Roll back so the board doesn't show a change the DB rejected.
+        if (prevJob) set((state) => ({ productionJobs: state.productionJobs.map((j) => (j.id === id ? prevJob : j)) }));
       } else {
         // Reconcile with the server's canonical row (computed fields, etc.).
         const fresh = (await res.json()) as ProductionJob;
@@ -653,15 +696,22 @@ export const useAppStore = create<AppState>()((set, get) => ({
       }
     } catch (err) {
       console.error('Failed to update production job:', err);
+      if (prevJob) set((state) => ({ productionJobs: state.productionJobs.map((j) => (j.id === id ? prevJob : j)) }));
     }
   },
 
   deleteProductionJob: async (id) => {
+    const removed = get().productionJobs.find((j) => j.id === id);
     set((state) => ({ productionJobs: state.productionJobs.filter((j) => j.id !== id) }));
     try {
-      await fetch(`/api/production/jobs/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/production/jobs/${id}`, { method: 'DELETE' });
+      if (!res.ok && removed) {
+        console.error(`Failed to delete production job (${res.status}) — restoring`);
+        set((state) => ({ productionJobs: [removed, ...state.productionJobs] }));
+      }
     } catch (err) {
       console.error('Failed to delete production job:', err);
+      if (removed) set((state) => ({ productionJobs: [removed, ...state.productionJobs] }));
     }
   },
 
