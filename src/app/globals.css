@@ -4,16 +4,18 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Warm editorial palette */
-  --color-background: #f5f1ea;
-  --color-foreground: #1a1714;
-  --color-surface: #faf7f1;
-  --color-surface-hover: #f0eade;
-  --color-border: #d9d0c2;
+  /* Gallery-white neutral canvas — cleaner and brighter than the old cream,
+     with true-white surfaces so the vermilion accent reads sharply. Only the
+     neutrals changed here; the accent and status hues are unchanged. */
+  --color-background: #f6f5f2;
+  --color-foreground: #1b1917;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f2ee;
+  --color-border: #e4e1da;
   /* "border-light" is a HOVER state in this codebase — must be MORE visible
-     than --color-border, not less. Mapped to the editorial "strong" tone. */
-  --color-border-light: #c4b8a5;
-  --color-muted: #7a716a;
+     than --color-border, not less. Kept as the darker "strong" tone. */
+  --color-border-light: #cfcabf;
+  --color-muted: #77716a;
 
   /* Vermilion accent */
   --color-accent: #d94e1f;
@@ -42,13 +44,13 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #c4b8a5 #f5f1ea;
+  scrollbar-color: #cfcabf #f6f5f2;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d9d0c2; border-radius: 999px; border: 2px solid #f5f1ea; }
-::-webkit-scrollbar-thumb:hover { background: #c4b8a5; }
+::-webkit-scrollbar-thumb { background: #e4e1da; border-radius: 999px; border: 2px solid #f6f5f2; }
+::-webkit-scrollbar-thumb:hover { background: #cfcabf; }
 
 body {
   background: var(--color-background);
@@ -116,7 +118,7 @@ input, textarea, select {
 .display-md { font-family: 'Fraunces', serif; font-weight: 400; font-size: 36px; line-height: 1.02; letter-spacing: -0.02em; font-variation-settings: "opsz" 96; }
 .display-sm { font-family: 'Fraunces', serif; font-weight: 500; font-size: 24px; line-height: 1.1; letter-spacing: -0.015em; font-variation-settings: "opsz" 48; }
 
-.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #7a716a; }
+.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #77716a; }
 
 /* Custom drag-and-drop styles */
 [data-rfd-draggable-context-id] {
@@ -139,7 +141,7 @@ input, textarea, select {
 
 /* Placeholder image pattern — editorial diagonal weave */
 .placeholder-pattern {
-  background-color: #ebe5d9;
+  background-color: #edece7;
   background-image:
     linear-gradient(135deg, transparent 46%, rgba(0,0,0,0.06) 46%, rgba(0,0,0,0.06) 54%, transparent 54%),
     linear-gradient(45deg, transparent 46%, rgba(0,0,0,0.06) 46%, rgba(0,0,0,0.06) 54%, transparent 54%);
@@ -166,7 +168,7 @@ input, textarea, select {
 /* Brand mark */
 .brand-mark {
   width: 36px; height: 36px;
-  border: 1.5px solid #1a1714;
+  border: 1.5px solid #1b1917;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500;
   letter-spacing: -0.02em;
@@ -174,6 +176,6 @@ input, textarea, select {
 }
 .brand-mark::before {
   content: ''; position: absolute; inset: 3px;
-  border: 0.5px solid #1a1714; pointer-events: none;
+  border: 0.5px solid #1b1917; pointer-events: none;
 }
 
