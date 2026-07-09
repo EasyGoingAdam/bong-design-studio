@@ -8,7 +8,7 @@ export const maxDuration = 300;
  * POST /api/calendar/cron-sweep
  *
  * Autonomous daily job: generate a coil mockup for every event now within the
- * 40-day window that doesn't have one yet. Runs with NO browser, so it reads
+ * WINDOW_DAYS window that doesn't have one yet. Runs with NO browser, so it reads
  * the stored OpenAI key server-side.
  *
  * Protected by a shared secret (it's on the proxy's public allowlist, so the

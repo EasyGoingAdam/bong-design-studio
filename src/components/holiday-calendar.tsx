@@ -181,7 +181,7 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
   );
 
   // On-visit auto-fill: once mockups have loaded and a key is available,
-  // generate a coil design for every event now within 40 days that lacks one.
+  // generate a coil design for every event now within the window that lacks one.
   // Runs once per session; the server dedupes so re-attempts are harmless.
   useEffect(() => {
     if (!loaded || !openAIKey || autofilledRef.current) return;

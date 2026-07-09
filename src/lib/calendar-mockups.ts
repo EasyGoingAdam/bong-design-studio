@@ -14,7 +14,7 @@ import { HolidayEvent, nextOccurrence, daysUntil } from './holiday-events';
 import { ENGRAVING_RULES } from './prompt-builder';
 
 /** Generate a mockup once an event is this many days out (or closer). */
-export const WINDOW_DAYS = 40;
+export const WINDOW_DAYS = 30;
 
 /** One stored coil mockup (camelCase view of the calendar_mockups row). */
 export interface CalendarMockup {
