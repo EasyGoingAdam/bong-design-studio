@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   HOLIDAY_EVENTS,
   HolidayCategory,
@@ -12,6 +12,12 @@ import {
   eventsRollingYear,
   eventsForYear,
 } from '@/lib/holiday-events';
+import {
+  WINDOW_DAYS,
+  CalendarMockup,
+  mockupKey,
+  eventsWithinWindow,
+} from '@/lib/calendar-mockups';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 
@@ -86,12 +92,22 @@ function dismissKey(eventId: string, occurrenceDate: Date): string {
 /* ───────────── Component ───────────── */
 
 export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
-  const { addConcept } = useAppStore();
+  const { addConcept, openAIKey } = useAppStore();
   const { toast } = useToast();
 
   const [alerts, setAlerts] = useState<Set<string>>(new Set());
   const [leadDays, setLeadDaysState] = useState<number>(DEFAULT_LEAD_DAYS);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  /* ───────── Auto-generated coil mockups ───────── */
+  // Stored coil designs, keyed by `${eventId}:${occurrenceYear}`.
+  const [mockups, setMockups] = useState<Map<string, CalendarMockup>>(new Map());
+  const [loaded, setLoaded] = useState(false);
+  // Keys currently generating (for spinners / disabling buttons).
+  const [genKeys, setGenKeys] = useState<Set<string>>(new Set());
+  // Keys auto-attempted this session, so the on-visit fill never loops.
+  const attemptedRef = useRef<Set<string>>(new Set());
+  const autofilledRef = useRef(false);
 
   const [filter, setFilter] = useState<HolidayCategory | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -105,6 +121,111 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
     setLeadDaysState(loadLeadDays());
     setDismissed(loadDismissed());
   }, []);
+
+  // Load any stored coil mockups once on mount. Degrades to empty if the
+  // table isn't migrated yet (the GET route returns []).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/calendar/mockups')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: CalendarMockup[]) => {
+        if (cancelled) return;
+        const m = new Map<string, CalendarMockup>();
+        for (const row of Array.isArray(rows) ? rows : []) {
+          m.set(mockupKey(row.eventId, row.occurrenceYear), row);
+        }
+        setMockups(m);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Generate (or regenerate) one event's coil mockup. force=true regenerates
+  // even if one exists; force=false is a no-op server-side when a ready row
+  // already exists (it just returns it), which keeps the on-visit fill cheap.
+  const generateMockup = useCallback(
+    async (event: HolidayEvent, occurrenceYear: number, force = false) => {
+      if (!openAIKey) {
+        if (force) toast('Set your OpenAI key in Settings first', 'error');
+        return;
+      }
+      const key = mockupKey(event.id, occurrenceYear);
+      setGenKeys((prev) => new Set(prev).add(key));
+      try {
+        const res = await fetch('/api/calendar/mockups/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: event.id, apiKey: openAIKey, force }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.mockup) throw new Error(data.error || 'Generation failed');
+        setMockups((prev) => {
+          const n = new Map(prev);
+          n.set(key, data.mockup as CalendarMockup);
+          return n;
+        });
+      } catch (e) {
+        // Only surface errors for explicit user actions; the background fill
+        // fails quietly so it doesn't spam toasts.
+        if (force) toast(e instanceof Error ? e.message : 'Generation failed', 'error');
+      } finally {
+        setGenKeys((prev) => {
+          const n = new Set(prev);
+          n.delete(key);
+          return n;
+        });
+      }
+    },
+    [openAIKey, toast],
+  );
+
+  // On-visit auto-fill: once mockups have loaded and a key is available,
+  // generate a coil design for every event now within 40 days that lacks one.
+  // Runs once per session; the server dedupes so re-attempts are harmless.
+  useEffect(() => {
+    if (!loaded || !openAIKey || autofilledRef.current) return;
+    autofilledRef.current = true;
+    (async () => {
+      for (const { event, occurrence } of eventsWithinWindow(HOLIDAY_EVENTS)) {
+        const year = occurrence.getFullYear();
+        const key = mockupKey(event.id, year);
+        if (attemptedRef.current.has(key)) continue;
+        attemptedRef.current.add(key);
+        // Sequential — stay gentle on the OpenAI rate limit.
+        await generateMockup(event, year, false);
+      }
+    })();
+  }, [loaded, openAIKey, generateMockup]);
+
+  // Pin / unpin a mockup so the auto sweep won't replace it.
+  const toggleKeep = useCallback(
+    async (event: HolidayEvent, mockup: CalendarMockup, forceValue?: boolean) => {
+      const next = forceValue ?? !mockup.kept;
+      const key = mockupKey(event.id, mockup.occurrenceYear);
+      setMockups((prev) => {
+        const n = new Map(prev);
+        const cur = n.get(key);
+        if (cur) n.set(key, { ...cur, kept: next });
+        return n;
+      });
+      try {
+        const res = await fetch('/api/calendar/mockups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: event.id, occurrenceYear: mockup.occurrenceYear, kept: next }),
+        });
+        if (res.ok) {
+          const row = (await res.json()) as CalendarMockup;
+          setMockups((prev) => new Map(prev).set(key, row));
+          toast(next ? 'Kept — pinned on the calendar' : 'Unpinned', 'success');
+        }
+      } catch {
+        /* optimistic value stands */
+      }
+    },
+    [toast],
+  );
 
   /* ───────── Alerts banner — only events the user has alerted on,
                 that are within their lead-time, and not dismissed for
@@ -193,7 +314,7 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
     toast('Restored dismissed alerts', 'info');
   };
 
-  const createConceptFromEvent = async (e: HolidayEvent) => {
+  const createConceptFromEvent = async (e: HolidayEvent, coilImageUrl?: string) => {
     const occ = nextOccurrence(e);
     if (!occ) { toast('No date available for this event', 'error'); return; }
     const yr = occ.getFullYear();
@@ -208,6 +329,9 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
         name: `${e.name} ${yr}`,
         description,
         tags,
+        // Seed the concept with the auto-generated coil design when the user
+        // chose "Use" on a mockup, so it opens with art already in place.
+        coilImageUrl: coilImageUrl || '',
         lifecycleType: 'limited_edition',
         intendedAudience: 'Holiday gift buyers',
         priority: daysUntil(e) <= 60 ? 'high' : 'medium',
@@ -227,6 +351,14 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
     }
   };
 
+  // "Use" a mockup → spin up a real concept seeded with this coil art, and
+  // pin the mockup so it isn't auto-replaced later. (Not named use* — that
+  // prefix is reserved for React hooks.)
+  const applyMockupToConcept = (event: HolidayEvent, mockup: CalendarMockup) => {
+    createConceptFromEvent(event, mockup.imageUrl);
+    if (!mockup.kept) toggleKeep(event, mockup, true);
+  };
+
   /* ───────── Rendering ───────── */
 
   const renderEvent = ({ event, date }: { event: HolidayEvent; date: Date }) => {
@@ -237,6 +369,12 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
     const isImminent = days >= 0 && days <= leadDays;
     const isPast = days < 0;
     const meta = CATEGORY_META[event.category];
+
+    const year = date.getFullYear();
+    const mKey = mockupKey(event.id, year);
+    const mockup = mockups.get(mKey);
+    const isGenerating = genKeys.has(mKey);
+    const withinWindow = days >= 0 && days <= WINDOW_DAYS;
 
     return (
       <div
@@ -275,6 +413,82 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
               </span>
             </div>
             <p className="text-xs text-muted mb-3 leading-relaxed">{event.blurb}</p>
+
+            {/* Auto-generated coil design */}
+            {!isPast && (
+              <div className="mb-3">
+                {mockup && mockup.status === 'ready' && mockup.imageUrl ? (
+                  <div>
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={mockup.imageUrl}
+                        alt={`${event.name} coil design`}
+                        className="w-full aspect-square object-contain rounded-lg border border-border bg-white"
+                      />
+                      {mockup.kept && (
+                        <span className="absolute top-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-accent text-white font-medium">
+                          ◈ kept
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <button
+                        onClick={() => applyMockupToConcept(event, mockup)}
+                        className="text-xs px-2.5 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg font-medium transition-colors"
+                      >
+                        Use
+                      </button>
+                      <button
+                        onClick={() => toggleKeep(event, mockup)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                          mockup.kept
+                            ? 'bg-accent/10 text-accent border-accent/30'
+                            : 'bg-surface text-muted border-border hover:border-border-light'
+                        }`}
+                      >
+                        {mockup.kept ? '◈ kept' : '◇ keep'}
+                      </button>
+                      <button
+                        onClick={() => generateMockup(event, year, true)}
+                        disabled={isGenerating}
+                        className="text-xs px-2.5 py-1 rounded-lg font-medium border bg-surface text-muted border-border hover:border-border-light transition-colors disabled:opacity-50"
+                      >
+                        {isGenerating ? 'Regenerating…' : '↻ regenerate'}
+                      </button>
+                    </div>
+                  </div>
+                ) : isGenerating ? (
+                  <div className="w-full aspect-square rounded-lg border border-dashed border-border flex items-center justify-center text-xs text-muted animate-pulse">
+                    Generating coil design…
+                  </div>
+                ) : mockup && mockup.status === 'failed' ? (
+                  <div className="w-full rounded-lg border border-dashed border-border p-3 text-xs text-muted flex items-center justify-between gap-2">
+                    <span>Could not generate a design.</span>
+                    <button onClick={() => generateMockup(event, year, true)} className="text-accent hover:underline">
+                      Retry
+                    </button>
+                  </div>
+                ) : withinWindow ? (
+                  <button
+                    onClick={() => generateMockup(event, year, false)}
+                    disabled={!openAIKey}
+                    className="w-full aspect-square rounded-lg border border-dashed border-border hover:border-border-light flex items-center justify-center text-xs text-muted text-center px-3 transition-colors disabled:opacity-60"
+                  >
+                    {openAIKey ? '＋ Generate coil design' : 'Set your OpenAI key in Settings to generate'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => generateMockup(event, year, false)}
+                    disabled={!openAIKey}
+                    className="w-full rounded-lg border border-dashed border-border hover:border-border-light py-2 text-[11px] text-muted text-center px-3 transition-colors disabled:opacity-60"
+                  >
+                    Auto-generates {WINDOW_DAYS} days before · Generate now
+                  </button>
+                )}
+              </div>
+            )}
+
             {event.designIdeas.length > 0 && (
               <details className="text-xs mb-3">
                 <summary className="cursor-pointer text-muted hover:text-foreground font-medium">
@@ -375,7 +589,7 @@ export function HolidayCalendar({ onOpenConcept }: { onOpenConcept: (id: string)
           and want them back. */}
       {alertsBanner.length === 0 && dismissed.size > 0 && (
         <div className="mb-5 text-xs text-muted flex items-center gap-2">
-          <span>You've dismissed {dismissed.size} alert{dismissed.size === 1 ? '' : 's'} this cycle.</span>
+          <span>You&apos;ve dismissed {dismissed.size} alert{dismissed.size === 1 ? '' : 's'} this cycle.</span>
           <button onClick={restoreAllDismissed} className="text-accent hover:underline">
             Restore them
           </button>

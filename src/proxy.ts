@@ -26,6 +26,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/cfp\/designs\/[^/]+\/files\//,   // design preview/file images
   /^\/api\/cfp\/designs\/[^/]+\/zip$/,      // per-design zip download
   /^\/api\/cfp\/designs\.csv$/,             // CSV export (window.location nav)
+  /^\/api\/calendar\/cron-sweep$/,          // scheduled job — gated by CRON_SECRET
 ];
 
 function isPublic(pathname: string): boolean {
