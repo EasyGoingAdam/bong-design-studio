@@ -109,7 +109,7 @@ function chooseCustomItem(items: SSItem[]): SSItem | undefined {
 // Etch/custom keywords — the products this shop actually laser-etches. Used to
 // tell a genuine custom piece apart from an accessory-only order so the import
 // UI can hide the non-custom noise.
-const ETCH_KEYWORD = /coil|freeze ?pipe|chiller|\bdna\b|bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum/i;
+const ETCH_KEYWORD = /coil|freeze ?pipe|chiller|\bdna\b|bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum|custom|personaliz|engrav|etch/i;
 function isCustomItem(it: SSItem | undefined): boolean {
   if (!it) return false;
   const text = `${it.name || ''} ${it.sku || ''}`;

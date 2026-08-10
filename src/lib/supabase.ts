@@ -39,6 +39,16 @@ async function ensureBucket(): Promise<void> {
         console.error('ensureBucket: create failed:', createErr.message);
         return; // don't cache — let a later upload retry provisioning
       }
+    } else if (data.public === false) {
+      // Bucket exists but is private → getPublicImageUrl() links would 403 and
+      // images wouldn't render. Flip it public.
+      const { error: updErr } = await supabaseAdmin.storage.updateBucket(STORAGE_BUCKET, {
+        public: true,
+      });
+      if (updErr) {
+        console.error('ensureBucket: make-public failed:', updErr.message);
+        return; // don't cache — retry next upload
+      }
     }
     bucketEnsured = true;
   } catch (err) {

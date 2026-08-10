@@ -15,9 +15,11 @@ interface PromptInputs {
   contrast: string;
   baseShape?: 'circle' | 'oval' | 'square' | 'rectangle';
   /** Coil canvas orientation. 'rectangle' = wide horizontal landscape;
-   *  'square' = 1:1 aspect. Drives the hardest constraint we put on the
-   *  model — orientation drift is the #1 failure mode otherwise. */
-  coilShape?: 'square' | 'rectangle';
+   *  'portrait' = tall vertical; 'square' = 1:1 aspect. Drives the hardest
+   *  constraint we put on the model — orientation drift is the #1 failure
+   *  mode otherwise. Kept in lock-step with the generation size so the prompt
+   *  never fights the canvas. */
+  coilShape?: 'square' | 'rectangle' | 'portrait';
 }
 
 /**
@@ -121,6 +123,14 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
       'Do NOT center a portrait composition inside the wide canvas. ' +
       'Do NOT add vertical bars or padding on the left and right.'
     );
+  } else if (inputs.coilShape === 'portrait') {
+    parts.push(
+      'CRITICAL CANVAS ORIENTATION: TALL VERTICAL PORTRAIT composition. ' +
+      'The artwork must be TALLER than wide (roughly 2:3). ' +
+      'Compose the design to FILL the tall portrait canvas edge-to-edge from top to bottom. ' +
+      'Do NOT center a wide composition inside the tall canvas. ' +
+      'Do NOT add horizontal bars or padding above and below.'
+    );
   } else {
     parts.push('Flat SQUARE artwork (1:1 aspect ratio) for a coil sleeve. Compose to fill the square canvas evenly.');
   }
@@ -138,6 +148,8 @@ export function buildCoilPrompt(inputs: PromptInputs): string {
   // weight heaviest in image-gen models.
   if (inputs.coilShape === 'rectangle') {
     parts.push('Final reminder: WIDE HORIZONTAL LANDSCAPE — wider than tall, never portrait.');
+  } else if (inputs.coilShape === 'portrait') {
+    parts.push('Final reminder: TALL VERTICAL PORTRAIT — taller than wide, never landscape.');
   }
 
   return parts.join(' ');

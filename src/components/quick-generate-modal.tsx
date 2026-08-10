@@ -279,6 +279,19 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       ? `Overall product dimensions: ${overallWidth}x${overallHeight}${dimUnit}.`
       : '';
 
+  // Keep the prompt orientation and the generation canvas in lock-step: derive
+  // BOTH from the entered coil dimensions (falling back to the Wide/Square
+  // toggle only when the boxes are empty). Without this the prompt could demand
+  // "wide landscape" while the canvas is portrait — e.g. the 4×7 preset.
+  const coilGenSize = useMemo(
+    () => (coilWidth && coilHeight)
+      ? pickGenerationSize(Number(coilWidth), Number(coilHeight))
+      : (coilShape === 'rectangle' ? '1536x1024' : '1024x1024'),
+    [coilWidth, coilHeight, coilShape],
+  );
+  const effectiveCoilShape: 'square' | 'rectangle' | 'portrait' =
+    coilGenSize === '1536x1024' ? 'rectangle' : coilGenSize === '1024x1536' ? 'portrait' : 'square';
+
   const inputs = useMemo(() => ({
     title: concept.name,
     stylePrompt: concept.specs.designStyleName || concept.tags.join(', '),
@@ -293,8 +306,8 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     patternDensity: concept.specs.patternDensity || 'medium',
     contrast,
     baseShape,
-    coilShape,
-  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, coilShape, coilDimNote, baseDimNote, overallDimNote, engravingMode]);
+    coilShape: effectiveCoilShape,
+  }), [concept, mode, relationship, complexity, contrast, coilInstructions, baseInstructions, extraNotes, baseShape, effectiveCoilShape, coilDimNote, baseDimNote, overallDimNote, engravingMode]);
 
   const coilPrompt = useMemo(() => buildCoilPrompt(inputs), [inputs]);
   const basePrompt = useMemo(() => buildBasePrompt(inputs), [inputs]);
@@ -317,13 +330,11 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
     try {
       // Generate coil — and base too unless the user flipped on coil-only.
-      // Aspect ratio now follows the ENTERED dimensions (nearest supported of
-      // square / landscape / portrait) so the design boxes actually drive the
-      // output. Fall back to the shape enum only when the boxes are blank.
+      // coilGenSize is derived from the entered dimensions (same source the
+      // prompt orientation uses, so they always agree). Base aspect ratio
+      // likewise follows its dimensions, falling back to the shape enum.
       const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
-      const coilSize = coilWidth && coilHeight
-        ? pickGenerationSize(Number(coilWidth), Number(coilHeight))
-        : (coilShape === 'rectangle' ? '1536x1024' : '1024x1024');
+      const coilSize = coilGenSize;
       const baseSize = baseWidth && baseHeight
         ? pickGenerationSize(Number(baseWidth), Number(baseHeight))
         : (baseSizeMap[baseShape] || '1024x1024');
