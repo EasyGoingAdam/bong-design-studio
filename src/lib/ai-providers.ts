@@ -297,3 +297,34 @@ export function getAuthHeaders(params: ImageGenParams): Record<string, string> {
 
 // Export config for reference
 export { PROVIDER_CONFIG };
+
+/**
+ * Pick the closest supported generation size for an entered width×height.
+ *
+ * gpt-image-1 (and the Gemini aspect-ratio mapping) only support three
+ * shapes: 1:1 square, 3:2 landscape, 2:3 portrait. Rather than snapping to a
+ * shape toggle, we choose whichever supported ratio is nearest the ACTUAL
+ * entered dimensions — so the design's width/height boxes drive the output
+ * orientation (this is what makes "the boxes follow the measurements"). We
+ * compare on a log scale so, e.g., 2:1 and 1:2 are treated as equally far
+ * from square.
+ */
+export function pickGenerationSize(width: number, height: number): string {
+  if (!width || !height || width <= 0 || height <= 0) return '1024x1024';
+  const ratio = width / height; // >1 landscape, <1 portrait, 1 square
+  const options: Array<[number, string]> = [
+    [1, '1024x1024'],       // square
+    [3 / 2, '1536x1024'],   // landscape
+    [2 / 3, '1024x1536'],   // portrait
+  ];
+  let best = options[0];
+  let bestDiff = Infinity;
+  for (const opt of options) {
+    const diff = Math.abs(Math.log(ratio) - Math.log(opt[0]));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = opt;
+    }
+  }
+  return best[1];
+}

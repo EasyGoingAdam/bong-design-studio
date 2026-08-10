@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { Concept, GenerationMode, CoilBaseRelationship, Stamp } from '@/lib/types';
 import { Select, TextArea, SliderInput } from './ui';
 import { buildCoilPrompt, buildBasePrompt } from '@/lib/prompt-builder';
+import { pickGenerationSize } from '@/lib/ai-providers';
 import { ImageDownloadButtons } from './image-download';
 import { getStampTheme } from '@/lib/concept-images';
 import { useToast } from './toast';
@@ -257,23 +258,18 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   };
 
   // Append dimension context to the per-part instructions so the prompt is
-  // dimension-aware without needing a separate prompt builder field.
-  //
-  // ORIENTATION CORRECTION: when "Wide" coil shape is selected, surface
-  // the dimensions in landscape order (larger value as width). The user
-  // entered W=45 H=120 which read as portrait — that conflicted with the
-  // wide canvas request and caused the AI to compose portrait designs
-  // inside a landscape canvas. We respect the LARGER dimension as the
-  // long axis of the wide coil and present it as such to the model.
-  const coilDimNote = (() => {
-    if (!coilWidth || !coilHeight) return '';
-    const w = Number(coilWidth);
-    const h = Number(coilHeight);
-    if (coilShape === 'rectangle' && w < h) {
-      return `Target print area: ${h}${dimUnit} wide x ${w}${dimUnit} tall (HORIZONTAL coil strip — width is the long axis). Design must read cleanly at this size.`;
-    }
-    return `Target print area ${coilWidth}x${coilHeight}${dimUnit} — design must read cleanly at this size.`;
-  })();
+  // dimension-aware without needing a separate prompt builder field. The
+  // numbers are reported exactly as entered (no orientation auto-swap) and the
+  // generation aspect ratio is derived from them, so what you type is what you
+  // get.
+  // Report the entered print area EXACTLY as typed — no auto-swapping of
+  // width/height. The generation aspect ratio is derived from these same
+  // numbers (see pickGenerationSize below), so whatever the user enters is
+  // what gets composed and generated.
+  const coilDimNote =
+    coilWidth && coilHeight
+      ? `Target print area ${coilWidth}x${coilHeight}${dimUnit} — design must read cleanly at this size.`
+      : '';
   const baseDimNote =
     baseWidth && baseHeight
       ? `Target print area ${baseWidth}x${baseHeight}${dimUnit} — design must read cleanly at this size.`
@@ -321,9 +317,16 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
 
     try {
       // Generate coil — and base too unless the user flipped on coil-only.
-      const coilSize = coilShape === 'rectangle' ? '1536x1024' : '1024x1024';
+      // Aspect ratio now follows the ENTERED dimensions (nearest supported of
+      // square / landscape / portrait) so the design boxes actually drive the
+      // output. Fall back to the shape enum only when the boxes are blank.
       const baseSizeMap: Record<string, string> = { circle: '1024x1024', oval: '1536x1024', square: '1024x1024', rectangle: '1536x1024' };
-      const baseSize = baseSizeMap[baseShape] || '1024x1024';
+      const coilSize = coilWidth && coilHeight
+        ? pickGenerationSize(Number(coilWidth), Number(coilHeight))
+        : (coilShape === 'rectangle' ? '1536x1024' : '1024x1024');
+      const baseSize = baseWidth && baseHeight
+        ? pickGenerationSize(Number(baseWidth), Number(baseHeight))
+        : (baseSizeMap[baseShape] || '1024x1024');
 
       const coilJob = fetch('/api/generate-image', {
         method: 'POST',
@@ -689,11 +692,6 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                   Stamps
                 </button>
               </div>
-              {designType === 'standard' && coilShape === 'rectangle' && coilWidth && coilHeight && Number(coilWidth) < Number(coilHeight) && (
-                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1 leading-snug">
-                  ⚠ Your coil dimensions read as portrait ({coilWidth}×{coilHeight}). For a Wide coil the AI will treat the LARGER value as the width axis. Swap them in the Dimensions section if you want the literal numbers respected.
-                </p>
-              )}
               {designType === 'stamps' && (
                 <div className="mt-2 bg-amber-50 border border-amber-200 rounded px-2 py-2 space-y-1.5">
                   <p className="text-[10px] text-amber-900 leading-snug">
