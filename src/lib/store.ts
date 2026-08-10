@@ -4,6 +4,8 @@ import {
   Concept,
   ConceptStatus,
   SpecTemplate,
+  CoilSizePreset,
+  DEFAULT_COIL_SIZES,
   User,
   Comment,
   ApprovalLog,
@@ -23,6 +25,7 @@ import { safeJsonArray, safeJsonResponse } from './fetch-helpers';
 interface AppState {
   concepts: Concept[];
   templates: SpecTemplate[];
+  coilSizes: CoilSizePreset[];
   users: User[];
   currentUser: User;
   openAIKey: string;
@@ -65,6 +68,11 @@ interface AppState {
   addTemplate: (template: Partial<SpecTemplate>) => void;
   updateTemplate: (id: string, updates: Partial<SpecTemplate>) => void;
   deleteTemplate: (id: string) => void;
+
+  // Coil size presets
+  addCoilSize: (size: Partial<CoilSizePreset>) => void;
+  updateCoilSize: (id: string, updates: Partial<CoilSizePreset>) => void;
+  deleteCoilSize: (id: string) => void;
 
   // Auth
   setAuthUser: (userId: string, email: string) => void;
@@ -118,6 +126,7 @@ async function saveSetting(key: string, value: string) {
 export const useAppStore = create<AppState>()((set, get) => ({
   concepts: [],
   templates: [],
+  coilSizes: DEFAULT_COIL_SIZES,
   users: sampleUsers,
   currentUser: sampleUsers[0],
   openAIKey: '',
@@ -164,11 +173,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ loading: true });
     let booted = false;
     try {
-      // Fetch concepts, templates, and settings from API in parallel
-      const [conceptsRes, templatesRes, settingsRes] = await Promise.all([
+      // Fetch concepts, templates, sizes, and settings from API in parallel
+      const [conceptsRes, templatesRes, settingsRes, coilSizesRes] = await Promise.all([
         fetch('/api/concepts'),
         fetch('/api/templates'),
         fetch('/api/settings'),
+        fetch('/api/coil-sizes'),
       ]);
 
       if (conceptsRes.ok) {
@@ -187,6 +197,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
         if (templatesData.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           set({ templates: templatesData as any });
+        }
+      }
+
+      // Coil size presets — keep the built-in defaults if the table is empty
+      // or unmigrated (the API returns [] in that case).
+      if (coilSizesRes.ok) {
+        const sizesData = await safeJsonArray(coilSizesRes);
+        if (sizesData.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          set({ coilSizes: sizesData as any });
         }
       }
 
@@ -608,6 +628,54 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }).catch((err) => {
       console.error(err);
       if (removed) set((state) => ({ templates: [...state.templates, removed] }));
+    });
+  },
+
+  addCoilSize: (partial) => {
+    const size: CoilSizePreset = {
+      id: uuidv4(),
+      name: partial.name || 'New size',
+      widthIn: partial.widthIn ?? 0,
+      heightIn: partial.heightIn ?? 0,
+      sortOrder: partial.sortOrder ?? (get().coilSizes.length + 1),
+    };
+    set((state) => ({ coilSizes: [...state.coilSizes, size] }));
+    fetch('/api/coil-sizes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(size),
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
+  },
+
+  updateCoilSize: (id, updates) => {
+    set((state) => ({
+      coilSizes: state.coilSizes.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+    }));
+    const size = get().coilSizes.find((s) => s.id === id);
+    if (size) {
+      fetch('/api/coil-sizes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(size),
+      }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
+    }
+  },
+
+  deleteCoilSize: (id) => {
+    const removed = get().coilSizes.find((s) => s.id === id);
+    set((state) => ({ coilSizes: state.coilSizes.filter((s) => s.id !== id) }));
+    fetch('/api/coil-sizes', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).then((r) => {
+      if (!r.ok) {
+        console.error('Fire-and-forget API write rejected:', r.status, r.url);
+        if (removed) set((state) => ({ coilSizes: [...state.coilSizes, removed] }));
+      }
+    }).catch((err) => {
+      console.error(err);
+      if (removed) set((state) => ({ coilSizes: [...state.coilSizes, removed] }));
     });
   },
 

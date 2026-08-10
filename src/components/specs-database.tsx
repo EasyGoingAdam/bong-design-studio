@@ -7,6 +7,62 @@ import { Input, TextArea, Select, SliderInput, EmptyState } from './ui';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 
+/**
+ * Editable coil size presets (Small / Regular / XL …). These feed the size
+ * checkboxes in the generate modal. Inputs commit on blur to avoid a write per
+ * keystroke.
+ */
+function CoilSizesPanel() {
+  const { coilSizes, addCoilSize, updateCoilSize, deleteCoilSize } = useAppStore();
+  return (
+    <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold">Coil Size Presets</h3>
+        <button
+          onClick={() => addCoilSize({ name: 'New size', widthIn: 4, heightIn: 7 })}
+          className="text-xs px-2.5 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+        >
+          + Add size
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">
+        Named sizes (inches) the generate modal&apos;s size buttons fill in. Width × height drives the design shape.
+      </p>
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-[1fr_5rem_5rem_2rem] gap-2 text-[10px] uppercase tracking-wider text-muted px-1">
+          <span>Name</span><span>Width (in)</span><span>Height (in)</span><span />
+        </div>
+        {coilSizes.map((s) => (
+          <div key={s.id} className="grid grid-cols-[1fr_5rem_5rem_2rem] gap-2 items-center">
+            <input
+              defaultValue={s.name}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== s.name) updateCoilSize(s.id, { name: v }); }}
+              className="bg-background border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+            />
+            <input
+              type="number" step="0.1" defaultValue={s.widthIn}
+              onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && v !== s.widthIn) updateCoilSize(s.id, { widthIn: v }); }}
+              className="bg-background border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+            />
+            <input
+              type="number" step="0.1" defaultValue={s.heightIn}
+              onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && v !== s.heightIn) updateCoilSize(s.id, { heightIn: v }); }}
+              className="bg-background border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+            />
+            <button
+              onClick={() => deleteCoilSize(s.id)}
+              className="text-red-400 hover:text-red-300 text-sm"
+              title={`Delete ${s.name}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SpecsDatabase() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useAppStore();
   const { toast } = useToast();
@@ -28,6 +84,8 @@ export function SpecsDatabase() {
           + New Template
         </button>
       </div>
+
+      <CoilSizesPanel />
 
       {templates.length === 0 ? (
         <EmptyState icon="⚙" title="No templates yet" description="Create design templates to standardize your concepts." action={{ label: '+ New Template', onClick: () => setShowNew(true) }} />

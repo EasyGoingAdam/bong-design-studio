@@ -208,6 +208,29 @@ export interface SpecTemplate {
 }
 
 /**
+ * A named coil size preset (Small / Regular / XL …) with inch measurements.
+ * Editable in the Specs DB tab; the generate modal's size checkboxes fill the
+ * design dimensions from these.
+ */
+export interface CoilSizePreset {
+  id: string;
+  name: string;
+  widthIn: number;
+  heightIn: number;
+  sortOrder: number;
+}
+
+/**
+ * Fallback presets used before the DB loads (or if the coil_sizes table hasn't
+ * been migrated yet), so the size checkboxes always work.
+ */
+export const DEFAULT_COIL_SIZES: CoilSizePreset[] = [
+  { id: 'default-small', name: 'Small', widthIn: 3, heightIn: 5, sortOrder: 1 },
+  { id: 'default-regular', name: 'Regular', widthIn: 4, heightIn: 7, sortOrder: 2 },
+  { id: 'default-xl', name: 'XL', widthIn: 6, heightIn: 7, sortOrder: 3 },
+];
+
+/**
  * One stamp = one independent engraving-ready mini graphic. A stamps-mode
  * Concept has 1-5 of these; each can be edited or regenerated on its own.
  * `id` is stable across regenerations so the UI can hold its place when

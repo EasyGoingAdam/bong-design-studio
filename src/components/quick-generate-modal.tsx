@@ -32,7 +32,7 @@ const RELATIONSHIP_OPTIONS = [
 ];
 
 export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onClose: () => void }) {
-  const { openAIKey, geminiKey, updateConcept, addAIGeneration, addVersion } = useAppStore();
+  const { openAIKey, geminiKey, updateConcept, addAIGeneration, addVersion, coilSizes } = useAppStore();
   const { toast } = useToast();
 
   // Pre-fill from concept specs
@@ -764,6 +764,39 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 ))}
               </div>
             </div>
+
+            {/* Size presets — one tap fills the coil dimensions (in inches).
+                Editable in the Specs DB tab. Because generation now follows the
+                entered dimensions, picking a preset also sets the output shape. */}
+            {coilSizes.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                <span className="text-[10px] text-muted mr-0.5">Preset:</span>
+                {coilSizes.map((s) => {
+                  const active = dimUnit === 'in'
+                    && Number(coilWidth) === s.widthIn
+                    && Number(coilHeight) === s.heightIn;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setDimUnit('in');
+                        setCoilWidth(String(s.widthIn));
+                        setCoilHeight(String(s.heightIn));
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                        active
+                          ? 'bg-accent text-white border-accent'
+                          : 'bg-surface text-muted border-border hover:border-foreground'
+                      }`}
+                      title={`${s.widthIn}×${s.heightIn} in`}
+                    >
+                      {s.name} · {s.widthIn}×{s.heightIn}″
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <div className={`grid gap-3 ${coilOnly ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <div>
