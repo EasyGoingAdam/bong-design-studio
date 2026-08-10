@@ -106,6 +106,17 @@ function chooseCustomItem(items: SSItem[]): SSItem | undefined {
   return bestScore === -Infinity ? items[0] : best;
 }
 
+// Etch/custom keywords — the products this shop actually laser-etches. Used to
+// tell a genuine custom piece apart from an accessory-only order so the import
+// UI can hide the non-custom noise.
+const ETCH_KEYWORD = /coil|freeze ?pipe|chiller|\bdna\b|bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum/i;
+function isCustomItem(it: SSItem | undefined): boolean {
+  if (!it) return false;
+  const text = `${it.name || ''} ${it.sku || ''}`;
+  if (NON_ETCH.test(text)) return false;
+  return ETCH_KEYWORD.test(text);
+}
+
 function tagNames(s: SSShipment, tagMap: Map<number, string>): string[] {
   const names: string[] = [];
   const raw = s.tags;
@@ -127,10 +138,16 @@ function tagNames(s: SSShipment, tagMap: Map<number, string>): string[] {
 }
 
 /** Map one ShipStation shipment to a production-job draft. */
-export function mapShipmentToDraft(s: SSShipment, tagMap: Map<number, string>): Partial<ProductionJob> {
+export function mapShipmentToDraft(
+  s: SSShipment,
+  tagMap: Map<number, string>,
+): Partial<ProductionJob> & { custom: boolean } {
   const items = s.items || [];
   // The etched piece — NOT necessarily items[0] (often an accessory).
   const coil = chooseCustomItem(items);
+  // Whether the chosen line is a genuine custom/etched product (vs an order
+  // with only accessories, which the import UI hides by default).
+  const custom = isCustomItem(coil);
   const otherCount = items.filter((it) => it !== coil).length;
   const names = tagNames(s, tagMap);
   const rush = names.some((n) => /rush|expedite|priority|prime/i.test(n)) ||
@@ -169,6 +186,7 @@ export function mapShipmentToDraft(s: SSShipment, tagMap: Map<number, string>): 
     complexity: 'medium',
     status: 'backlog',
     inventoryAvailable: true,
+    custom,
   };
 }
 

@@ -6,6 +6,10 @@ import { useToast } from './toast';
 import { ProductionJob } from '@/lib/types';
 import { slaStatus, daysUntil } from '@/lib/production';
 
+// Import drafts carry a transient `custom` flag (genuine etched piece vs an
+// accessory-only order) that isn't part of the persisted ProductionJob.
+type ImportDraft = Partial<ProductionJob> & { custom?: boolean };
+
 /**
  * Pulls the open ShipStation queue (pending + on_hold) and lets the operator
  * choose which orders to bring into the production backlog. Dedups against
@@ -16,9 +20,12 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [drafts, setDrafts] = useState<Partial<ProductionJob>[]>([]);
+  const [drafts, setDrafts] = useState<ImportDraft[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  // Default to showing/importing only custom (etched) items — accessory-only
+  // orders are noise the operator had to sift through before.
+  const [customOnly, setCustomOnly] = useState(true);
   const [importing, setImporting] = useState(false);
 
   const alreadyImported = useMemo(
@@ -35,12 +42,16 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
         if (cancelled) return;
         if (data.configured === false) { setError('ShipStation token not configured.'); return; }
         if (data.error) { setError(data.error); return; }
-        const incoming: Partial<ProductionJob>[] = (data.drafts || []).filter(
-          (d: Partial<ProductionJob>) => !d.shipstationOrderId || !alreadyImported.has(d.shipstationOrderId),
+        const incoming: ImportDraft[] = (data.drafts || []).filter(
+          (d: ImportDraft) => !d.shipstationOrderId || !alreadyImported.has(d.shipstationOrderId),
         );
         setDrafts(incoming);
-        // Default-select everything fresh.
-        setSelected(new Set(incoming.map((d) => d.shipstationOrderId || '')));
+        // Default-select only the custom (etched) items — that's what the
+        // operator actually manufactures. If none look custom, fall back to
+        // selecting all so nothing is silently missed.
+        const custom = incoming.filter((d) => d.custom);
+        const toSelect = custom.length > 0 ? custom : incoming;
+        setSelected(new Set(toSelect.map((d) => d.shipstationOrderId || '')));
       } catch {
         if (!cancelled) setError('Failed to reach ShipStation.');
       } finally {
@@ -51,7 +62,11 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const customCount = useMemo(() => drafts.filter((d) => d.custom).length, [drafts]);
+  const hiddenNonCustom = customOnly ? drafts.length - customCount : 0;
+
   const visible = drafts.filter((d) => {
+    if (customOnly && !d.custom) return false;
     if (!filter.trim()) return true;
     const q = filter.toLowerCase();
     return [d.title, d.customerName, d.sku, (d.tags || []).join(' ')].join(' ').toLowerCase().includes(q);
@@ -61,7 +76,10 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const doImport = async () => {
-    const chosen = drafts.filter((d) => selected.has(d.shipstationOrderId || ''));
+    const chosen = drafts
+      .filter((d) => selected.has(d.shipstationOrderId || ''))
+      // Drop the transient `custom` flag — it's not a ProductionJob field.
+      .map(({ custom: _custom, ...d }) => d as Partial<ProductionJob>);
     if (chosen.length === 0) { toast('Select at least one order', 'info'); return; }
     setImporting(true);
     const n = await importProductionJobs(chosen);
@@ -81,17 +99,34 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
           <button onClick={onClose} className="text-muted hover:text-foreground text-lg px-2">×</button>
         </div>
 
-        <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by order, customer, SKU, tag…" className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
-          <button onClick={() => setSelected(new Set(visible.map((d) => d.shipstationOrderId || '')))} className="text-xs px-2 py-1.5 border border-border rounded-lg hover:border-foreground">Select all</button>
-          <button onClick={() => setSelected(new Set())} className="text-xs px-2 py-1.5 border border-border rounded-lg hover:border-foreground">None</button>
+        <div className="px-5 py-3 border-b border-border flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by order, customer, SKU, tag…" className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
+            <button onClick={() => setSelected(new Set(visible.map((d) => d.shipstationOrderId || '')))} className="text-xs px-2 py-1.5 border border-border rounded-lg hover:border-foreground">Select all</button>
+            <button onClick={() => setSelected(new Set())} className="text-xs px-2 py-1.5 border border-border rounded-lg hover:border-foreground">None</button>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+            <input type="checkbox" checked={customOnly} onChange={(e) => setCustomOnly(e.target.checked)} className="accent-accent" />
+            Custom items only
+            {customOnly && hiddenNonCustom > 0 && (
+              <span className="text-[10px] text-muted">· hiding {hiddenNonCustom} accessory-only order{hiddenNonCustom === 1 ? '' : 's'}</span>
+            )}
+          </label>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-[200px]">
           {loading && <div className="text-center text-sm text-muted py-10">Loading ShipStation queue…</div>}
           {error && <div className="text-center text-sm text-red-600 py-10">{error}</div>}
           {!loading && !error && drafts.length === 0 && (
-            <div className="text-center text-sm text-muted py-10">No new open orders to import — everything's already in the backlog.</div>
+            <div className="text-center text-sm text-muted py-10">No new open orders to import — everything&apos;s already in the backlog.</div>
+          )}
+          {!loading && !error && drafts.length > 0 && visible.length === 0 && customOnly && (
+            <div className="text-center text-sm text-muted py-10">
+              No custom items in the open queue.
+              <button onClick={() => setCustomOnly(false)} className="text-accent hover:underline ml-1">
+                Show {drafts.length} accessory-only order{drafts.length === 1 ? '' : 's'}
+              </button>
+            </div>
           )}
           {visible.map((d) => {
             const id = d.shipstationOrderId || '';
