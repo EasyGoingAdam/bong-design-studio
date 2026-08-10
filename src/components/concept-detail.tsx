@@ -41,7 +41,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const [inverting, setInverting] = useState<string | null>(null);
-  const [makingXL, setMakingXL] = useState<string | null>(null);
   const [editingImage, setEditingImage] = useState<{ part: 'coil' | 'base'; url: string } | null>(null);
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [showSharePreview, setShowSharePreview] = useState(false);
@@ -116,82 +115,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
       toast(`Invert failed: ${message}`, 'error');
     } finally {
       setInverting(null);
-    }
-  };
-
-  /**
-   * Generate an XL Piece Version — same design recomposed for a taller
-   * canvas. Uses gpt-image-1's edit endpoint with the original image as
-   * reference + the standard XL prompt + portrait size (1024×1536, the
-   * tallest fixed aspect OpenAI offers — closest to "25% taller").
-   *
-   * The XL output is saved as a new AIGenerationRecord AND a Version
-   * snapshot. The original image stays untouched so both versions live
-   * side by side in AI History.
-   */
-  const handleMakeXL = async (part: 'coil' | 'base') => {
-    if (!concept) return;
-    const sourceUrl = part === 'coil' ? concept.coilImageUrl : concept.baseImageUrl;
-    if (!sourceUrl) {
-      toast(`No ${part} image to convert — generate one first`, 'error');
-      return;
-    }
-    // No OpenAI key check — the new endpoint does deterministic sharp
-    // canvas extension server-side, no AI involved.
-    setMakingXL(part);
-    try {
-      const res = await fetch('/api/xl-piece', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageUrl: sourceUrl,
-          // 2:3 portrait — same "XL" aspect we standardized on previously.
-          // Original design is centered, untouched, with white (or auto-
-          // detected) padding above and below to fill the taller canvas.
-          targetWidth: 1024,
-          targetHeight: 1536,
-          background: 'auto',
-          folder: 'xl',
-          filename: `${concept.id.slice(0, 8)}-${part}-xl-${Date.now()}`,
-        }),
-      });
-      const data = await safeJsonResponse(res);
-      if (!res.ok || !data.url) {
-        toast((data.error as string) || 'XL generation failed', 'error');
-        return;
-      }
-      const xlUrl = data.url as string;
-
-      // Save as a new AI generation record with [XL Piece Version] prefix
-      // so the History tab can detect and badge it. (Not AI anymore but
-      // History UI keys off the prompt prefix for the badge — keeping the
-      // tagging convention for backwards-compat with existing entries.)
-      const xlPromptLabel = `[XL Piece Version] Canvas extended to 1024×1536 (original artwork preserved, no AI)`;
-      addAIGeneration(concept.id, {
-        prompt: xlPromptLabel,
-        coilPrompt: part === 'coil' ? xlPromptLabel : '',
-        basePrompt: part === 'base' ? xlPromptLabel : '',
-        mode: 'production_bw',
-        coilImageUrl: part === 'coil' ? xlUrl : '',
-        baseImageUrl: part === 'base' ? xlUrl : '',
-        model: 'sharp-extend',
-        provider: 'internal',
-      });
-
-      // Also as a Version snapshot so it shows in the Versions tab
-      addVersion(concept.id, {
-        coilImageUrl: part === 'coil' ? xlUrl : concept.coilImageUrl,
-        baseImageUrl: part === 'base' ? xlUrl : concept.baseImageUrl,
-        combinedImageUrl: '',
-        notes: `XL Piece Version — ${part} canvas extended to 1024×1536. Original artwork preserved exactly (no AI recomposition).`,
-      });
-
-      toast(`XL ${part} version generated — see AI History tab`, 'success');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'XL generation failed';
-      toast(message, 'error');
-    } finally {
-      setMakingXL(null);
     }
   };
 
@@ -439,14 +362,6 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         ✦ Regenerate
                       </button>
                     </div>
-                    <button
-                      onClick={() => handleMakeXL('coil')}
-                      disabled={makingXL === 'coil'}
-                      className="mt-1.5 w-full text-xs px-2 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors disabled:opacity-60"
-                      title="Generate the same design recomposed for an XL (taller) coil. Both versions are saved."
-                    >
-                      {makingXL === 'coil' ? 'Generating XL…' : '▦ Make for XL Piece'}
-                    </button>
                     <div className="mt-1.5">
                       <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
                     </div>
@@ -1006,7 +921,7 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
             <div className="font-medium mb-0.5">All generated images for this concept</div>
             <p className="leading-snug">
-              Every image is auto-saved here the moment it's generated — even if you close the modal without applying it.
+              Every image is auto-saved here the moment it&apos;s generated — even if you close the modal without applying it.
               {concept.aiGenerations.length > 0 && ` ${concept.aiGenerations.length} record${concept.aiGenerations.length === 1 ? '' : 's'} so far.`}
             </p>
           </div>

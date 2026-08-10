@@ -12,6 +12,41 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export const STORAGE_BUCKET = 'concept-images';
 
+/**
+ * Ensure the storage bucket exists and is public.
+ *
+ * A missing or private bucket is the usual reason uploads fail — the caller
+ * then falls back to embedding a multi-megabyte base64 data URI, which is too
+ * large to persist reliably on the concept row, so generated images "vanish on
+ * refresh." Provisioning the bucket up front (idempotent, cached after the
+ * first success) keeps images as small public URLs that round-trip cleanly.
+ *
+ * Best-effort: any failure is logged and the upload still proceeds, so this can
+ * only help, never block.
+ */
+let bucketEnsured = false;
+async function ensureBucket(): Promise<void> {
+  if (bucketEnsured) return;
+  try {
+    const { data } = await supabaseAdmin.storage.getBucket(STORAGE_BUCKET);
+    if (!data) {
+      const { error: createErr } = await supabaseAdmin.storage.createBucket(STORAGE_BUCKET, {
+        public: true,
+      });
+      // A concurrent create loses the race with an "already exists" error —
+      // that's fine, the bucket is there.
+      if (createErr && !/exist/i.test(createErr.message)) {
+        console.error('ensureBucket: create failed:', createErr.message);
+        return; // don't cache — let a later upload retry provisioning
+      }
+    }
+    bucketEnsured = true;
+  } catch (err) {
+    console.error('ensureBucket: check failed:', err);
+    // Leave uncached so we retry next upload.
+  }
+}
+
 export function getPublicImageUrl(path: string): string {
   if (!path) return '';
   // If it's already a full URL or data URI, return as-is
@@ -47,6 +82,9 @@ export async function uploadImage(base64Data: string, folder: string, filename: 
 
   const buffer = Buffer.from(base64, 'base64');
   const path = `${folder}/${filename}-${Date.now()}.${ext}`;
+
+  // Make sure the bucket is there (and public) before we try to write to it.
+  await ensureBucket();
 
   const { error } = await supabaseAdmin.storage
     .from(STORAGE_BUCKET)
