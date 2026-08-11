@@ -68,9 +68,10 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      // /api/health returns 500 when a CORE check fails, but the body is still
-      // the full report — parse it regardless of status.
-      fetch('/api/health').then((r) => r.json()).catch(() => null),
+      // Light mode: skips the storage write round-trip (this polls on every
+      // dashboard view). Returns 500 when a CORE check fails, but the body is
+      // still the full report — parse it regardless of status.
+      fetch('/api/health?light=1').then((r) => r.json()).catch(() => null),
       fetch('/api/migrations').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
     ])
       .then(([h, m]) => {

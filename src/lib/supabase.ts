@@ -25,7 +25,7 @@ export const STORAGE_BUCKET = 'concept-images';
  * only help, never block.
  */
 let bucketEnsured = false;
-async function ensureBucket(): Promise<void> {
+export async function ensureBucket(): Promise<void> {
   if (bucketEnsured) return;
   try {
     const { data } = await supabaseAdmin.storage.getBucket(STORAGE_BUCKET);

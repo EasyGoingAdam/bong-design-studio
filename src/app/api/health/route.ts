@@ -1,19 +1,26 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
-import { supabaseAdmin, STORAGE_BUCKET } from '@/lib/supabase';
+import { supabaseAdmin, STORAGE_BUCKET, ensureBucket } from '@/lib/supabase';
 
 /**
  * Health-check endpoint for core infrastructure.
- * Hit GET /api/health to verify sharp, Supabase Storage upload,
- * and Supabase DB connectivity are all working. Useful after deploys.
+ * Hit GET /api/health to verify sharp, Supabase Storage, and Supabase DB
+ * connectivity are all working. Useful after deploys.
+ *
+ * Pass ?light=1 for the dashboard poll: it skips the storage upload+delete
+ * round-trip (which would write to storage on every dashboard view) and instead
+ * self-heals + inspects the bucket. The full endpoint keeps the write round-trip
+ * for deploy smoke-tests.
  *
  * Response shape:
- *   { ok: true, checks: { sharp, storage, database } }
+ *   { ok, checks: { sharp, storage, database }, features: {...} }
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const light = new URL(request.url).searchParams.get('light') === '1';
   const checks: Record<string, { ok: boolean; detail?: string }> = {};
 
-  // 1. Sharp — generate a tiny PNG, invert it, check bytes
+  // 1. Sharp — generate a tiny PNG, invert it, check bytes. Cheap + local, so
+  // it runs in light mode too.
   try {
     const source = await sharp({
       create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 0, b: 0 } },
@@ -35,27 +42,40 @@ export async function GET() {
     checks.sharp = { ok: false, detail: err instanceof Error ? err.message : 'sharp failed' };
   }
 
-  // 2. Supabase Storage — upload a tiny test image then delete it
-  try {
-    const testBuffer = await sharp({
-      create: { width: 2, height: 2, channels: 3, background: { r: 255, g: 255, b: 255 } },
-    })
-      .png()
-      .toBuffer();
-    const testPath = `health/health-${Date.now()}.png`;
+  // 2. Supabase Storage. Light mode self-heals the bucket and reports its
+  // reachability without writing a throwaway object; full mode does a real
+  // upload+delete round-trip.
+  if (light) {
+    try {
+      await ensureBucket();
+      const { data, error } = await supabaseAdmin.storage.getBucket(STORAGE_BUCKET);
+      if (error || !data) throw error ?? new Error('bucket missing');
+      checks.storage = { ok: true, detail: 'bucket reachable (no write test)' };
+    } catch (err) {
+      checks.storage = { ok: false, detail: err instanceof Error ? err.message : 'storage failed' };
+    }
+  } else {
+    try {
+      const testBuffer = await sharp({
+        create: { width: 2, height: 2, channels: 3, background: { r: 255, g: 255, b: 255 } },
+      })
+        .png()
+        .toBuffer();
+      const testPath = `health/health-${Date.now()}.png`;
 
-    const upload = await supabaseAdmin.storage
-      .from(STORAGE_BUCKET)
-      .upload(testPath, testBuffer, { contentType: 'image/png', upsert: false });
+      const upload = await supabaseAdmin.storage
+        .from(STORAGE_BUCKET)
+        .upload(testPath, testBuffer, { contentType: 'image/png', upsert: false });
 
-    if (upload.error) throw upload.error;
+      if (upload.error) throw upload.error;
 
-    // Clean up
-    await supabaseAdmin.storage.from(STORAGE_BUCKET).remove([testPath]);
+      // Clean up
+      await supabaseAdmin.storage.from(STORAGE_BUCKET).remove([testPath]);
 
-    checks.storage = { ok: true, detail: 'upload + delete round-trip ok' };
-  } catch (err) {
-    checks.storage = { ok: false, detail: err instanceof Error ? err.message : 'storage failed' };
+      checks.storage = { ok: true, detail: 'upload + delete round-trip ok' };
+    } catch (err) {
+      checks.storage = { ok: false, detail: err instanceof Error ? err.message : 'storage failed' };
+    }
   }
 
   // 3. Supabase DB — quick select count
