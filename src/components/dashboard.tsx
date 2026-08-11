@@ -7,6 +7,7 @@ import { ConceptStatus } from '@/lib/types';
 import { useMemo } from 'react';
 import { formatDate } from '@/lib/utils';
 import { computeReadiness } from '@/lib/readiness';
+import { SystemSetupCard, UpcomingDropsCard } from './dashboard-widgets';
 
 export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => void }) {
   const { concepts } = useAppStore();
@@ -116,6 +117,18 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
     [concepts]
   );
 
+  // Images that fell back to data URIs (storage upload failed) — these won't
+  // reliably survive a refresh, so surface the count in the Setup card.
+  const unstoredImages = useMemo(() => {
+    let n = 0;
+    for (const c of concepts) {
+      for (const url of [c.coilImageUrl, c.baseImageUrl, c.combinedImageUrl, c.productMockupUrl, c.marketingGraphicUrl]) {
+        if (typeof url === 'string' && url.startsWith('data:')) n += 1;
+      }
+    }
+    return n;
+  }, [concepts]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
@@ -210,6 +223,12 @@ export function Dashboard({ onOpenConcept }: { onOpenConcept: (id: string) => vo
         <StatCard label="Approved" value={stats.approved} sub="waiting for prod" />
         <StatCard label="Ready for Mfg" value={stats.readyForMfg} sub="in production queue" />
         <StatCard label="Manufactured" value={stats.manufactured} sub="total shipped" />
+      </div>
+
+      {/* SETUP + UPCOMING DROPS — surfaces the newer features and their infra */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SystemSetupCard unstoredImages={unstoredImages} />
+        <UpcomingDropsCard />
       </div>
 
       {/* UPSTREAM QUEUES */}

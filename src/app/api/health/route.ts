@@ -69,10 +69,51 @@ export async function GET() {
     checks.database = { ok: false, detail: err instanceof Error ? err.message : 'db failed' };
   }
 
+  // ── Feature infrastructure ────────────────────────────────────────────
+  // Optional-but-recommended backing for the newer features. These do NOT gate
+  // the top-level `ok` (a fresh deploy is still healthy before the feature
+  // migrations run) — they're surfaced so the Setup card can nudge the operator
+  // to run the right migration / fix the bucket.
+  const features: Record<string, { ok: boolean; detail?: string }> = {};
+
+  // Storage bucket must be PUBLIC or the public image URLs 403.
+  try {
+    const { data } = await supabaseAdmin.storage.getBucket(STORAGE_BUCKET);
+    features.bucketPublic = data
+      ? { ok: data.public === true, detail: data.public ? 'public' : 'bucket is PRIVATE — images will not render' }
+      : { ok: false, detail: 'bucket missing — it is auto-created on first upload' };
+  } catch (err) {
+    features.bucketPublic = { ok: false, detail: err instanceof Error ? err.message : 'bucket check failed' };
+  }
+
+  // coil_sizes — size presets (Small/Regular/XL)
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('coil_sizes')
+      .select('id', { count: 'exact', head: true });
+    features.coilSizes = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-coil-sizes.sql' }
+      : { ok: true, detail: `${count ?? 0} presets` };
+  } catch (err) {
+    features.coilSizes = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
+  // calendar_mockups — auto-generated holiday coil designs
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('calendar_mockups')
+      .select('id', { count: 'exact', head: true });
+    features.calendarMockups = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-calendar-mockups.sql' }
+      : { ok: true, detail: `${count ?? 0} designs` };
+  } catch (err) {
+    features.calendarMockups = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
   const ok = Object.values(checks).every((c) => c.ok);
 
   return NextResponse.json(
-    { ok, checks, timestamp: new Date().toISOString() },
+    { ok, checks, features, timestamp: new Date().toISOString() },
     { status: ok ? 200 : 500 }
   );
 }
