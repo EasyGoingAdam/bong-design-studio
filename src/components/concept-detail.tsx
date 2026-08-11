@@ -947,8 +947,9 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         {gen.provider === 'openai_v2' ? '✦ ChatGPT 2.0' : gen.provider === 'gemini' ? 'Gemini' : 'ChatGPT'}
                       </span>
                     )}
-                    {/* XL Piece Version badge — detected via the prompt prefix the
-                        handleMakeXL handler stamps on every XL record. */}
+                    {/* XL Piece Version badge — detected via the prompt prefix
+                        on historical XL records (the former Make-for-XL action).
+                        Kept so those older records still badge correctly. */}
                     {(gen.prompt?.startsWith('[XL Piece Version]') || gen.coilPrompt?.startsWith('[XL Piece Version]') || gen.basePrompt?.startsWith('[XL Piece Version]')) && (
                       <span
                         className="text-[10px] px-2 py-0.5 rounded font-bold bg-orange-100 text-orange-800 border border-orange-300"
