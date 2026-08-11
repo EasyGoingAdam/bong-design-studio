@@ -150,13 +150,20 @@ export async function POST(request: NextRequest) {
       base64Data = await generateWithOpenAI(params, 'v1');
     }
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage. `stored` tells the client whether the image
+    // is a persistable storage URL or a data-URI fallback (upload failed) —
+    // the latter is too large to reliably survive on a concept row, so the
+    // client warns the user instead of letting the work silently vanish.
     let imageUrl: string;
+    let stored = true;
+    let storageError: string | undefined;
     try {
       imageUrl = await uploadImage(base64Data, params.folder, params.filename);
     } catch (uploadErr) {
       console.error('Supabase upload failed, returning base64 fallback:', uploadErr);
       imageUrl = base64Data;
+      stored = false;
+      storageError = uploadErr instanceof Error ? uploadErr.message : 'storage upload failed';
     }
 
     // Echo back which model ACTUALLY produced the image (post-fallback)
@@ -174,6 +181,8 @@ export async function POST(request: NextRequest) {
       requestedProvider: params.provider,
       fellBack,
       fallbackReason,
+      stored,
+      storageError,
     });
   } catch (error) {
     console.error('Image generation error:', error);

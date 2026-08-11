@@ -145,11 +145,12 @@ export function mapShipmentToDraft(
   const items = s.items || [];
   // The etched piece — NOT necessarily items[0] (often an accessory).
   const coil = chooseCustomItem(items);
-  // Whether the chosen line is a genuine custom/etched product (vs an order
-  // with only accessories, which the import UI hides by default).
-  const custom = isCustomItem(coil);
   const otherCount = items.filter((it) => it !== coil).length;
   const names = tagNames(s, tagMap);
+  // Whether this is a genuine custom/etched order (vs accessory-only, which the
+  // import UI hides by default): either the chosen line reads as a custom
+  // product, OR the order carries a custom/etch tag from ShipStation.
+  const custom = isCustomItem(coil) || names.some((n) => /custom|etch|engrav|personaliz/i.test(n));
   const rush = names.some((n) => /rush|expedite|priority|prime/i.test(n)) ||
     /express|priority|overnight/i.test(s.service_code || '');
   const label = coil?.name ? `${coil.name}${otherCount ? ` +${otherCount}` : ''}` : 'ShipStation order';

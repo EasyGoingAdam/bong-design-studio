@@ -291,6 +291,10 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
   );
   const effectiveCoilShape: 'square' | 'rectangle' | 'portrait' =
     coilGenSize === '1536x1024' ? 'rectangle' : coilGenSize === '1024x1536' ? 'portrait' : 'square';
+  const coilOrientationLabel =
+    effectiveCoilShape === 'rectangle' ? 'Landscape 3:2'
+    : effectiveCoilShape === 'portrait' ? 'Portrait 2:3'
+    : 'Square 1:1';
 
   const inputs = useMemo(() => ({
     title: concept.name,
@@ -366,6 +370,9 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       let lastUsedModel: string | undefined = coilData.model as string | undefined;
       let lastUsedProvider: string | undefined = coilData.provider as string | undefined;
       let anyFellBack = !!coilData.fellBack;
+      // Track whether any image fell back to a data URI (storage upload failed)
+      // so we can warn the user it may not persist.
+      let anyUnstored = coilData.stored === false;
 
       let baseImageUrl = '';
       if (baseRes) {
@@ -379,6 +386,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         lastUsedModel = (baseData.model as string | undefined) || lastUsedModel;
         lastUsedProvider = (baseData.provider as string | undefined) || lastUsedProvider;
         anyFellBack = anyFellBack || !!baseData.fellBack;
+        anyUnstored = anyUnstored || baseData.stored === false;
       }
 
       // CRITICAL: auto-save every successful generation to the concept's
@@ -446,6 +454,16 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         toast(
           'ChatGPT Image 2.0 didn’t process — generated with ChatGPT Image (1.0) instead.',
           'info',
+        );
+      }
+
+      // Loud warning when storage upload failed: the image is showing from a
+      // data URI but won't reliably survive a refresh. This is the signal that
+      // the Supabase storage bucket needs attention.
+      if (anyUnstored) {
+        toast(
+          'Image generated but could NOT be saved to storage — it may disappear on refresh. Check the Supabase storage bucket.',
+          'error',
         );
       }
     } catch (err: unknown) {
@@ -819,7 +837,12 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-muted mb-1">Coil</div>
+                <div className="text-[10px] text-muted mb-1 flex items-center gap-1">
+                  Coil
+                  <span className="text-accent" title="The design will be generated at this orientation, derived from the coil width × height.">
+                    · {coilOrientationLabel}
+                  </span>
+                </div>
                 <div className="flex gap-1">
                   <input type="number" step="0.1" value={coilWidth} onChange={(e) => setCoilWidth(e.target.value)} placeholder="W" className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs focus:outline-none focus:border-accent" />
                   <span className="text-[10px] text-muted self-center">×</span>
