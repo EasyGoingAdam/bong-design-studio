@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { HOLIDAY_EVENTS } from '@/lib/holiday-events';
 import {
   WINDOW_DAYS,
@@ -25,15 +25,16 @@ function Dot({ ok }: { ok: boolean }) {
   );
 }
 
-function Row({ label, check }: { label: string; check?: HealthCheck }) {
+function Row({ label, check, trailing }: { label: string; check?: HealthCheck; trailing?: ReactNode }) {
   if (!check) return null;
   return (
     <div className="flex items-center gap-2 text-xs py-0.5">
       <Dot ok={check.ok} />
       <span className="font-medium text-foreground shrink-0">{label}</span>
       {check.detail && (
-        <span className={`truncate ${check.ok ? 'text-muted' : 'text-red-600'}`}>· {check.detail}</span>
+        <span className={`truncate min-w-0 ${check.ok ? 'text-muted' : 'text-red-600'}`}>· {check.detail}</span>
       )}
+      {trailing && <span className="ml-auto shrink-0">{trailing}</span>}
     </div>
   );
 }
@@ -44,22 +45,83 @@ function Row({ label, check }: { label: string; check?: HealthCheck }) {
  * concept images that never made it to storage (data-URI fallbacks that won't
  * persist). Tells the operator exactly which migration / fix is outstanding.
  */
+// Supabase SQL-editor URL for this project, derived from the public URL
+// (no hardcoded project ref).
+const SQL_EDITOR_URL: string | null = (() => {
+  try {
+    const u = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!u) return null;
+    const ref = new URL(u).hostname.split('.')[0];
+    return ref ? `https://supabase.com/dashboard/project/${ref}/sql/new` : null;
+  } catch {
+    return null;
+  }
+})();
+
 export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [migrations, setMigrations] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/health')
+    Promise.all([
       // /api/health returns 500 when a CORE check fails, but the body is still
       // the full report — parse it regardless of status.
-      .then((r) => r.json())
-      .then((data: HealthResponse) => { if (!cancelled) setHealth(data); })
-      .catch(() => { if (!cancelled) setFailed(true); })
+      fetch('/api/health').then((r) => r.json()).catch(() => null),
+      fetch('/api/migrations').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+    ])
+      .then(([h, m]) => {
+        if (cancelled) return;
+        if (h) setHealth(h as HealthResponse); else setFailed(true);
+        setMigrations((m || {}) as Record<string, string>);
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const copySql = async (slug: string) => {
+    const sql = migrations[slug];
+    if (!sql || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopied(slug);
+      setTimeout(() => setCopied((c) => (c === slug ? null : c)), 2000);
+    } catch {
+      /* clipboard blocked — the Open SQL editor link still works */
+    }
+  };
+
+  // Actions for a migration-backed feature that isn't provisioned yet.
+  const migrationActions = (slug: string, ok: boolean | undefined) => {
+    if (ok !== false) return null;
+    const hasSql = !!migrations[slug];
+    return (
+      <span className="flex items-center gap-2 ml-1">
+        {hasSql && (
+          <button
+            type="button"
+            onClick={() => copySql(slug)}
+            className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:border-foreground text-foreground"
+          >
+            {copied === slug ? 'Copied ✓' : 'Copy SQL'}
+          </button>
+        )}
+        {SQL_EDITOR_URL && (
+          <a
+            href={SQL_EDITOR_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] text-accent hover:underline"
+          >
+            Open SQL editor ↗
+          </a>
+        )}
+      </span>
+    );
+  };
 
   const features = health?.features;
   const checks = health?.checks;
@@ -100,8 +162,16 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">Features</div>
             <Row label="Image bucket public" check={features?.bucketPublic} />
-            <Row label="Size presets table" check={features?.coilSizes} />
-            <Row label="Calendar designs table" check={features?.calendarMockups} />
+            <Row
+              label="Size presets table"
+              check={features?.coilSizes}
+              trailing={migrationActions('coil-sizes', features?.coilSizes?.ok)}
+            />
+            <Row
+              label="Calendar designs table"
+              check={features?.calendarMockups}
+              trailing={migrationActions('calendar-mockups', features?.calendarMockups?.ok)}
+            />
           </div>
 
           {/* Core services */}
