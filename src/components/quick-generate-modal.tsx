@@ -296,6 +296,20 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
     : effectiveCoilShape === 'portrait' ? 'Portrait 2:3'
     : 'Square 1:1';
 
+  // Persist the entered/preset dimensions back onto the concept so they survive
+  // a refresh, pre-fill the modal next time, and tick the readiness
+  // "Manufacturing dimensions" check. Merged so printableArea/notes are kept.
+  const dimensionUpdates = useMemo(() => {
+    const upd: Partial<Concept> = {};
+    if (coilWidth && coilHeight) {
+      upd.coilSpecs = { ...concept.coilSpecs, dimensions: `${coilWidth}x${coilHeight}${dimUnit}` };
+    }
+    if (!coilOnly && baseWidth && baseHeight) {
+      upd.baseSpecs = { ...concept.baseSpecs, dimensions: `${baseWidth}x${baseHeight}${dimUnit}` };
+    }
+    return upd;
+  }, [concept.coilSpecs, concept.baseSpecs, coilWidth, coilHeight, baseWidth, baseHeight, dimUnit, coilOnly]);
+
   const inputs = useMemo(() => ({
     title: concept.name,
     stylePrompt: concept.specs.designStyleName || concept.tags.join(', '),
@@ -431,6 +445,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
         coilImageUrl: newCoil,
         baseImageUrl: coilOnly ? '' : newBase,
         coilOnly,
+        ...dimensionUpdates,
       });
       // Also snapshot the NEW images as a version so the Versions tab
       // has a row for each iteration. (Without this, only the first
@@ -484,6 +499,7 @@ export function QuickGenerateModal({ concept, onClose }: { concept: Concept; onC
       coilImageUrl: generatedCoilUrl,
       baseImageUrl: coilOnly ? '' : generatedBaseUrl,
       coilOnly,
+      ...dimensionUpdates,
     });
 
     // Save as new version (snapshot)

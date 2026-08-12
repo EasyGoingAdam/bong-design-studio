@@ -24,8 +24,16 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
   // Default to showing/importing only custom (etched) items — accessory-only
-  // orders are noise the operator had to sift through before.
-  const [customOnly, setCustomOnly] = useState(true);
+  // orders are noise the operator had to sift through before. Remembered across
+  // sessions.
+  const [customOnly, setCustomOnly] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem('ss-custom-only') !== '0';
+  });
+  const setCustomOnlyPersisted = (v: boolean) => {
+    setCustomOnly(v);
+    try { window.localStorage.setItem('ss-custom-only', v ? '1' : '0'); } catch { /* ignore */ }
+  };
   const [importing, setImporting] = useState(false);
 
   const alreadyImported = useMemo(
@@ -106,7 +114,7 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
             <button onClick={() => setSelected(new Set())} className="text-xs px-2 py-1.5 border border-border rounded-lg hover:border-foreground">None</button>
           </div>
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
-            <input type="checkbox" checked={customOnly} onChange={(e) => setCustomOnly(e.target.checked)} className="accent-accent" />
+            <input type="checkbox" checked={customOnly} onChange={(e) => setCustomOnlyPersisted(e.target.checked)} className="accent-accent" />
             Custom items only
             {customOnly && hiddenNonCustom > 0 && (
               <span className="text-[10px] text-muted">· hiding {hiddenNonCustom} accessory-only order{hiddenNonCustom === 1 ? '' : 's'}</span>
@@ -146,6 +154,7 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
                     {ordered != null ? ` · ordered ${ordered <= 0 ? `${-ordered}d ago` : 'today'}` : ''}
                   </div>
                   <div className="flex flex-wrap gap-1 mt-0.5">
+                    {d.custom && <span className="text-[9px] bg-accent/15 text-accent px-1 rounded font-bold">CUSTOM</span>}
                     {d.rush && <span className="text-[9px] bg-red-100 text-red-700 px-1 rounded font-bold">RUSH</span>}
                     {sla !== 'none' && <span className={`text-[9px] px-1 rounded border ${sla === 'red' ? 'bg-red-50 text-red-700 border-red-200' : sla === 'yellow' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>ship {sla}</span>}
                     {(d.tags || []).filter((t) => t !== 'shipstation').slice(0, 3).map((t) => (

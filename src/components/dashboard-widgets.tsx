@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useAppStore } from '@/lib/store';
 import { HOLIDAY_EVENTS } from '@/lib/holiday-events';
 import {
   WINDOW_DAYS,
@@ -59,11 +60,37 @@ const SQL_EDITOR_URL: string | null = (() => {
 })();
 
 export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) {
+  const refreshConcepts = useAppStore((s) => s.refreshConcepts);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [migrations, setMigrations] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [repairMsg, setRepairMsg] = useState<string | null>(null);
+
+  const repairImages = async () => {
+    setRepairing(true);
+    setRepairMsg(null);
+    try {
+      const res = await fetch('/api/concepts/repair-images', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Repair failed');
+      // Pull the rewritten rows into the store so the count updates.
+      await refreshConcepts();
+      setRepairMsg(
+        data.imagesRepaired > 0
+          ? `Repaired ${data.imagesRepaired} image${data.imagesRepaired === 1 ? '' : 's'}.`
+          : data.stillFailing > 0
+            ? 'Still failing — storage isn’t writable yet. Check the bucket rows above.'
+            : 'Nothing to repair.',
+      );
+    } catch (e) {
+      setRepairMsg(e instanceof Error ? e.message : 'Repair failed');
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -188,11 +215,20 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
             <div className="flex items-center gap-2 text-xs py-0.5">
               <Dot ok={false} />
               <span className="font-medium text-foreground shrink-0">Unsaved images</span>
-              <span className="truncate text-red-600">
-                · {unstoredImages} image{unstoredImages === 1 ? '' : 's'} stored as data URIs — regenerate once storage is healthy
+              <span className="truncate min-w-0 text-red-600">
+                · {unstoredImages} stored as data URIs — won’t survive refresh
               </span>
+              <button
+                type="button"
+                onClick={repairImages}
+                disabled={repairing}
+                className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-border hover:border-foreground text-foreground disabled:opacity-50"
+              >
+                {repairing ? 'Repairing…' : 'Repair'}
+              </button>
             </div>
           )}
+          {repairMsg && <p className="text-[10px] text-muted pl-4">{repairMsg}</p>}
         </div>
       )}
     </div>
