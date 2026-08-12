@@ -42,7 +42,7 @@ export interface ProductionReport {
   dueDatedCompleted: number;
   onTimePct: number;
   reworkCount: number;
-  reworkRate: number;          // rework / completed
+  reworkRate: number;          // reworked jobs / scheduled non-held jobs (0-100)
   scrapCount: number;
   scrapRate: number;           // scrap / pieces completed
   heldCount: number;
@@ -152,9 +152,15 @@ export function computeProductionReport(
     dueDatedCompleted: dueDated.length,
     onTimePct: dueDated.length ? Math.round((onTime.length / dueDated.length) * 100) : 0,
     reworkCount,
-    reworkRate: completed.length ? Math.round((reworkCount / completed.length) * 100) : 0,
+    // Rework rate = reworked jobs / scheduled non-held jobs. reworkCount is a
+    // subset of `active`, so this stays 0–100 (the old `/ completed.length`
+    // mixed a rework-status numerator with a completed denominator and could
+    // read 300% on a day with more rework than completions). Clamped as a
+    // belt-and-braces against the held-with-reworkReason edge.
+    reworkRate: active.length ? Math.min(100, Math.round((reworkCount / active.length) * 100)) : 0,
     scrapCount,
-    scrapRate: piecesCompleted > 0 ? Math.round((scrapCount / piecesCompleted) * 100) : 0,
+    // Clamp: a heavy-scrap day could have scrapCount exceed piecesCompleted.
+    scrapRate: piecesCompleted > 0 ? Math.min(100, Math.round((scrapCount / piecesCompleted) * 100)) : 0,
     heldCount,
     revenueScheduled: active.reduce((s, j) => s + (j.revenueValue || 0), 0),
     revenueCompleted: completed.reduce((s, j) => s + (j.revenueValue || 0), 0),
