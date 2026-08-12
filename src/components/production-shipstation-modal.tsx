@@ -87,7 +87,11 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
     const chosen = drafts
       .filter((d) => selected.has(d.shipstationOrderId || ''))
       // Drop the transient `custom` flag — it's not a ProductionJob field.
-      .map(({ custom: _custom, ...d }) => d as Partial<ProductionJob>);
+      .map((d) => {
+        const copy = { ...d };
+        delete copy.custom;
+        return copy as Partial<ProductionJob>;
+      });
     if (chosen.length === 0) { toast('Select at least one order', 'info'); return; }
     setImporting(true);
     const n = await importProductionJobs(chosen);

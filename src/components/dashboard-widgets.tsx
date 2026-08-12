@@ -171,6 +171,8 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
         <h3 className="text-sm font-semibold">System &amp; Setup</h3>
         {loading ? (
           <span className="text-[10px] text-muted">checking…</span>
+        ) : failed ? (
+          <span className="text-[10px] text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full">unreachable</span>
         ) : allGood ? (
           <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">All healthy</span>
         ) : (

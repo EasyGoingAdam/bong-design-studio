@@ -3,7 +3,6 @@
 import { conceptPrimaryImage } from '@/lib/concept-images';
 import { useAppStore } from '@/lib/store';
 import { StatCard, StatusBadge, PriorityBadge } from './ui';
-import { ConceptStatus } from '@/lib/types';
 import { useMemo } from 'react';
 import { formatDate } from '@/lib/utils';
 import { computeReadiness } from '@/lib/readiness';

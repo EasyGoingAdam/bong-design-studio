@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { ConceptStatus, STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
-import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select, SliderInput } from './ui';
+import { STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
+import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
 import { ImageDownloadButtons } from './image-download';
@@ -16,7 +16,6 @@ import { CostCalculatorModal } from './cost-calculator-modal';
 import { BulkVariantsModal } from './bulk-variants-modal';
 import { ConceptAuditTimeline } from './concept-audit-timeline';
 import { StampsPanel } from './stamps-panel';
-import { safeJsonResponse } from '@/lib/fetch-helpers';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
 import { useToast } from './toast';
@@ -24,7 +23,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
-  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, addAIGeneration, openAIKey } = useAppStore();
+  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, openAIKey } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing' | 'audit'>('overview');
   const [commentText, setCommentText] = useState('');
