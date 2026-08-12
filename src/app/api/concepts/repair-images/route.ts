@@ -17,9 +17,9 @@ const IMAGE_COLS = [
 
 export async function POST() {
   try {
-    const { data: rows, error } = await supabaseAdmin
-      .from('concepts')
-      .select(['id', ...IMAGE_COLS].join(','));
+    // select('*') so a not-yet-migrated image column can't fail the whole
+    // repair with a "column not found" error — missing fields read as undefined.
+    const { data: rows, error } = await supabaseAdmin.from('concepts').select('*');
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let conceptsRepaired = 0;

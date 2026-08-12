@@ -109,7 +109,9 @@ function chooseCustomItem(items: SSItem[]): SSItem | undefined {
 // Etch/custom keywords — the products this shop actually laser-etches. Used to
 // tell a genuine custom piece apart from an accessory-only order so the import
 // UI can hide the non-custom noise.
-const ETCH_KEYWORD = /coil|freeze ?pipe|chiller|\bdna\b|bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum|custom|personaliz|engrav|etch/i;
+// Word boundaries on the "intent" words (custom/etch/engrave/personalize) so
+// they don't false-match inside unrelated words (sketch, accustomed, …).
+const ETCH_KEYWORD = /coil|freeze ?pipe|chiller|\bdna\b|bong|beaker|bubbler|rig|recycler|tube|\bpipe\b|chillum|\bcustom|\bpersonaliz|\bengrav|\betch/i;
 function isCustomItem(it: SSItem | undefined): boolean {
   if (!it) return false;
   const text = `${it.name || ''} ${it.sku || ''}`;
@@ -150,7 +152,7 @@ export function mapShipmentToDraft(
   // Whether this is a genuine custom/etched order (vs accessory-only, which the
   // import UI hides by default): either the chosen line reads as a custom
   // product, OR the order carries a custom/etch tag from ShipStation.
-  const custom = isCustomItem(coil) || names.some((n) => /custom|etch|engrav|personaliz/i.test(n));
+  const custom = isCustomItem(coil) || names.some((n) => /\bcustom|\betch|\bengrav|\bpersonaliz/i.test(n));
   const rush = names.some((n) => /rush|expedite|priority|prime/i.test(n)) ||
     /express|priority|overnight/i.test(s.service_code || '');
   const label = coil?.name ? `${coil.name}${otherCount ? ` +${otherCount}` : ''}` : 'ShipStation order';

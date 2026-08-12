@@ -3,6 +3,29 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { dbConceptToFrontend } from '../route';
 import { logAuditAsync, diffShallow } from '@/lib/audit';
 
+// Update a child-spec row, inserting it first if the concept has none yet.
+// Some concepts (imported / created outside the main POST path) may lack a
+// coil_specs / base_specs row; a bare UPDATE would match zero rows and silently
+// drop the change — so dimensions entered in the generator would not persist.
+async function updateOrInsertSpec(
+  table: 'coil_specs' | 'base_specs',
+  conceptId: string,
+  update: Record<string, unknown>,
+): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .update(update)
+    .eq('concept_id', conceptId)
+    .select();
+  if (error) {
+    console.error(`${table} update failed:`, error.message);
+    return;
+  }
+  if (data && data.length > 0) return; // updated an existing row
+  const { error: insErr } = await supabaseAdmin.from(table).insert({ concept_id: conceptId, ...update });
+  if (insErr) console.error(`${table} insert failed:`, insErr.message);
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/concepts/[id]  — fetch single concept with all related data
 // ---------------------------------------------------------------------------
@@ -206,9 +229,7 @@ export async function PATCH(
       if (cs.printableArea !== undefined) coilUpdate.printable_area = cs.printableArea;
       if (cs.notes !== undefined) coilUpdate.notes = cs.notes;
       if (Object.keys(coilUpdate).length > 0) {
-        updates.push(
-          supabaseAdmin.from('coil_specs').update(coilUpdate).eq('concept_id', id).select()
-        );
+        updates.push(updateOrInsertSpec('coil_specs', id, coilUpdate));
       }
     }
 
@@ -219,9 +240,7 @@ export async function PATCH(
       if (bs.printableArea !== undefined) baseUpdate.printable_area = bs.printableArea;
       if (bs.notes !== undefined) baseUpdate.notes = bs.notes;
       if (Object.keys(baseUpdate).length > 0) {
-        updates.push(
-          supabaseAdmin.from('base_specs').update(baseUpdate).eq('concept_id', id).select()
-        );
+        updates.push(updateOrInsertSpec('base_specs', id, baseUpdate));
       }
     }
 
