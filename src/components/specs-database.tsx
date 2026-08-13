@@ -63,6 +63,80 @@ function CoilSizesPanel() {
   );
 }
 
+/**
+ * SKU → "requires custom manufacturing" rules. The ShipStation import matches
+ * each item's SKU against these (rule wins over the name/keyword heuristic).
+ */
+function ManufacturingProductsPanel() {
+  const { manufacturingProducts, addManufacturingProduct, updateManufacturingProduct, deleteManufacturingProduct, coilSizes } = useAppStore();
+  return (
+    <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold">Manufacturing Product Rules (SKU)</h3>
+        <button
+          onClick={() => addManufacturingProduct({ sku: '', requiresCustomManufacturing: true, active: true })}
+          className="text-xs px-2.5 py-1 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+        >
+          + Add rule
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">
+        The reliable way to control which ShipStation items import as custom manufacturables — matched by SKU. Falls back to name keywords when no rule matches.
+      </p>
+      {manufacturingProducts.length === 0 ? (
+        <p className="text-xs text-muted py-2">No SKU rules yet — add one to override the keyword-based custom detection.</p>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[7rem_1fr_5rem_6rem_4rem_2rem] gap-2 text-[10px] uppercase tracking-wider text-muted px-1">
+            <span>SKU</span><span>Product name</span><span>Custom?</span><span>Coil type</span><span>Active</span><span />
+          </div>
+          {manufacturingProducts.map((p) => (
+            <div key={p.id} className="grid grid-cols-[7rem_1fr_5rem_6rem_4rem_2rem] gap-2 items-center">
+              <input
+                defaultValue={p.sku}
+                placeholder="SKU"
+                onBlur={(e) => { const v = e.target.value.trim(); if (v !== p.sku) updateManufacturingProduct(p.id, { sku: v }); }}
+                className="bg-background border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+              />
+              <input
+                defaultValue={p.productName}
+                placeholder="Product name (optional)"
+                onBlur={(e) => { const v = e.target.value; if (v !== p.productName) updateManufacturingProduct(p.id, { productName: v }); }}
+                className="bg-background border border-border rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+              />
+              <label className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={p.requiresCustomManufacturing}
+                  onChange={(e) => updateManufacturingProduct(p.id, { requiresCustomManufacturing: e.target.checked })}
+                  className="accent-accent"
+                />
+              </label>
+              <select
+                value={p.coilType ?? ''}
+                onChange={(e) => updateManufacturingProduct(p.id, { coilType: e.target.value || null })}
+                className="bg-background border border-border rounded px-1.5 py-1 text-sm focus:outline-none focus:border-accent"
+              >
+                <option value="">—</option>
+                {coilSizes.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+              <label className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={p.active}
+                  onChange={(e) => updateManufacturingProduct(p.id, { active: e.target.checked })}
+                  className="accent-accent"
+                />
+              </label>
+              <button onClick={() => deleteManufacturingProduct(p.id)} className="text-red-400 hover:text-red-300 text-sm" title={`Delete ${p.sku}`}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SpecsDatabase() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useAppStore();
   const { toast } = useToast();
@@ -86,6 +160,7 @@ export function SpecsDatabase() {
       </div>
 
       <CoilSizesPanel />
+      <ManufacturingProductsPanel />
 
       {templates.length === 0 ? (
         <EmptyState icon="⚙" title="No templates yet" description="Create design templates to standardize your concepts." action={{ label: '+ New Template', onClick: () => setShowNew(true) }} />

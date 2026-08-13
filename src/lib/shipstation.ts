@@ -194,9 +194,12 @@ export function mapShipmentToDraft(
 }
 
 /** Pull the open (unshipped) queue and return mapped job drafts. */
-export async function fetchOpenShipmentDrafts(token: string, perStatus = 100): Promise<Partial<ProductionJob>[]> {
+export async function fetchOpenShipmentDrafts(
+  token: string,
+  perStatus = 100,
+): Promise<(Partial<ProductionJob> & { custom: boolean })[]> {
   const tagMap = await fetchTagMap(token);
-  const drafts: Partial<ProductionJob>[] = [];
+  const drafts: (Partial<ProductionJob> & { custom: boolean })[] = [];
   const seen = new Set<string>();
   for (const status of OPEN_STATUSES) {
     const data = await ssGet(token, `/v2/shipments?shipment_status=${status}&page_size=${perStatus}&sort_by=created_at&sort_dir=desc`);

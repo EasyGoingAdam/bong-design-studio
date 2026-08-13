@@ -6,6 +6,7 @@ import {
   SpecTemplate,
   CoilSizePreset,
   DEFAULT_COIL_SIZES,
+  ManufacturingProduct,
   User,
   Comment,
   ApprovalLog,
@@ -26,6 +27,7 @@ interface AppState {
   concepts: Concept[];
   templates: SpecTemplate[];
   coilSizes: CoilSizePreset[];
+  manufacturingProducts: ManufacturingProduct[];
   users: User[];
   currentUser: User;
   openAIKey: string;
@@ -73,6 +75,11 @@ interface AppState {
   addCoilSize: (size: Partial<CoilSizePreset>) => void;
   updateCoilSize: (id: string, updates: Partial<CoilSizePreset>) => void;
   deleteCoilSize: (id: string) => void;
+
+  // Manufacturing product (SKU) rules
+  addManufacturingProduct: (rule: Partial<ManufacturingProduct>) => void;
+  updateManufacturingProduct: (id: string, updates: Partial<ManufacturingProduct>) => void;
+  deleteManufacturingProduct: (id: string) => void;
 
   // Auth
   setAuthUser: (userId: string, email: string) => void;
@@ -127,6 +134,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   concepts: [],
   templates: [],
   coilSizes: DEFAULT_COIL_SIZES,
+  manufacturingProducts: [],
   users: sampleUsers,
   currentUser: sampleUsers[0],
   openAIKey: '',
@@ -173,12 +181,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ loading: true });
     let booted = false;
     try {
-      // Fetch concepts, templates, sizes, and settings from API in parallel
-      const [conceptsRes, templatesRes, settingsRes, coilSizesRes] = await Promise.all([
+      // Fetch concepts, templates, sizes, rules, and settings from API in parallel
+      const [conceptsRes, templatesRes, settingsRes, coilSizesRes, mfgProductsRes] = await Promise.all([
         fetch('/api/concepts'),
         fetch('/api/templates'),
         fetch('/api/settings'),
         fetch('/api/coil-sizes'),
+        fetch('/api/manufacturing-products'),
       ]);
 
       if (conceptsRes.ok) {
@@ -208,6 +217,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           set({ coilSizes: sizesData as any });
         }
+      }
+
+      // Manufacturing SKU rules — empty until the operator adds some.
+      if (mfgProductsRes.ok) {
+        const rulesData = await safeJsonArray(mfgProductsRes);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        set({ manufacturingProducts: rulesData as any });
       }
 
       // Load settings from server
@@ -676,6 +692,55 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }).catch((err) => {
       console.error(err);
       if (removed) set((state) => ({ coilSizes: [...state.coilSizes, removed] }));
+    });
+  },
+
+  addManufacturingProduct: (partial) => {
+    const rule: ManufacturingProduct = {
+      id: uuidv4(),
+      sku: partial.sku || '',
+      productName: partial.productName || '',
+      requiresCustomManufacturing: partial.requiresCustomManufacturing ?? true,
+      coilType: partial.coilType ?? null,
+      active: partial.active ?? true,
+    };
+    set((state) => ({ manufacturingProducts: [...state.manufacturingProducts, rule] }));
+    fetch('/api/manufacturing-products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
+  },
+
+  updateManufacturingProduct: (id, updates) => {
+    set((state) => ({
+      manufacturingProducts: state.manufacturingProducts.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+    }));
+    const rule = get().manufacturingProducts.find((p) => p.id === id);
+    if (rule) {
+      fetch('/api/manufacturing-products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rule),
+      }).then((r) => { if (!r.ok) console.error('Fire-and-forget API write rejected:', r.status, r.url); }).catch(console.error);
+    }
+  },
+
+  deleteManufacturingProduct: (id) => {
+    const removed = get().manufacturingProducts.find((p) => p.id === id);
+    set((state) => ({ manufacturingProducts: state.manufacturingProducts.filter((p) => p.id !== id) }));
+    fetch('/api/manufacturing-products', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).then((r) => {
+      if (!r.ok) {
+        console.error('Fire-and-forget API write rejected:', r.status, r.url);
+        if (removed) set((state) => ({ manufacturingProducts: [...state.manufacturingProducts, removed] }));
+      }
+    }).catch((err) => {
+      console.error(err);
+      if (removed) set((state) => ({ manufacturingProducts: [...state.manufacturingProducts, removed] }));
     });
   },
 

@@ -231,6 +231,21 @@ export const DEFAULT_COIL_SIZES: CoilSizePreset[] = [
 ];
 
 /**
+ * A SKU → "requires custom manufacturing" rule. The reliable, DB-driven way to
+ * decide which ShipStation line items are custom manufacturables. Editable in
+ * the Specs DB tab.
+ */
+export interface ManufacturingProduct {
+  id: string;
+  sku: string;
+  productName: string;
+  requiresCustomManufacturing: boolean;
+  /** Optional coil size preset name (matches CoilSizePreset.name). */
+  coilType: string | null;
+  active: boolean;
+}
+
+/**
  * One stamp = one independent engraving-ready mini graphic. A stamps-mode
  * Concept has 1-5 of these; each can be edited or regenerated on its own.
  * `id` is stable across regenerations so the UI can hold its place when

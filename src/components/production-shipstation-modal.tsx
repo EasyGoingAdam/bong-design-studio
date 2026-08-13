@@ -6,9 +6,10 @@ import { useToast } from './toast';
 import { ProductionJob } from '@/lib/types';
 import { slaStatus, daysUntil } from '@/lib/production';
 
-// Import drafts carry a transient `custom` flag (genuine etched piece vs an
-// accessory-only order) that isn't part of the persisted ProductionJob.
-type ImportDraft = Partial<ProductionJob> & { custom?: boolean };
+// Import drafts carry transient fields (a `custom` flag, and whether it came
+// from a SKU rule vs the name heuristic) that aren't part of the persisted
+// ProductionJob.
+type ImportDraft = Partial<ProductionJob> & { custom?: boolean; customSource?: 'rule' | 'heuristic' };
 
 /**
  * Pulls the open ShipStation queue (pending + on_hold) and lets the operator
@@ -90,6 +91,7 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
       .map((d) => {
         const copy = { ...d };
         delete copy.custom;
+        delete copy.customSource;
         return copy as Partial<ProductionJob>;
       });
     if (chosen.length === 0) { toast('Select at least one order', 'info'); return; }
@@ -158,7 +160,14 @@ export function ProductionShipstationModal({ onClose }: { onClose: () => void })
                     {ordered != null ? ` · ordered ${ordered <= 0 ? `${-ordered}d ago` : 'today'}` : ''}
                   </div>
                   <div className="flex flex-wrap gap-1 mt-0.5">
-                    {d.custom && <span className="text-[9px] bg-accent/15 text-accent px-1 rounded font-bold">CUSTOM</span>}
+                    {d.custom && (
+                      <span
+                        className="text-[9px] bg-accent/15 text-accent px-1 rounded font-bold"
+                        title={d.customSource === 'rule' ? 'Matched a SKU rule (Database tab)' : 'Detected by product name'}
+                      >
+                        CUSTOM{d.customSource === 'rule' ? ' ✓' : ''}
+                      </span>
+                    )}
                     {d.rush && <span className="text-[9px] bg-red-100 text-red-700 px-1 rounded font-bold">RUSH</span>}
                     {sla !== 'none' && <span className={`text-[9px] px-1 rounded border ${sla === 'red' ? 'bg-red-50 text-red-700 border-red-200' : sla === 'yellow' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>ship {sla}</span>}
                     {(d.tags || []).filter((t) => t !== 'shipstation').slice(0, 3).map((t) => (
