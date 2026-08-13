@@ -5,8 +5,7 @@
 
 @theme inline {
   /* Gallery-white neutral canvas — cleaner and brighter than the old cream,
-     with true-white surfaces so the vermilion accent reads sharply. Only the
-     neutrals changed here; the accent and status hues are unchanged. */
+     with true-white surfaces so the indigo accent reads sharply. */
   --color-background: #f6f5f2;
   --color-foreground: #1b1917;
   --color-surface: #ffffff;
@@ -17,9 +16,11 @@
   --color-border-light: #cfcabf;
   --color-muted: #77716a;
 
-  /* Vermilion accent */
-  --color-accent: #d94e1f;
-  --color-accent-hover: #b8401a;
+  /* Indigo accent — a deliberate, highly-visible shift from the previous
+     vermilion so a new deploy is obvious at a glance. High contrast on white
+     for buttons (white text) and links (accent text). */
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
 
   --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
   --font-serif: 'Fraunces', 'Times New Roman', serif;
