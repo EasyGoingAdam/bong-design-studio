@@ -19,6 +19,7 @@ import { ConceptAuditTimeline } from './concept-audit-timeline';
 import { StampsPanel } from './stamps-panel';
 import { EtchingScoreBadge } from './etching-score-badge';
 import { ReadinessChecklist } from './readiness-checklist';
+import { ProductionTasksCard } from './production-tasks-card';
 import { useToast } from './toast';
 import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -718,6 +719,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
               concept={concept}
               onTabChange={(tab) => setActiveSection(tab)}
             />
+
+            <ProductionTasksCard conceptId={concept.id} />
 
             {/* StampsPanel now lives in the main image column (see top
                 of the overview section) so a stamps concept gets the
