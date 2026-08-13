@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
+import { pickGenerationSize } from '@/lib/ai-providers';
 import { StatusBadge, PriorityBadge, LifecycleBadge, Tag, Input, TextArea, Select } from './ui';
 import { ManufacturingPanel } from './manufacturing-panel';
 import { QuickGenerateModal } from './quick-generate-modal';
@@ -23,8 +24,9 @@ import { ConfirmDialog } from './confirm-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack: () => void }) {
-  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, openAIKey } = useAppStore();
+  const { concepts, updateConcept, deleteConcept, duplicateConcept, moveConcept, addComment, addApproval, addVersion, openAIKey, coilSizes } = useAppStore();
   const concept = concepts.find((c) => c.id === conceptId);
+  const [makingXL, setMakingXL] = useState<'coil' | 'base' | null>(null);
   const [activeSection, setActiveSection] = useState<'overview' | 'specs' | 'versions' | 'comments' | 'ai' | 'manufacturing' | 'audit'>('overview');
   const [commentText, setCommentText] = useState('');
   const [editing, setEditing] = useState(false);
@@ -165,6 +167,58 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
     });
     setEditing(false);
     toast('Concept updated', 'success');
+  };
+
+  /**
+   * Make for XL Piece — recompose the existing design to fill a genuine XL
+   * canvas (dimensions pulled from the coil_sizes DB, not hard-coded). Uses the
+   * AI image-EDIT endpoint so the design's motifs/style are preserved while it's
+   * scaled and rebalanced to fill the larger frame — no white-bar padding.
+   */
+  const handleMakeXL = async (part: 'coil' | 'base') => {
+    if (!concept) return;
+    const sourceUrl = part === 'coil' ? concept.coilImageUrl : concept.baseImageUrl;
+    if (!sourceUrl) { toast(`No ${part} image yet — generate one first`, 'error'); return; }
+    if (!openAIKey) { toast('Set your OpenAI API key in Settings first', 'error'); return; }
+    const xl = coilSizes.find((s) => s.name.toLowerCase() === 'xl') ?? { widthIn: 6, heightIn: 7, name: 'XL' };
+    const size = pickGenerationSize(xl.widthIn, xl.heightIn);
+    const orientation = size === '1536x1024' ? 'wider than tall' : size === '1024x1536' ? 'taller than wide' : 'roughly square';
+    const editPrompt =
+      `Recompose this exact design to fill a ${xl.widthIn}×${xl.heightIn} inch XL coil piece (${orientation}). ` +
+      `Keep the same motifs, style, and line work, but scale and rebalance the elements to fill the ENTIRE canvas ` +
+      `edge-to-edge. Do NOT add white bars, borders, or padding. Preserve the black-on-white engraving look.`;
+    setMakingXL(part);
+    try {
+      const res = await fetch('/api/edit-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: sourceUrl, editPrompt, apiKey: openAIKey, size,
+          strength: 'major', preserveComposition: false, preserveSubject: true,
+          folder: 'xl', filename: `${concept.id.slice(0, 8)}-${part}-xl`,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) { toast((data.error as string) || 'XL generation failed', 'error'); return; }
+      const xlUrl = data.url as string;
+      const dims = `${xl.widthIn}x${xl.heightIn}in`;
+      // Snapshot the pre-XL image so it's recoverable in the Versions tab.
+      addVersion(concept.id, {
+        coilImageUrl: concept.coilImageUrl,
+        baseImageUrl: concept.baseImageUrl,
+        notes: `Pre-XL ${part} snapshot (before recomposing for ${xl.name} ${dims})`,
+      });
+      if (part === 'coil') {
+        updateConcept(concept.id, { coilImageUrl: xlUrl, coilSpecs: { ...concept.coilSpecs, dimensions: dims } });
+      } else {
+        updateConcept(concept.id, { baseImageUrl: xlUrl, baseSpecs: { ...concept.baseSpecs, dimensions: dims } });
+      }
+      toast(`XL ${part} created — recomposed for ${xl.widthIn}×${xl.heightIn}"`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'XL generation failed', 'error');
+    } finally {
+      setMakingXL(null);
+    }
   };
 
   const handleComment = () => {
@@ -361,6 +415,14 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
                         ✦ Regenerate
                       </button>
                     </div>
+                    <button
+                      onClick={() => handleMakeXL('coil')}
+                      disabled={makingXL === 'coil'}
+                      className="mt-1.5 w-full text-xs px-2 py-1.5 bg-background border border-accent/40 text-accent hover:bg-accent/5 rounded-lg font-medium transition-colors disabled:opacity-60"
+                      title="Recompose this design to fill a true XL canvas (dimensions from the Database tab) — AI-resized to fill the frame, no white bars."
+                    >
+                      {makingXL === 'coil' ? 'Recomposing for XL…' : '▦ Make for XL Piece'}
+                    </button>
                     <div className="mt-1.5">
                       <EtchingScoreBadge imageUrl={concept.coilImageUrl} label="coil" />
                     </div>
