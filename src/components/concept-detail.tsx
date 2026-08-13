@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { STATUS_LABELS, KANBAN_COLUMNS } from '@/lib/types';
 import { pickGenerationSize } from '@/lib/ai-providers';
@@ -131,6 +131,37 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   const [editPriority, setEditPriority] = useState('');
   const [editLifecycle, setEditLifecycle] = useState('');
 
+  // ── Debounced auto-save ────────────────────────────────────────────────
+  // While editing, persist field changes ~800ms after the user stops typing so
+  // work survives refresh without a manual Save. A ref skips the initial field
+  // population (startEditing) so entering edit mode doesn't fire a save.
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const skipAutoSaveRef = useRef(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!editing || !concept) return;
+    if (skipAutoSaveRef.current) { skipAutoSaveRef.current = false; return; }
+    setSaveState('saving');
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      updateConcept(concept.id, {
+        name: editName,
+        description: editDesc,
+        tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+        collection: editCollection,
+        intendedAudience: editAudience,
+        manufacturingNotes: editMfgNotes,
+        marketingStory: editMarketingStory,
+        priority: editPriority as typeof concept.priority,
+        lifecycleType: editLifecycle as typeof concept.lifecycleType,
+      });
+      setSaveState('saved');
+    }, 800);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, editName, editDesc, editTags, editCollection, editAudience, editMfgNotes, editMarketingStory, editPriority, editLifecycle]);
+
   if (!concept) {
     return (
       <div className="p-6 text-center">
@@ -141,6 +172,8 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   }
 
   const startEditing = () => {
+    skipAutoSaveRef.current = true; // don't auto-save the initial field population
+    setSaveState('idle');
     setEditName(concept.name);
     setEditDesc(concept.description);
     setEditTags(concept.tags.join(', '));
@@ -281,8 +314,11 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             </button>
           ) : (
             <>
-              <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-muted hover:text-foreground">Cancel</button>
-              <button onClick={saveEdits} className="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">Save</button>
+              <span className="text-xs text-muted self-center min-w-[3.5rem] text-right" aria-live="polite">
+                {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : ''}
+              </span>
+              <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-muted hover:text-foreground">Done</button>
+              <button onClick={saveEdits} className="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">Save now</button>
             </>
           )}
           <button onClick={() => { duplicateConcept(concept.id); toast('Concept duplicated', 'success'); }} className="px-3 py-1.5 text-sm bg-background border border-border rounded-lg hover:bg-surface-hover">
