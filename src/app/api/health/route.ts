@@ -130,6 +130,30 @@ export async function GET(request: NextRequest) {
     features.calendarMockups = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
   }
 
+  // manufacturing_products — SKU → custom rules for ShipStation import
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('manufacturing_products')
+      .select('id', { count: 'exact', head: true });
+    features.manufacturingProducts = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-manufacturing-products.sql' }
+      : { ok: true, detail: `${count ?? 0} rules` };
+  } catch (err) {
+    features.manufacturingProducts = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
+  // production_tasks — task-based production readiness
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('production_tasks')
+      .select('id', { count: 'exact', head: true });
+    features.productionTasks = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-production-tasks.sql' }
+      : { ok: true, detail: `${count ?? 0} tasks` };
+  } catch (err) {
+    features.productionTasks = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
   const ok = Object.values(checks).every((c) => c.ok);
 
   return NextResponse.json(

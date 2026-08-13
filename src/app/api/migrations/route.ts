@@ -8,6 +8,8 @@ import path from 'path';
 const MIGRATIONS: Record<string, string> = {
   'coil-sizes': 'supabase-migration-coil-sizes.sql',
   'calendar-mockups': 'supabase-migration-calendar-mockups.sql',
+  'manufacturing-products': 'supabase-migration-manufacturing-products.sql',
+  'production-tasks': 'supabase-migration-production-tasks.sql',
 };
 
 export async function GET() {

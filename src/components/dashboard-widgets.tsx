@@ -202,6 +202,16 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
               check={features?.calendarMockups}
               trailing={migrationActions('calendar-mockups', features?.calendarMockups?.ok)}
             />
+            <Row
+              label="Manufacturing rules table"
+              check={features?.manufacturingProducts}
+              trailing={migrationActions('manufacturing-products', features?.manufacturingProducts?.ok)}
+            />
+            <Row
+              label="Production tasks table"
+              check={features?.productionTasks}
+              trailing={migrationActions('production-tasks', features?.productionTasks?.ok)}
+            />
           </div>
 
           {/* Core services */}
