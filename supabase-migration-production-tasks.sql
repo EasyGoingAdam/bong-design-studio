@@ -12,7 +12,9 @@ create table if not exists production_tasks (
   completed_by text,
   sort_order   integer not null default 0,
   created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now()
+  updated_at   timestamptz not null default now(),
+  -- Prevents duplicate tasks when two first-loads race to seed the defaults.
+  unique (concept_id, label)
 );
 
 create index if not exists production_tasks_concept_idx on production_tasks (concept_id);

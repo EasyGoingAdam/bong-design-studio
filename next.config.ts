@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
   // is the documented escape hatch.
   outputFileTracingIncludes: {
     "/api/marketing-graphic": ["./src/assets/fonts/*.ttf"],
+    // Same escape hatch: /api/migrations reads these root .sql files at runtime
+    // via process.cwd(); without pinning them here the standalone build strips
+    // them and the dashboard's "Copy SQL" silently returns nothing.
+    "/api/migrations": ["./supabase-migration-*.sql"],
   },
   // Prevent aggressive browser caching of the HTML shell so users always
   // get the latest deployed JS bundle. Static chunks keep their own

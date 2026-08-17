@@ -40,14 +40,23 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }
     if (data && data.length > 0) return NextResponse.json(data.map(toFrontend));
 
-    // Seed the default checklist for this concept.
+    // Seed the default checklist. Idempotent: upsert on (concept_id, label) with
+    // ignoreDuplicates so two racing first-loads can't create duplicate tasks,
+    // then re-select to return the authoritative set regardless of who won.
     const rows = DEFAULT_TASKS.map((label, i) => ({ concept_id: id, label, sort_order: i }));
-    const { data: seeded, error: seedErr } = await supabaseAdmin.from('production_tasks').insert(rows).select();
+    const { error: seedErr } = await supabaseAdmin
+      .from('production_tasks')
+      .upsert(rows, { onConflict: 'concept_id,label', ignoreDuplicates: true });
     if (seedErr) {
       console.warn('production_tasks seed failed:', seedErr.message);
       return NextResponse.json([]);
     }
-    return NextResponse.json((seeded ?? []).map(toFrontend));
+    const { data: after } = await supabaseAdmin
+      .from('production_tasks')
+      .select('*')
+      .eq('concept_id', id)
+      .order('sort_order', { ascending: true });
+    return NextResponse.json((after ?? []).map(toFrontend));
   } catch {
     return NextResponse.json([]);
   }
@@ -71,8 +80,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .eq('id', taskId)
       .eq('concept_id', id)
       .select()
-      .single();
-    if (error || !data) return NextResponse.json({ error: error?.message ?? 'Update failed' }, { status: 500 });
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     return NextResponse.json(toFrontend(data));
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });

@@ -70,10 +70,9 @@ export async function PUT(request: NextRequest) {
       .update(update)
       .eq('id', body.id)
       .select()
-      .single();
-    if (error || !data) {
-      return NextResponse.json({ error: error?.message ?? 'Failed to update rule' }, { status: 500 });
-    }
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Rule not found' }, { status: 404 });
     return NextResponse.json(toFrontend(data));
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

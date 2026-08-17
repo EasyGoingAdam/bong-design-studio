@@ -136,32 +136,52 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
   // While editing, persist field changes ~800ms after the user stops typing so
   // work survives refresh without a manual Save. A ref skips the initial field
   // population (startEditing) so entering edit mode doesn't fire a save.
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const skipAutoSaveRef = useRef(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Holds the latest save so a pending debounce can be FLUSHED on exit/unmount
+  // instead of being silently dropped (which lost the last edit before Done).
+  const saveNowRef = useRef<() => Promise<boolean>>(async () => true);
 
   useEffect(() => {
     if (!editing || !concept) return;
+    // Keep the flushable save closure current with the latest field values.
+    saveNowRef.current = () => updateConcept(concept.id, {
+      name: editName,
+      description: editDesc,
+      tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+      collection: editCollection,
+      intendedAudience: editAudience,
+      manufacturingNotes: editMfgNotes,
+      marketingStory: editMarketingStory,
+      priority: editPriority as typeof concept.priority,
+      lifecycleType: editLifecycle as typeof concept.lifecycleType,
+    });
     if (skipAutoSaveRef.current) { skipAutoSaveRef.current = false; return; }
     setSaveState('saving');
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      updateConcept(concept.id, {
-        name: editName,
-        description: editDesc,
-        tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
-        collection: editCollection,
-        intendedAudience: editAudience,
-        manufacturingNotes: editMfgNotes,
-        marketingStory: editMarketingStory,
-        priority: editPriority as typeof concept.priority,
-        lifecycleType: editLifecycle as typeof concept.lifecycleType,
-      });
-      setSaveState('saved');
+      autoSaveTimer.current = null;
+      // Reflect the REAL persistence result, not an optimistic "Saved".
+      saveNowRef.current().then((ok) => setSaveState(ok ? 'saved' : 'error'));
     }, 800);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, editName, editDesc, editTags, editCollection, editAudience, editMfgNotes, editMarketingStory, editPriority, editLifecycle]);
+
+  // Flush a pending debounced save immediately (used by the Done button).
+  const flushAutoSave = () => {
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+      saveNowRef.current().then((ok) => setSaveState(ok ? 'saved' : 'error'));
+    }
+  };
+
+  // Flush on unmount too, so navigating away never drops a pending edit.
+  useEffect(() => () => {
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); saveNowRef.current(); }
+  }, []);
 
   if (!concept) {
     return (
@@ -315,10 +335,13 @@ export function ConceptDetail({ conceptId, onBack }: { conceptId: string; onBack
             </button>
           ) : (
             <>
-              <span className="text-xs text-muted self-center min-w-[3.5rem] text-right" aria-live="polite">
-                {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : ''}
+              <span
+                className={`text-xs self-center min-w-[3.5rem] text-right ${saveState === 'error' ? 'text-red-600' : 'text-muted'}`}
+                aria-live="polite"
+              >
+                {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Saved' : saveState === 'error' ? '⚠ Save failed' : ''}
               </span>
-              <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm text-muted hover:text-foreground">Done</button>
+              <button onClick={() => { flushAutoSave(); setEditing(false); }} className="px-3 py-1.5 text-sm text-muted hover:text-foreground">Done</button>
               <button onClick={saveEdits} className="px-3 py-1.5 text-sm bg-accent text-white rounded-lg">Save now</button>
             </>
           )}

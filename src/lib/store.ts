@@ -46,7 +46,7 @@ interface AppState {
 
   // Concept CRUD
   addConcept: (concept: Partial<Concept>) => Promise<Concept>;
-  updateConcept: (id: string, updates: Partial<Concept>) => Promise<void>;
+  updateConcept: (id: string, updates: Partial<Concept>) => Promise<boolean>;
   deleteConcept: (id: string) => Promise<void>;
   duplicateConcept: (id: string) => Promise<Concept>;
   moveConcept: (id: string, status: ConceptStatus) => void;
@@ -181,13 +181,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ loading: true });
     let booted = false;
     try {
-      // Fetch concepts, templates, sizes, rules, and settings from API in parallel
+      // Fetch concepts, templates, sizes, rules, and settings from API in
+      // parallel. The OPTIONAL datasets (coil-sizes, manufacturing-products)
+      // swallow their own rejections with .catch → null so a transient network
+      // blip on a non-critical endpoint can't fail the entire app boot.
       const [conceptsRes, templatesRes, settingsRes, coilSizesRes, mfgProductsRes] = await Promise.all([
         fetch('/api/concepts'),
         fetch('/api/templates'),
         fetch('/api/settings'),
-        fetch('/api/coil-sizes'),
-        fetch('/api/manufacturing-products'),
+        fetch('/api/coil-sizes').catch(() => null),
+        fetch('/api/manufacturing-products').catch(() => null),
       ]);
 
       if (conceptsRes.ok) {
@@ -211,7 +214,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       // Coil size presets — keep the built-in defaults if the table is empty
       // or unmigrated (the API returns [] in that case).
-      if (coilSizesRes.ok) {
+      if (coilSizesRes?.ok) {
         const sizesData = await safeJsonArray(coilSizesRes);
         if (sizesData.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -220,7 +223,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       }
 
       // Manufacturing SKU rules — empty until the operator adds some.
-      if (mfgProductsRes.ok) {
+      if (mfgProductsRes?.ok) {
         const rulesData = await safeJsonArray(mfgProductsRes);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         set({ manufacturingProducts: rulesData as any });
@@ -403,19 +406,21 @@ export const useAppStore = create<AppState>()((set, get) => ({
         // Roll the optimistic edit back to the pre-update row so the UI can't
         // keep showing a change the database rejected.
         if (current) set((state) => ({ concepts: state.concepts.map((c) => (c.id === id ? current : c)) }));
-      } else {
-        // Reconcile with the server's canonical row so the optimistic copy
-        // can't silently diverge from what was actually persisted.
-        const fresh = await res.json().catch(() => null);
-        if (fresh && fresh.id) {
-          set((state) => ({
-            concepts: state.concepts.map((c) => (c.id === id ? (fresh as Concept) : c)),
-          }));
-        }
+        return false;
       }
+      // Reconcile with the server's canonical row so the optimistic copy
+      // can't silently diverge from what was actually persisted.
+      const fresh = await res.json().catch(() => null);
+      if (fresh && fresh.id) {
+        set((state) => ({
+          concepts: state.concepts.map((c) => (c.id === id ? (fresh as Concept) : c)),
+        }));
+      }
+      return true;
     } catch (err) {
       console.error('Failed to update concept:', err);
       if (current) set((state) => ({ concepts: state.concepts.map((c) => (c.id === id ? current : c)) }));
+      return false;
     }
   },
 
