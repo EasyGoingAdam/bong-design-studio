@@ -154,6 +154,18 @@ export async function GET(request: NextRequest) {
     features.productionTasks = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
   }
 
+  // design_performance — bot API sales/rating log
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('design_performance')
+      .select('id', { count: 'exact', head: true });
+    features.designPerformance = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-design-performance.sql' }
+      : { ok: true, detail: `${count ?? 0} records` };
+  } catch (err) {
+    features.designPerformance = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
   const ok = Object.values(checks).every((c) => c.ok);
 
   return NextResponse.json(

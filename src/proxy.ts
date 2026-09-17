@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * The browser attaches the token via the global fetch wrapper (auth-fetch.ts).
  */
 
-const PUBLIC_PREFIXES = ['/api/health', '/api/preview', '/api/incoming', '/api/webhooks'];
+const PUBLIC_PREFIXES = ['/api/health', '/api/preview', '/api/incoming', '/api/webhooks', '/api/bot'];
 
 // Binary assets the browser loads DIRECTLY via <img src>, <a download>, or a
 // navigation — these can't carry a Bearer header, so the token wrapper can't

@@ -10,6 +10,7 @@ const MIGRATIONS: Record<string, string> = {
   'calendar-mockups': 'supabase-migration-calendar-mockups.sql',
   'manufacturing-products': 'supabase-migration-manufacturing-products.sql',
   'production-tasks': 'supabase-migration-production-tasks.sql',
+  'design-performance': 'supabase-migration-design-performance.sql',
 };
 
 export async function GET() {

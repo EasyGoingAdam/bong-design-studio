@@ -212,6 +212,11 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
               check={features?.productionTasks}
               trailing={migrationActions('production-tasks', features?.productionTasks?.ok)}
             />
+            <Row
+              label="Bot performance table"
+              check={features?.designPerformance}
+              trailing={migrationActions('design-performance', features?.designPerformance?.ok)}
+            />
           </div>
 
           {/* Core services */}
