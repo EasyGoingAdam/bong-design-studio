@@ -166,6 +166,18 @@ export async function GET(request: NextRequest) {
     features.designPerformance = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
   }
 
+  // bot_messages — team ↔ bot chat
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('bot_messages')
+      .select('id', { count: 'exact', head: true });
+    features.botMessages = error
+      ? { ok: false, detail: 'table missing — run supabase-migration-bot-messages.sql' }
+      : { ok: true, detail: `${count ?? 0} messages` };
+  } catch (err) {
+    features.botMessages = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
   const ok = Object.values(checks).every((c) => c.ok);
 
   return NextResponse.json(

@@ -61,6 +61,11 @@ export async function POST(request: NextRequest) {
         else if (action === 'highlight') update.highlighted = true;
         else if (action === 'unhighlight') update.highlighted = false;
 
+        // Priority (prioritize favorite designs).
+        if (['urgent', 'high', 'medium', 'low'].includes(String(d.priority))) {
+          update.priority = d.priority;
+        }
+
         if (Object.keys(update).length > 0) {
           update.updated_at = new Date().toISOString();
           const { error } = await supabaseAdmin.from('concepts').update(update).eq('id', conceptId);

@@ -24,15 +24,24 @@ export async function GET(request: NextRequest) {
     endpoints: {
       'GET /api/bot': 'This manifest + auth check.',
       'GET /api/bot/designs':
-        'Bulk export of designs (specs + latest performance). Query: status, collection, updatedSince (ISO), limit (<=500), offset. → { designs, count, limit, offset }',
+        'Bulk export of designs (specs + latest performance). Query: status, collection, updatedSince (ISO), limit (<=500), offset.',
       'POST /api/bot/designs':
-        'Bulk create/update designs. Body { designs: [{ externalId?, id?, name, description?, tags?, status?, coilOnly?, coilImageUrl?, baseImageUrl?, collection?, coilDimensions?, baseDimensions?, source? }] }. Matches on id or externalId. → { created, updated, errors }',
+        'Bulk create/update designs. { designs: [{ externalId?, id?, name, description?, tags?, status?, coilOnly?, coilImageUrl?, coilDimensions?, source? }] }. Matches on id or externalId.',
+      'POST /api/bot/designs/generate':
+        'Generate a real coil image for a design and save it. { conceptId? | externalId?, prompt?, size? }.',
+      'POST /api/bot/ideas':
+        'AI brainstorm laser-etch design ideas. { prompt?, count? (1..12), create? }. create=true also saves them as ideation concepts.',
       'POST /api/bot/performance':
-        'Bulk record sales/sell-through/rating. Body { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, periodStart?, periodEnd?, source?, metrics?, notes? }] }. → { inserted, errors }',
-      'GET /api/bot/performance':
-        'Read recent performance rows. Query: conceptId?, limit (<=1000). → { records }',
+        'Bulk record sales/sell-through/rating. { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, periodStart?, periodEnd?, metrics?, notes? }] }.',
+      'GET /api/bot/performance': 'Read recent performance rows. Query: conceptId?, limit.',
       'POST /api/bot/decisions':
-        'Bulk approve/rate/highlight/archive. Body { decisions: [{ conceptId? | externalId?, action?, status?, highlighted?, rating?, notes? }] }. action: approve|ready|manufactured|review|reject|archive|highlight|unhighlight|rate. → { applied, errors }',
+        'Bulk approve/rate/highlight/prioritize/archive. { decisions: [{ conceptId? | externalId?, action?, status?, highlighted?, priority?, rating?, notes? }] }. action: approve|ready|manufactured|review|reject|archive|highlight|unhighlight|rate. priority: urgent|high|medium|low.',
+      'GET /api/bot/production': 'Read the production queue + machines. Query: status?, limit.',
+      'POST /api/bot/production':
+        'Create/update production jobs. { jobs: [{ id?, conceptId? | externalId?, title?, status?, priority?, machineId?, scheduledDate?, quantity?, notes? }] }.',
+      'GET /api/bot/messages':
+        'Pull messages from the manufacturing team. Default = unread human messages (marks them read); ?all=true for the whole thread.',
+      'POST /api/bot/messages': 'Reply into the team chat thread. { text, metadata? }.',
     },
     identifiers: {
       conceptId: 'This app\'s design id (uuid).',

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from './supabase';
+import { supabaseAdmin, uploadImage } from './supabase';
+import { validateParams, getOpenAIRequestBody, getEndpoint, getAuthHeaders } from './ai-providers';
 
 /**
  * Shared helpers for the bot-facing bulk API (`/api/bot/*`).
@@ -55,4 +56,41 @@ export async function resolveConceptId(ref: { conceptId?: string; externalId?: s
     if (data?.id) return data.id;
   }
   return null;
+}
+
+/**
+ * Generate a coil design image server-side (using the stored key) and upload it
+ * to storage. Returns a public URL, or a data URI if storage upload fails.
+ */
+export async function generateCoilImageServer(
+  prompt: string,
+  apiKey: string,
+  filename: string,
+  size = '1024x1024',
+): Promise<string> {
+  const params = validateParams({ prompt, provider: 'openai', apiKey, size, quality: 'medium', folder: 'bot', filename });
+  const res = await fetch(getEndpoint('openai'), {
+    method: 'POST',
+    headers: getAuthHeaders(params),
+    body: JSON.stringify(getOpenAIRequestBody(params)),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error?.message || `OpenAI image error ${res.status}`);
+  }
+  const data = await res.json();
+  const img = data.data?.[0];
+  if (!img?.b64_json && !img?.url) throw new Error('No image data in OpenAI response');
+  let base64: string;
+  if (img.b64_json) {
+    base64 = `data:image/png;base64,${img.b64_json}`;
+  } else {
+    const r = await fetch(img.url);
+    base64 = `data:image/png;base64,${Buffer.from(await r.arrayBuffer()).toString('base64')}`;
+  }
+  try {
+    return await uploadImage(base64, 'bot', filename);
+  } catch {
+    return base64;
+  }
 }

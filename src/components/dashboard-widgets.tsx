@@ -217,6 +217,11 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
               check={features?.designPerformance}
               trailing={migrationActions('design-performance', features?.designPerformance?.ok)}
             />
+            <Row
+              label="Bot chat table"
+              check={features?.botMessages}
+              trailing={migrationActions('bot-messages', features?.botMessages?.ok)}
+            />
           </div>
 
           {/* Core services */}

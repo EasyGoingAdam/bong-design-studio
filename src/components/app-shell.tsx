@@ -20,6 +20,7 @@ import { MarketingStudio } from './marketing-studio';
 import { MockupStudio } from './mockup-studio';
 import { ManufacturingBoard } from './manufacturing-board';
 import { HolidayCalendar } from './holiday-calendar';
+import { BotChat } from './bot-chat';
 import { CustomerDesigns } from './customer-designs';
 import { UpcomingHolidayBanner } from './upcoming-holiday-banner';
 import { InsightsDashboard } from './insights-dashboard';
@@ -30,7 +31,7 @@ import { ToastProvider } from './toast';
 import { ErrorBoundary } from './error-boundary';
 import { installAuthFetch, setAuthToken } from '@/lib/auth-fetch';
 
-type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'detail';
+type Tab = 'dashboard' | 'concepts' | 'workflow' | 'manufacturing' | 'specs' | 'ai' | 'brainstorm' | 'archive' | 'presets' | 'marketing' | 'mockup' | 'benchmark' | 'calendar' | 'customer' | 'insights' | 'compare' | 'lineage' | 'drops' | 'botchat' | 'detail';
 
 const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'workflow', label: 'Workflow', icon: '⊞' },
@@ -38,6 +39,7 @@ const PRIMARY_TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'customer', label: 'Customer Designs', icon: '◐' },
   { id: 'drops', label: 'Drops', icon: '◇' },
   { id: 'calendar', label: 'Calendar', icon: '◷' },
+  { id: 'botchat', label: 'Bot Chat', icon: '🤖' },
   { id: 'brainstorm', label: 'Brainstorm', icon: '💡' },
   { id: 'ai', label: 'AI Generate', icon: '✦' },
   { id: 'presets', label: 'Presets', icon: '★' },
@@ -413,6 +415,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {initialized && activeTab === 'mockup' && <MockupStudio />}
           {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
           {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
+          {initialized && activeTab === 'botchat' && <BotChat />}
           {initialized && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
           {initialized && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
           {initialized && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
