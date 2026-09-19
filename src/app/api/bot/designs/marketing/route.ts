@@ -16,7 +16,7 @@ Taglines are short (<= 8 words), evocative, no hashtags.`;
  * tagline + story onto the design.
  */
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   const apiKey = await getServerOpenAIKey();
   if (!apiKey) return NextResponse.json({ error: 'No OpenAI key configured in settings.' }, { status: 503 });

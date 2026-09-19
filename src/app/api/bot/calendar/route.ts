@@ -9,7 +9,7 @@ export const maxDuration = 30;
  * drops for, with each event's design-idea hints. Query: days (default 120, <=365).
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   const days = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('days') || '120', 10) || 120, 1), 365);
   const from = new Date();

@@ -13,7 +13,7 @@ export const maxDuration = 60;
  * actually sell — one pull instead of crunching every performance row itself.
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const topN = Math.min(Math.max(parseInt(request.nextUrl.searchParams.get('topN') || '10', 10) || 10, 1), 50);

@@ -24,6 +24,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [key, setKey] = useState(openAIKey);
   const [gKey, setGKey] = useState(geminiKey);
   const [name, setName] = useState(currentUser.name);
+  const [botKey, setBotKey] = useState('062119062119');
   const [activeSection, setActiveSection] = useState<'general' | 'team'>('general');
 
   // Team management
@@ -57,10 +58,28 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   }, [isAdmin, activeSection]);
 
-  const handleSave = () => {
+  // Load the bot API key from server settings (it's stored in app_settings, not
+  // the app store). Falls back to the built-in default so the field is never blank.
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((d) => { if (d && typeof d.bot_api_key === 'string' && d.bot_api_key) setBotKey(d.bot_api_key); })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
     setOpenAIKey(key);
     setGeminiKey(gKey);
     setCurrentUserName(name);
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'bot_api_key', value: botKey.trim() }),
+      });
+    } catch {
+      // Non-fatal — the built-in default still authenticates the bot.
+    }
     toast('Settings saved', 'success');
     onClose();
   };
@@ -239,6 +258,18 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
               />
               <p className="text-xs text-muted mt-1">Optional. Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-accent hover:underline">aistudio.google.com</a></p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1.5">Bot API Key</label>
+              <input
+                type="text"
+                value={botKey}
+                onChange={(e) => setBotKey(e.target.value)}
+                placeholder="062119062119"
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent"
+              />
+              <p className="text-xs text-muted mt-1">The password the Grok bot sends on every API call (<code>Authorization: Bearer &lt;key&gt;</code>). Give this same value to the bot.</p>
             </div>
 
             <div className="flex justify-between pt-2">

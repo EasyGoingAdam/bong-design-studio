@@ -9,18 +9,31 @@ import { validateParams, getOpenAIRequestBody, getEndpoint, getAuthHeaders } fro
  *   Authorization: Bearer <password>   or   x-bot-key: <password>
  * The routes are public in the proxy (no user JWT), so this password is the gate.
  *
- * The default password is baked in so the bot works with no env setup. Because
- * it lives in the repo it only keeps casual traffic out — for a real secret,
- * set BOT_API_KEY in the environment and that value is accepted too.
+ * The key is managed in the app's Settings (app_settings.bot_api_key). A default
+ * is baked in so the bot works with no setup, and BOT_API_KEY (env) is accepted
+ * too. Any of the three matching lets the caller in.
  */
 
-/** The always-accepted bot password (no env var required). */
+/** Default bot password, used when none is set in Settings or the env. */
 export const BOT_PASSWORD = '062119062119';
 
+/** The bot key configured in Settings (app_settings.bot_api_key), or null. */
+export async function getServerBotKey(): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'bot_api_key')
+    .maybeSingle();
+  const key = data?.value?.trim();
+  return key || null;
+}
+
 /** Returns a 401 NextResponse when unauthorized, or null when the caller is allowed. */
-export function requireBotKey(request: NextRequest): NextResponse | null {
-  // Accept the built-in password, plus BOT_API_KEY if one is configured.
-  const accepted = [BOT_PASSWORD, process.env.BOT_API_KEY].filter(Boolean) as string[];
+export async function requireBotKey(request: NextRequest): Promise<NextResponse | null> {
+  // Accept the key from Settings, the BOT_API_KEY env var, and the built-in
+  // default — any match is allowed.
+  const stored = await getServerBotKey().catch(() => null);
+  const accepted = [stored, process.env.BOT_API_KEY, BOT_PASSWORD].filter(Boolean) as string[];
   const auth = request.headers.get('authorization') || '';
   const bearer = /^bearer\s+/i.test(auth) ? auth.replace(/^bearer\s+/i, '').trim() : '';
   const provided = bearer || request.headers.get('x-bot-key') || '';
@@ -39,12 +52,18 @@ export function requireBotKey(request: NextRequest): NextResponse | null {
 export function notifyBotWebhook(payload: Record<string, unknown>): void {
   const url = process.env.BOT_WEBHOOK_URL;
   if (!url) return;
-  const key = process.env.BOT_API_KEY || BOT_PASSWORD;
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(payload),
-  }).catch((err) => console.warn('bot webhook failed:', err instanceof Error ? err.message : err));
+  // Sign with the same key the bot authenticates with (Settings → env → default).
+  getServerBotKey()
+    .catch(() => null)
+    .then((stored) => {
+      const key = stored || process.env.BOT_API_KEY || BOT_PASSWORD;
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload),
+      });
+    })
+    .catch((err) => console.warn('bot webhook failed:', err instanceof Error ? err.message : err));
 }
 
 /** Concept statuses the bot may set. */

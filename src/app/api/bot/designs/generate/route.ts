@@ -15,7 +15,7 @@ const SIZES = new Set(['1024x1024', '1536x1024', '1024x1536']);
  * If no prompt is given, one is built from the design's name / tags / notes.
  */
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
 
   const apiKey = await getServerOpenAIKey();

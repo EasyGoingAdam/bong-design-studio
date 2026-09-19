@@ -134,9 +134,10 @@ If `BOT_WEBHOOK_URL` is set, the studio POSTs these to you (with `Authorization:
 ---
 
 ## One-time setup (studio side)
-1. **Auth works out of the box** — the API accepts a built-in password (ask the
-   operator). To use a stronger secret instead, set env var **`BOT_API_KEY`** to a
-   long random value (Railway → Variables); it's accepted alongside the password.
+1. **Auth key lives in Settings** — open the app → **Settings → Bot API Key**,
+   set the value, and give the bot that same value. A built-in default works out
+   of the box if you never touch it, and env var **`BOT_API_KEY`** (Railway →
+   Variables) is also accepted — any of the three matching lets the bot in.
 2. (Optional) Set **`BOT_WEBHOOK_URL`** to the bot's endpoint to get instant chat
    notifications instead of polling.
 3. Run these migrations in Supabase (dashboard → **System & Setup** card has a

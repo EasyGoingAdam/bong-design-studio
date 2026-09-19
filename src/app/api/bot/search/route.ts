@@ -9,7 +9,7 @@ export const maxDuration = 30;
  * Returns a lean list so the bot can find a design to act on.
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const sp = request.nextUrl.searchParams;

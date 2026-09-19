@@ -25,7 +25,7 @@ const ACTION_STATUS: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const body = await request.json();

@@ -11,6 +11,7 @@ const CLIENT_READABLE_SETTINGS = new Set([
   'gemini_key',
   'user_name',
   'production_settings',
+  'bot_api_key',
 ]);
 
 // GET client-readable settings only

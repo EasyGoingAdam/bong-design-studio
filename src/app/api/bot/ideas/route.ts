@@ -18,7 +18,7 @@ Be creative and diverse; every idea must be distinct.`;
  * concept in the 'ideation' column and { created: [ids] } is returned.
  */
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
 
   const apiKey = await getServerOpenAIKey();

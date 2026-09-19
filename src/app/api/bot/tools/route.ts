@@ -29,7 +29,7 @@ const idRef: Props = {
  * an `endpoint` {method, path} the operator's runner uses to make the HTTP call.
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
 
   const tools = [

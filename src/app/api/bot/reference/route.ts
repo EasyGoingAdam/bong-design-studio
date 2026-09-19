@@ -39,7 +39,7 @@ function deriveVelocity(units: number, metrics: Record<string, unknown> | null):
  * Query: topN (per-bucket cap, default 25, <=200), velocity (filter to one bucket).
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const sp = request.nextUrl.searchParams;

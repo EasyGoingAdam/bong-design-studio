@@ -56,7 +56,7 @@ function toExport(c: any, coil: any, base: any, perf: any) {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const sp = request.nextUrl.searchParams;
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const body = await request.json();

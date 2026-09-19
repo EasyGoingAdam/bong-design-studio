@@ -9,7 +9,7 @@ export const maxDuration = 30;
  * status, highlighted/favorites, production queue by status, and performance totals.
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
   try {
     const [conceptsRes, jobsRes, perfRes] = await Promise.all([

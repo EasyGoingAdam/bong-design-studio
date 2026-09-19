@@ -31,7 +31,7 @@ Every idea must be distinct.`;
  * and the studio gets a fresh, on-trend batch of designs every day.
  */
 export async function POST(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
 
   const apiKey = await getServerOpenAIKey();

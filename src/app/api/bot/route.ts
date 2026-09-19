@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * bot can discover what it can read and write.
  */
 export async function GET(request: NextRequest) {
-  const denied = requireBotKey(request);
+  const denied = await requireBotKey(request);
   if (denied) return denied;
 
   const origin = request.nextUrl.origin;
