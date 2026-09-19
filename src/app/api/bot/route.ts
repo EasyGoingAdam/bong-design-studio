@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     version: 1,
     description:
       'Bulk read/write API so a bot can learn what laser-etched designs sell, create designs, record performance, and approve favorites.',
-    auth: 'Authorization: Bearer <BOT_API_KEY>  (or  x-bot-key: <BOT_API_KEY>)',
+    auth: 'Authorization: Bearer <password>  (or  x-bot-key: <password>). Ask the operator for the password.',
     statuses: BOT_STATUSES,
     endpoints: {
       'GET /api/bot': 'This manifest + auth check.',
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       'POST /api/bot/messages': 'Reply into the team chat thread. { text, metadata? }.',
     },
     webhook:
-      'Set BOT_WEBHOOK_URL to receive instant POSTs (with Authorization: Bearer <BOT_API_KEY>). Events: { type: "chat.message", message } when the team sends a message; { type: "design.approved", conceptId, status } on approval; { type: "production.completed", jobId } when a job finishes. Otherwise poll GET /api/bot/messages.',
+      'Set BOT_WEBHOOK_URL to receive instant POSTs (with Authorization: Bearer <password>). Events: { type: "chat.message", message } when the team sends a message; { type: "design.approved", conceptId, status } on approval; { type: "production.completed", jobId } when a job finishes. Otherwise poll GET /api/bot/messages.',
     identifiers: {
       conceptId: 'This app\'s design id (uuid).',
       externalId:

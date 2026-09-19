@@ -14,13 +14,13 @@ website, but this API is the primary, reliable channel — prefer it.
 ## Connect
 
 - **Base URL:** `https://<the-app>/api/bot`  (chat for the app UI is `/api/bot-chat`)
-- **Auth (every request):**
+- **Auth (every request):** send the password the operator gives you.
   ```
-  Authorization: Bearer <BOT_API_KEY>
+  Authorization: Bearer <password>
   ```
-  (or the header `x-bot-key: <BOT_API_KEY>`)
+  (or the header `x-bot-key: <password>`)
 - **First call:** `GET /api/bot` → returns a live manifest of every endpoint and
-  confirms your key works. Poll it any time to rediscover the contract.
+  confirms your password works. Poll it any time to rediscover the contract.
 
 ### Identifiers
 - `conceptId` — the studio's design id (uuid).
@@ -101,7 +101,7 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
   → posts your reply into that thread.
 - **Instant notify (optional):** if `BOT_WEBHOOK_URL` is set on the studio side,
   the studio POSTs to it the moment the tech sends a message —
-  `{ "type": "chat.message", "message": {...} }` with `Authorization: Bearer <BOT_API_KEY>`
+  `{ "type": "chat.message", "message": {...} }` with `Authorization: Bearer <password>`
   so you can verify it. Otherwise **poll `GET /api/bot/messages` regularly** so you
   catch the tech's issues and ideas, and let them steer your designs.
 
@@ -116,7 +116,7 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
 - `GET /api/bot/comments?conceptId=` and `POST /api/bot/comments` `{ conceptId? | externalId?, text }` — read/leave notes on a design (visible to the team).
 
 ## Events (webhook)
-If `BOT_WEBHOOK_URL` is set, the studio POSTs these to you (with `Authorization: Bearer <BOT_API_KEY>`):
+If `BOT_WEBHOOK_URL` is set, the studio POSTs these to you (with `Authorization: Bearer <password>`):
 - `{ type: "chat.message", message }` — the tech sent a message.
 - `{ type: "design.approved", conceptId, status }` — a design was approved / moved to ready.
 - `{ type: "production.completed", jobId }` — a production job finished.
@@ -134,7 +134,9 @@ If `BOT_WEBHOOK_URL` is set, the studio POSTs these to you (with `Authorization:
 ---
 
 ## One-time setup (studio side)
-1. Set env var **`BOT_API_KEY`** to a long random secret (Railway → Variables).
+1. **Auth works out of the box** — the API accepts a built-in password (ask the
+   operator). To use a stronger secret instead, set env var **`BOT_API_KEY`** to a
+   long random value (Railway → Variables); it's accepted alongside the password.
 2. (Optional) Set **`BOT_WEBHOOK_URL`** to the bot's endpoint to get instant chat
    notifications instead of polling.
 3. Run these migrations in Supabase (dashboard → **System & Setup** card has a

@@ -5,24 +5,26 @@ import { validateParams, getOpenAIRequestBody, getEndpoint, getAuthHeaders } fro
 /**
  * Shared helpers for the bot-facing bulk API (`/api/bot/*`).
  *
- * Auth: a single shared secret in the BOT_API_KEY env var, passed as either
- *   Authorization: Bearer <key>   or   x-bot-key: <key>
- * The routes are public in the proxy (no user JWT), so this key is the gate.
+ * Auth: a shared password passed as either
+ *   Authorization: Bearer <password>   or   x-bot-key: <password>
+ * The routes are public in the proxy (no user JWT), so this password is the gate.
+ *
+ * The default password is baked in so the bot works with no env setup. Because
+ * it lives in the repo it only keeps casual traffic out — for a real secret,
+ * set BOT_API_KEY in the environment and that value is accepted too.
  */
 
-/** Returns a 401/503 NextResponse when unauthorized, or null when the caller is allowed. */
+/** The always-accepted bot password (no env var required). */
+export const BOT_PASSWORD = '062119062119';
+
+/** Returns a 401 NextResponse when unauthorized, or null when the caller is allowed. */
 export function requireBotKey(request: NextRequest): NextResponse | null {
-  const configured = process.env.BOT_API_KEY;
-  if (!configured) {
-    return NextResponse.json(
-      { error: 'Bot API not configured. Set BOT_API_KEY in the environment.' },
-      { status: 503 },
-    );
-  }
+  // Accept the built-in password, plus BOT_API_KEY if one is configured.
+  const accepted = [BOT_PASSWORD, process.env.BOT_API_KEY].filter(Boolean) as string[];
   const auth = request.headers.get('authorization') || '';
   const bearer = /^bearer\s+/i.test(auth) ? auth.replace(/^bearer\s+/i, '').trim() : '';
   const provided = bearer || request.headers.get('x-bot-key') || '';
-  if (!provided || provided !== configured) {
+  if (!provided || !accepted.includes(provided)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return null;
@@ -37,10 +39,10 @@ export function requireBotKey(request: NextRequest): NextResponse | null {
 export function notifyBotWebhook(payload: Record<string, unknown>): void {
   const url = process.env.BOT_WEBHOOK_URL;
   if (!url) return;
-  const key = process.env.BOT_API_KEY || '';
+  const key = process.env.BOT_API_KEY || BOT_PASSWORD;
   fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify(payload),
   }).catch((err) => console.warn('bot webhook failed:', err instanceof Error ? err.message : err));
 }

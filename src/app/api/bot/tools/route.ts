@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     baseUrl: request.nextUrl.origin,
-    auth: 'Send Authorization: Bearer <BOT_API_KEY> with every call. GET params go in the query string; POST params in the JSON body.',
+    auth: 'Send Authorization: Bearer <password> with every call (ask the operator for the password). GET params go in the query string; POST params in the JSON body.',
     tools,
   });
 }
