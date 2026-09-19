@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const count = Math.min(Math.max(Number(body.count) || 4, 1), 12);
     const generateArt = !!body.generateArt;
+    const artPart = ['coil', 'base', 'both'].includes(String(body.part)) ? String(body.part) : 'coil';
     const size = SIZES.has(body.size) ? body.size : '1024x1024';
     const eventWindowDays = Math.min(Math.max(Number(body.eventWindowDays) || 45, 1), 365);
 
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
       for (const d of dupes ?? []) existing.add(String(d.name).toLowerCase());
     }
 
-    const created: { conceptId: string; name: string; coilImageUrl?: string; art?: 'stored' | 'inline' | 'failed' }[] = [];
+    const created: { conceptId: string; name: string; coilImageUrl?: string; baseImageUrl?: string; art?: 'stored' | 'inline' | 'failed' }[] = [];
     for (const idea of ideas) {
       const name = String(idea.name || 'Untitled idea').trim();
       if (existing.has(name.toLowerCase())) continue;
@@ -113,17 +114,28 @@ export async function POST(request: NextRequest) {
 
       if (generateArt) {
         try {
-          const prompt =
-            `${ENGRAVING_RULES.forGeneration} Flat coil-sleeve laser-etch design for "${name}". ` +
-            `${idea.description ?? ''} ${tags.length ? `Style: ${tags.join(', ')}.` : ''} ` +
-            `Bold, clean, high-contrast black-on-white line art. No text or lettering.`;
-          const coilImageUrl = await generateCoilImageServer(prompt, apiKey, `${id.slice(0, 8)}-coil`, size);
-          await supabaseAdmin
-            .from('concepts')
-            .update({ coil_image_url: coilImageUrl, coil_only: true, updated_at: new Date().toISOString() })
-            .eq('id', id);
-          rec.coilImageUrl = coilImageUrl;
-          rec.art = coilImageUrl.startsWith('data:') ? 'inline' : 'stored';
+          const styleLine = `${idea.description ?? ''} ${tags.length ? `Style: ${tags.join(', ')}.` : ''}`.trim();
+          const artUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+          if (artPart === 'coil' || artPart === 'both') {
+            const coilPrompt =
+              `${ENGRAVING_RULES.forGeneration} Flat coil-sleeve laser-etch design for "${name}". ${styleLine} ` +
+              `Bold, clean, high-contrast black-on-white line art. No text or lettering.`;
+            const coilImageUrl = await generateCoilImageServer(coilPrompt, apiKey, `${id.slice(0, 8)}-coil`, size);
+            artUpdate.coil_image_url = coilImageUrl;
+            rec.coilImageUrl = coilImageUrl;
+          }
+          if (artPart === 'base' || artPart === 'both') {
+            const basePrompt =
+              `${ENGRAVING_RULES.forGeneration} Flat circular base-piece laser-etch design for "${name}". ${styleLine} ` +
+              `Centered composition that fills the circular area. Bold, clean, high-contrast black-on-white line art. No text or lettering.`;
+            const baseImageUrl = await generateCoilImageServer(basePrompt, apiKey, `${id.slice(0, 8)}-base`, size);
+            artUpdate.base_image_url = baseImageUrl;
+            rec.baseImageUrl = baseImageUrl;
+          }
+          artUpdate.coil_only = !(artPart === 'base' || artPart === 'both');
+          await supabaseAdmin.from('concepts').update(artUpdate).eq('id', id);
+          const anyInline = [rec.coilImageUrl, rec.baseImageUrl].some((u) => u?.startsWith('data:'));
+          rec.art = anyInline ? 'inline' : 'stored';
         } catch {
           rec.art = 'failed';
         }

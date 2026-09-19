@@ -30,15 +30,23 @@ export async function GET(request: NextRequest) {
       'GET /api/bot/designs':
         'Bulk export of designs (specs + latest performance). Query: status, collection, updatedSince (ISO), limit (<=500), offset.',
       'POST /api/bot/designs':
-        'Bulk create/update designs. { designs: [{ externalId?, id?, name, description?, tags?, status?, coilOnly?, coilImageUrl?, coilDimensions?, source? }] }. Matches on id or externalId.',
+        'Bulk create/update designs (coil AND base). { designs: [{ externalId?, id?, name, description?, tags?, status?, coilOnly?, coilImageUrl?, baseImageUrl?, collection?, coilDimensions?, baseDimensions?, source? }] }. Matches on id or externalId.',
+      'GET /api/bot/design':
+        'Full deep view of ONE design: fields, coil + base specs, all comments, complete performance history. Query: conceptId? | externalId?.',
       'POST /api/bot/designs/generate':
-        'Generate a real coil image for a design and save it. { conceptId? | externalId?, prompt?, size? }.',
+        'Generate real etch artwork (coil AND/OR base) and save it. { conceptId? | externalId?, part? (coil|base|both, default coil), prompt?, coilPrompt?, basePrompt?, baseShape? (circle|oval|square|rectangle), size? }.',
+      'POST /api/bot/designs/variations':
+        'Generate several alternative takes on a design to choose from. { conceptId? | externalId?, part? (coil|base), count? (1..6), prompt?, applyIndex? (save one onto the design), size? }.',
       'POST /api/bot/designs/marketing':
         'Generate taglines + product story for a design. { conceptId? | externalId?, apply? }.',
       'POST /api/bot/ideas':
         'AI brainstorm laser-etch design ideas. { prompt?, count? (1..12), create? }. create=true also saves them as ideation concepts.',
       'POST /api/bot/autopilot':
-        'Daily design engine: studies best-selling tags + upcoming events, brainstorms N on-trend designs, saves them, and (optionally) generates artwork. { count? (1..12), generateArt?, size?, theme?, eventWindowDays? }. Point a daily scheduler here to create designs every day.',
+        'Daily design engine: studies best-selling tags + upcoming events, brainstorms N on-trend designs, saves them, and (optionally) generates artwork for coil/base/both. { count? (1..12), generateArt?, part? (coil|base|both), size?, theme?, eventWindowDays? }. Point a daily scheduler here to create designs every day.',
+      'POST /api/bot/organize':
+        'Bulk-organize the catalog: move designs into collections and add/remove/replace tags. { items: [{ conceptId? | externalId?, collection?, addTags?, removeTags?, setTags?, coilOnly? }] }.',
+      'GET /api/bot/tags': 'The catalog\'s tag vocabulary with usage counts. Query: limit.',
+      'GET /api/bot/collections': 'Every collection with design counts + status breakdown.',
       'POST /api/bot/performance':
         'Bulk record sales/sell-through/rating + a sell verdict. { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, velocity? (fast|steady|slow|none), sold? (bool), daysToFirstSale?, periodStart?, periodEnd?, metrics?, notes? }] }. velocity/sold/daysToFirstSale are stored as future reference.',
       'GET /api/bot/performance': 'Read recent performance rows. Query: conceptId?, limit.',

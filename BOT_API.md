@@ -65,10 +65,17 @@ events**, brainstorms that many on-trend designs, saves them, and (with
 `generateArt: true`) etches artwork for each. **Call this once a day** — or point a
 daily scheduler at it — and the studio gets a fresh, on-trend batch every day.
 
-### 3. Generate the actual coil artwork
-`POST /api/bot/designs/generate`  `{ "externalId": "grok-1042", "prompt": "optional art direction", "size": "1024x1024" }`
-→ `{ conceptId, coilImageUrl, stored }`. Produces real black-on-white etch art and
-saves it onto the design.
+### 3. Generate the actual artwork (coil AND base)
+`POST /api/bot/designs/generate`  `{ "externalId": "grok-1042", "part": "both", "prompt": "optional art direction", "baseShape": "circle", "size": "1024x1024" }`
+→ `{ conceptId, part, coilImageUrl?, baseImageUrl? }`. Produces real black-on-white
+etch art and saves it onto the design. `part` is `coil` (default), `base`, or
+`both`; pass `coilPrompt`/`basePrompt` to direct each part separately, and
+`baseShape` (`circle`/`oval`/`square`/`rectangle`) for the base piece.
+
+**Alternatives to choose from:** `POST /api/bot/designs/variations`
+`{ "externalId": "grok-1042", "part": "coil", "count": 3, "applyIndex": 0 }`
+→ `{ variations: [{ index, imageUrl }], applied? }`. Generates several takes; set
+`applyIndex` to save one onto the design.
 
 ### 4. Create / update designs directly
 `POST /api/bot/designs`  `{ "designs": [{ "externalId": "grok-1042", "name": "Fractal Mushroom", "tags": ["fungi"], "coilDimensions": "4 x 7 in", "status": "in_review" }] }`
@@ -111,6 +118,10 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
 - `GET /api/bot/tools` — all endpoints as an OpenAI/Grok **function-calling tools** array. Register these as tools so the model calls them structurally; each carries an `endpoint {method,path}` your runner uses to make the HTTP request.
 - `GET /api/bot/stats` — studio KPIs (design + production counts, performance totals).
 - `GET /api/bot/search?q=&limit=` — find designs by name/description/tag.
+- `GET /api/bot/design?conceptId=|externalId=` — **full deep view of ONE design**: fields, coil + base specs, every comment, and the complete performance history.
+- `GET /api/bot/tags?limit=` — the catalog's **tag vocabulary** with usage counts (check before inventing new tags).
+- `GET /api/bot/collections` — every **collection** with design counts + status breakdown.
+- `POST /api/bot/organize` — `{ items: [{ conceptId?|externalId?, collection?, addTags?, removeTags?, setTags?, coilOnly? }] }` — bulk move designs into collections and add/remove/replace tags.
 - `GET /api/bot/calendar?days=` — upcoming holidays/events (with design-idea hints) to plan drops.
 - `POST /api/bot/designs/marketing` — `{ conceptId? | externalId?, apply? }` → taglines + product story (apply=true saves them).
 - `GET /api/bot/comments?conceptId=` and `POST /api/bot/comments` `{ conceptId? | externalId?, text }` — read/leave notes on a design (visible to the team).
