@@ -37,11 +37,15 @@ export async function GET(request: NextRequest) {
         'Generate taglines + product story for a design. { conceptId? | externalId?, apply? }.',
       'POST /api/bot/ideas':
         'AI brainstorm laser-etch design ideas. { prompt?, count? (1..12), create? }. create=true also saves them as ideation concepts.',
+      'POST /api/bot/autopilot':
+        'Daily design engine: studies best-selling tags + upcoming events, brainstorms N on-trend designs, saves them, and (optionally) generates artwork. { count? (1..12), generateArt?, size?, theme?, eventWindowDays? }. Point a daily scheduler here to create designs every day.',
       'POST /api/bot/performance':
-        'Bulk record sales/sell-through/rating. { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, periodStart?, periodEnd?, metrics?, notes? }] }.',
+        'Bulk record sales/sell-through/rating + a sell verdict. { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, velocity? (fast|steady|slow|none), sold? (bool), daysToFirstSale?, periodStart?, periodEnd?, metrics?, notes? }] }. velocity/sold/daysToFirstSale are stored as future reference.',
       'GET /api/bot/performance': 'Read recent performance rows. Query: conceptId?, limit.',
       'GET /api/bot/insights':
         'Aggregated "what\'s working": top sellers, top-rated, best sell-through, and which tags/collections perform. Query: topN (<=50).',
+      'GET /api/bot/reference':
+        'Design reference library keyed by how each design sold: velocity buckets (fast/steady/slow/none) + which tags move quickly, so the bot learns what sells and leans future ideas that way. Query: topN (<=200), velocity (filter to one bucket).',
       'POST /api/bot/decisions':
         'Bulk approve/rate/highlight/prioritize/archive. { decisions: [{ conceptId? | externalId?, action?, status?, highlighted?, priority?, rating?, notes? }] }. action: approve|ready|manufactured|review|reject|archive|highlight|unhighlight|rate. priority: urgent|high|medium|low.',
       'GET /api/bot/production': 'Read the production queue + machines. Query: status?, limit.',

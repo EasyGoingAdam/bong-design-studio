@@ -46,10 +46,24 @@ newest sales/rating snapshot for that design.
 top-rated, best sell-through, and which tags/collections perform. Pull this first
 to be the expert fast, instead of crunching every performance row yourself.
 
+`GET /api/bot/reference?topN=25&velocity=` → your **design reference library**,
+keyed by how each design sold. Every design is bucketed by velocity —
+`fast` / `steady` / `slow` / `none` — with a `byTag` breakdown of which kinds of
+designs move quickly. Use it to remember what sold fast vs. slow and to lean new
+ideas toward the tags that perform. Pass `velocity=fast` to get just one bucket.
+
 ### 2. Invent designs (uses the studio's AI)
 `POST /api/bot/ideas`  `{ "prompt": "fall / mushrooms", "count": 6, "create": true }`
 → `{ ideas: [{ name, description, tags, designIdeas, coilNotes }], created: [ids] }`.
 `create: true` saves them as `ideation` concepts you can then generate art for.
+
+### 2b. Create designs daily on autopilot
+`POST /api/bot/autopilot`  `{ "count": 4, "generateArt": true }`
+→ `{ createdCount, created: [{ conceptId, name, coilImageUrl }], signals: { winningTags, upcomingEvents } }`.
+One call that studies **what's selling** (top tags + fast movers) and **upcoming
+events**, brainstorms that many on-trend designs, saves them, and (with
+`generateArt: true`) etches artwork for each. **Call this once a day** — or point a
+daily scheduler at it — and the studio gets a fresh, on-trend batch every day.
 
 ### 3. Generate the actual coil artwork
 `POST /api/bot/designs/generate`  `{ "externalId": "grok-1042", "prompt": "optional art direction", "size": "1024x1024" }`
@@ -61,8 +75,12 @@ saves it onto the design.
 → `{ created, updated, errors }`. Matches on `id` or `externalId`. Max 200.
 
 ### 5. Record how designs perform
-`POST /api/bot/performance`  `{ "records": [{ "externalId": "grok-1042", "unitsSold": 37, "revenue": 1480, "sellThroughRate": 0.82, "rating": 9.1, "periodStart": "2026-09-01", "periodEnd": "2026-09-15", "metrics": { "reorder": true } }] }`
+`POST /api/bot/performance`  `{ "records": [{ "externalId": "grok-1042", "unitsSold": 37, "revenue": 1480, "sellThroughRate": 0.82, "rating": 9.1, "velocity": "fast", "sold": true, "daysToFirstSale": 3, "periodStart": "2026-09-01", "periodEnd": "2026-09-15", "metrics": { "reorder": true } }] }`
 → `{ inserted, errors }`. `metrics` is freeform JSON — store any knowledge. Max 500.
+Set `velocity` (`fast`/`steady`/`slow`/`none`), `sold`, and/or `daysToFirstSale`
+to record how quickly a design sold — these feed `GET /api/bot/reference` so the
+verdict becomes permanent design reference. Omit `velocity` and it's inferred
+from `daysToFirstSale` (≤7 fast, ≤30 steady, else slow) or units sold.
 
 ### 6. Approve, rate, and prioritize your favorites
 `POST /api/bot/decisions`  `{ "decisions": [{ "externalId": "grok-1042", "action": "approve", "highlighted": true, "priority": "high", "rating": 9.1 }] }`

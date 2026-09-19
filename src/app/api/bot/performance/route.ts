@@ -35,6 +35,14 @@ export async function POST(request: NextRequest) {
         errors.push({ index: i, error: 'no matching design for conceptId/externalId' });
         continue;
       }
+      // Fold the sales verdict (sold? how fast?) into metrics so it becomes
+      // future reference — no schema change needed (metrics is jsonb).
+      const verdict: Record<string, unknown> = {};
+      if (r.velocity != null) verdict.velocity = r.velocity;             // fast | steady | slow | none
+      if (r.sold != null) verdict.sold = r.sold;                         // boolean
+      if (r.daysToFirstSale != null) verdict.daysToFirstSale = r.daysToFirstSale;
+      const baseMetrics = r.metrics && typeof r.metrics === 'object' ? (r.metrics as Record<string, unknown>) : {};
+      const metrics = Object.keys(verdict).length || Object.keys(baseMetrics).length ? { ...baseMetrics, ...verdict } : null;
       rows.push({
         concept_id: conceptId,
         source: r.source ?? 'grok',
@@ -44,7 +52,7 @@ export async function POST(request: NextRequest) {
         rating: r.rating ?? null,
         period_start: r.periodStart ?? null,
         period_end: r.periodEnd ?? null,
-        metrics: r.metrics ?? null,
+        metrics,
         notes: r.notes ?? null,
       });
     }
