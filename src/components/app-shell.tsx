@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Dashboard } from './dashboard';
+import { ProductionCockpit } from './production-cockpit';
 import { ConceptsLibrary } from './concepts-library';
 import { WorkflowBoard } from './workflow-board';
 import { SpecsDatabase } from './specs-database';
@@ -85,6 +86,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
+  const currentUser = useAppStore((s) => s.currentUser);
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Top-level mode: the streamlined Production cockpit (default, and the only
+  // thing the manufacturing tech ever sees) vs. the full design Studio (the
+  // 19 tabs). Admins can switch; everyone else is locked to Production.
+  // Remembered per-browser so the tech always lands back in the cockpit.
+  const [mode, setMode] = useState<'production' | 'studio'>('production');
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('app-mode');
+      if (saved === 'studio' || saved === 'production') setMode(saved);
+    } catch {}
+  }, []);
+  // Non-admins can never be in studio mode.
+  useEffect(() => {
+    if (!isAdmin && mode !== 'production') setMode('production');
+  }, [isAdmin, mode]);
+  const switchMode = (m: 'production' | 'studio') => {
+    setMode(m);
+    try { window.localStorage.setItem('app-mode', m); } catch {}
+  };
 
   // Keep tab ↔ URL in sync for routed tabs. Browser back/forward or direct
   // URL pastes switch the active tab; navigating to / from a routed tab
@@ -245,6 +268,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const studioReady = initialized && mode === 'studio';
+
   return (
     <ToastProvider>
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -264,6 +289,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Production ⇄ Studio switch — admins only. The tech never sees this
+              and stays in the streamlined cockpit. */}
+          {isAdmin && (
+            <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => switchMode('production')}
+                className={`px-3 py-1.5 transition-colors ${mode === 'production' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+              >
+                Production
+              </button>
+              <button
+                onClick={() => switchMode('studio')}
+                className={`px-3 py-1.5 transition-colors ${mode === 'studio' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+              >
+                Studio
+              </button>
+            </div>
+          )}
           {/* Visible build indicator — confirms which deploy is actually
               running in your browser. Hover for the build time. The bright
               color (vs muted) makes it impossible to miss when checking
@@ -289,6 +332,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           so the "More" dropdown can escape vertically without being clipped.
           Previously the dropdown was getting cropped because the parent
           `overflow-x-auto` implicitly clipped the y-axis too. */}
+      {mode === 'studio' && (
       <nav className="border-b border-border bg-surface px-2 sm:px-6 shrink-0 relative" role="navigation" aria-label="Main navigation">
         <div className="flex gap-1 items-center min-w-max overflow-x-auto">
           {PRIMARY_TABS.map((tab) => (
@@ -381,6 +425,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </nav>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
@@ -396,32 +441,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             active tab so switching tabs always re-mounts a fresh boundary.
             A crash in one view (e.g. AI Generate) now shows an inline error
             with the message + stack instead of white-screening the app. */}
-        <ErrorBoundary key={activeTab} scope={activeTab} fallback={renderTabError}>
-          {initialized && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'workflow' && (
+        <ErrorBoundary key={mode === 'production' ? 'production' : activeTab} scope={mode === 'production' ? 'production' : activeTab} fallback={renderTabError}>
+          {initialized && mode === 'production' && <ProductionCockpit />}
+          {studioReady && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'workflow' && (
             <WorkflowBoard
               onOpenConcept={openConcept}
               onOpenArchive={() => setActiveTab('archive')}
             />
           )}
-          {initialized && activeTab === 'manufacturing' && <ManufacturingBoard />}
-          {initialized && activeTab === 'specs' && <SpecsDatabase />}
-          {initialized && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'marketing' && <MarketingStudio />}
-          {initialized && activeTab === 'mockup' && <MockupStudio />}
-          {initialized && activeTab === 'benchmark' && <BenchmarkDashboard />}
-          {initialized && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'botchat' && <BotChat />}
-          {initialized && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'lineage' && <ConceptLineage onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'drops' && <DropPlanner onOpenConcept={openConcept} />}
-          {initialized && activeTab === 'detail' && selectedConceptId && (
+          {studioReady && activeTab === 'manufacturing' && <ManufacturingBoard />}
+          {studioReady && activeTab === 'specs' && <SpecsDatabase />}
+          {studioReady && activeTab === 'brainstorm' && <AIInspiration onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'ai' && <AIGeneration onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'archive' && <ArchiveBrowser onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'presets' && <PresetLibrary onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'marketing' && <MarketingStudio />}
+          {studioReady && activeTab === 'mockup' && <MockupStudio />}
+          {studioReady && activeTab === 'benchmark' && <BenchmarkDashboard />}
+          {studioReady && activeTab === 'calendar' && <HolidayCalendar onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'botchat' && <BotChat />}
+          {studioReady && activeTab === 'customer' && <CustomerDesigns onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'insights' && <InsightsDashboard onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'compare' && <CompareView onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'lineage' && <ConceptLineage onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'drops' && <DropPlanner onOpenConcept={openConcept} />}
+          {studioReady && activeTab === 'detail' && selectedConceptId && (
             <ConceptDetail conceptId={selectedConceptId} onBack={goBack} />
           )}
         </ErrorBoundary>

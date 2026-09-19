@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     tool('get_stats', 'GET', '/api/bot/stats', 'Studio KPIs: design + production counts, performance totals.', {}),
     tool('make_decisions', 'POST', '/api/bot/decisions', 'Approve / highlight / prioritize / archive designs in bulk.', { decisions: { type: 'array', description: 'array of { conceptId?|externalId?, action?, status?, highlighted?, priority?, rating? }' } }, ['decisions']),
     tool('get_production', 'GET', '/api/bot/production', 'Read the production queue + machines.', { status: { type: 'string' }, limit: { type: 'number' } }),
-    tool('update_production', 'POST', '/api/bot/production', 'Create/update production jobs.', { jobs: { type: 'array', description: 'array of { id?, conceptId?|externalId?, title?, status?, priority?, quantity? }' } }, ['jobs']),
+    tool('update_production', 'POST', '/api/bot/production', 'Create/update/drive production jobs (mirrors the tech\'s cockpit: start/pause/complete/hold/rework + QC).', { jobs: { type: 'array', description: 'array of { id?, conceptId?|externalId?, title?, status?, action? (start|resume|pause|complete|hold|rework|schedule|backlog), priority?, quantity?, quantityCompleted?, quantityFailed?, qcResult? (pass|fail), qcNotes?, reworkReason?, holdReason? }' } }, ['jobs']),
     tool('get_calendar', 'GET', '/api/bot/calendar', 'Upcoming holidays/events to design drops for.', { days: { type: 'number' } }),
     tool('get_comments', 'GET', '/api/bot/comments', 'Read notes on a design.', idRef),
     tool('add_comment', 'POST', '/api/bot/comments', 'Leave a note on a design (visible to the team).', { ...idRef, text: { type: 'string' } }, ['text']),

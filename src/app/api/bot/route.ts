@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
         'Bulk approve/rate/highlight/prioritize/archive. { decisions: [{ conceptId? | externalId?, action?, status?, highlighted?, priority?, rating?, notes? }] }. action: approve|ready|manufactured|review|reject|archive|highlight|unhighlight|rate. priority: urgent|high|medium|low.',
       'GET /api/bot/production': 'Read the production queue + machines. Query: status?, limit.',
       'POST /api/bot/production':
-        'Create/update production jobs. { jobs: [{ id?, conceptId? | externalId?, title?, status?, priority?, machineId?, scheduledDate?, quantity?, notes? }] }.',
+        'Create/update/drive production jobs — mirrors the Production cockpit the tech uses. { jobs: [{ id?, conceptId? | externalId?, title?, status?, action? (start|resume|pause|complete|hold|rework|schedule|backlog), priority?, machineId?, scheduledDate?, quantity?, quantityCompleted?, quantityFailed?, qcResult? (pass|fail), qcNotes?, reworkReason?, holdReason?, notes? }] }.',
       'GET /api/bot/comments': 'Read notes on a design. Query: conceptId? | externalId?.',
       'POST /api/bot/comments': 'Leave a note on a design (visible to the team). { conceptId? | externalId?, text, author? }.',
       'GET /api/bot/messages':

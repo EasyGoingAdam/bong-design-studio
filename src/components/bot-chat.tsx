@@ -17,7 +17,7 @@ interface ChatMessage {
  * in bot_messages; the bot reads new ones via /api/bot/messages and replies
  * there. Polls every few seconds so the bot's replies show up.
  */
-export function BotChat() {
+export function BotChat({ heightClass = 'h-[calc(100vh-8rem)]', compact = false }: { heightClass?: string; compact?: boolean } = {}) {
   const currentUser = useAppStore((s) => s.currentUser);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -66,13 +66,15 @@ export function BotChat() {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto h-[calc(100vh-8rem)] flex flex-col">
-      <div className="mb-3">
-        <div className="eyebrow mb-1">Manufacturing ↔ Grok</div>
-        <h2 className="text-2xl font-bold">Chat with the Bot</h2>
-        <p className="text-sm text-muted mt-1">
-          Raise an issue or a design idea — the bot reads your messages and can adjust what it designs and prioritizes.
-        </p>
+    <div className={`${compact ? 'p-3' : 'p-4 sm:p-6'} max-w-3xl mx-auto ${heightClass} flex flex-col`}>
+      <div className={compact ? 'mb-2' : 'mb-3'}>
+        {!compact && <div className="eyebrow mb-1">Manufacturing ↔ Grok</div>}
+        <h2 className={compact ? 'text-base font-bold' : 'text-2xl font-bold'}>Chat with the Bot</h2>
+        {!compact && (
+          <p className="text-sm text-muted mt-1">
+            Raise an issue or a design idea — the bot reads your messages and can adjust what it designs and prioritizes.
+          </p>
+        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto bg-surface border border-border rounded-xl p-4 space-y-3">

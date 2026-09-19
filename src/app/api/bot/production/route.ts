@@ -11,11 +11,26 @@ export const maxDuration = 60;
  *   knows the state of manufacturing. Query: status?, limit (<=500).
  *
  * POST /api/bot/production — create/update production jobs (drive what the
- *   laser tech works on next).
+ *   laser tech works on next). Mirrors every action in the Production cockpit.
  *   { jobs: [ { id?, conceptId? | externalId?, title?, status?, priority?,
- *              machineId?, scheduledDate?, quantity?, notes? } ] }
+ *              machineId?, scheduledDate?, quantity?, notes?,
+ *              action?, quantityCompleted?, quantityFailed?, qcResult?,
+ *              qcNotes?, reworkReason?, holdReason? } ] }
  *   status: backlog|scheduled|in_progress|paused|completed|held|rework
+ *   action (shortcut, sets status + timestamps): start|resume|pause|complete|
+ *          hold|rework|schedule|backlog
  */
+
+const ACTION_STATUS: Record<string, ProductionJob['status']> = {
+  start: 'in_progress',
+  resume: 'in_progress',
+  pause: 'paused',
+  complete: 'completed',
+  hold: 'held',
+  rework: 'rework',
+  schedule: 'scheduled',
+  backlog: 'backlog',
+};
 export async function GET(request: NextRequest) {
   const denied = await requireBotKey(request);
   if (denied) return denied;
@@ -54,12 +69,30 @@ export async function POST(request: NextRequest) {
       try {
         const partial: Partial<ProductionJob> = {};
         if (j.title != null) partial.title = String(j.title);
-        if (j.status != null) partial.status = j.status as ProductionJob['status'];
         if (j.priority != null) partial.priority = j.priority as ProductionJob['priority'];
         if (j.machineId != null) partial.machineId = String(j.machineId);
         if (j.scheduledDate != null) partial.scheduledDate = String(j.scheduledDate);
         if (j.quantity != null) partial.quantity = Number(j.quantity);
-        if (j.notes != null) partial.notes = String(j.notes);
+        if (j.quantityCompleted != null) partial.quantityCompleted = Number(j.quantityCompleted);
+        if (j.quantityFailed != null) partial.quantityFailed = Number(j.quantityFailed);
+        if (j.qcResult === 'pass' || j.qcResult === 'fail') partial.qcResult = j.qcResult;
+        if (j.qcNotes != null) partial.qcNotes = String(j.qcNotes);
+        if (j.reworkReason != null) partial.reworkReason = String(j.reworkReason);
+
+        // Status: explicit `status` wins, else derive from `action`.
+        const action = String(j.action ?? '').toLowerCase();
+        const status = (j.status as ProductionJob['status']) ?? ACTION_STATUS[action];
+        if (status) partial.status = status;
+        // Timestamps that the cockpit stamps for the same transitions.
+        if (status === 'in_progress' && action !== 'resume') partial.actualStartTime = new Date().toISOString();
+        if (status === 'completed') partial.actualEndTime = new Date().toISOString();
+        // A hold reason is appended to notes (matches the cockpit's [HELD] stamp).
+        if (j.holdReason != null || status === 'held') {
+          const reason = String(j.holdReason ?? j.notes ?? 'Held by bot');
+          partial.notes = `[HELD] ${reason}`;
+        } else if (j.notes != null) {
+          partial.notes = String(j.notes);
+        }
         if (j.conceptId || j.externalId) {
           const cid = await resolveConceptId({ conceptId: j.conceptId as string, externalId: j.externalId as string });
           if (cid) partial.conceptId = cid;

@@ -100,6 +100,15 @@ from `daysToFirstSale` (≤7 fast, ≤30 steady, else slow) or units sold.
 `POST /api/bot/production`  `{ "jobs": [{ "externalId": "grok-1042", "title": "Fractal Mushroom coil", "status": "scheduled", "priority": "high", "quantity": 10 }] }`
 → `{ created, updated, errors }`. Job status: `backlog|scheduled|in_progress|paused|completed|held|rework`.
 
+**Drive jobs like the tech does.** The tech works a **Production cockpit** (start →
+pause → complete with a QC check, flag problems, close the day). You can do the
+exact same actions on any job by id via `action`:
+`POST /api/bot/production` `{ "jobs": [{ "id": "<jobId>", "action": "complete", "quantityCompleted": 10, "quantityFailed": 0, "qcResult": "pass" }] }`.
+Actions: `start|resume|pause|complete|hold|rework|schedule|backlog` (they set the
+status + timestamps for you). Extra fields: `quantityCompleted`, `quantityFailed`,
+`qcResult` (pass|fail), `qcNotes`, `reworkReason`, `holdReason`. So you and the tech
+operate on the same jobs and statuses — whatever one of you does, the other sees.
+
 ### 8. Talk to the laser tech
 The tech chats with you from inside the app (the "Bot Chat" tab).
 - `GET /api/bot/messages` → unread human messages (and marks them read).
