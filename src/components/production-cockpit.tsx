@@ -5,8 +5,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { BotChat } from './bot-chat';
-import { todayKey, fmtMinutes } from '@/lib/production';
-import { ProductionJob, PriorityLevel, Concept, Machine } from '@/lib/types';
+import { todayKey, fmtMinutes, jobTotalMinutes } from '@/lib/production';
+import { ProductionJob, PriorityLevel, Concept, Machine, workdayHours } from '@/lib/types';
 
 const PRIORITY_DOT: Record<PriorityLevel, string> = {
   urgent: 'bg-red-500',
@@ -35,6 +35,8 @@ export function ProductionCockpit() {
   const currentUser = useAppStore((s) => s.currentUser);
   const updateProductionJob = useAppStore((s) => s.updateProductionJob);
   const addProductionJob = useAppStore((s) => s.addProductionJob);
+  const updateMachine = useAppStore((s) => s.updateMachine);
+  const addMachine = useAppStore((s) => s.addMachine);
   const closeOutDay = useAppStore((s) => s.closeOutDay);
   const { toast } = useToast();
 
@@ -47,6 +49,10 @@ export function ProductionCockpit() {
   const [qcNotes, setQcNotes] = useState('');
   const [showChat, setShowChat] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [mineOnly, setMineOnly] = useState(false);          // operator filter
+  const [editing, setEditing] = useState<ProductionJob | null>(null); // quick-edit drawer
+  const [editingLaneId, setEditingLaneId] = useState<string | null>(null); // lane header edit
+  const me = currentUser?.name || '';
 
   // Lanes = active machines (fallback to a single unassigned lane).
   const lanes: Machine[] = useMemo(() => {
@@ -54,23 +60,34 @@ export function ProductionCockpit() {
     return active.length ? active : [{ id: '', name: 'Unassigned', active: true, dailyPieceTarget: settings.dailyPieceTarget, dailyHours: 8, notes: '', position: 0 }];
   }, [machines, settings]);
 
-  const { jobsByMachine, backlog, completedToday, problems, targetPieces, madePieces } = useMemo(() => {
+  const { jobsByMachine, laneMinutes, backlog, completedToday, problems, targetPieces, madePieces } = useMemo(() => {
     const onToday = (j: ProductionJob) => j.scheduledDate === today;
     const workable = (j: ProductionJob) => j.status === 'scheduled' || j.status === 'in_progress' || j.status === 'paused';
+    const mine = (j: ProductionJob) => !mineOnly || !j.operatorName || j.operatorName === me;
 
     const jobsByMachine: Record<string, ProductionJob[]> = {};
     for (const m of lanes) jobsByMachine[m.id] = [];
     for (const j of productionJobs) {
-      if (!workable(j) || !onToday(j)) continue;
+      if (!workable(j) || !onToday(j) || !mine(j)) continue;
       const key = j.machineId && jobsByMachine[j.machineId] ? j.machineId : lanes[0].id;
       jobsByMachine[key].push(j);
     }
+    const laneMinutes: Record<string, number> = {};
     for (const k of Object.keys(jobsByMachine)) {
       jobsByMachine[k].sort((a, b) => {
         // Running first, then by scheduled position.
         if ((a.status === 'in_progress') !== (b.status === 'in_progress')) return a.status === 'in_progress' ? -1 : 1;
         return (a.scheduledPosition ?? 0) - (b.scheduledPosition ?? 0);
       });
+      // Remaining work time for the lane (running job counts its remaining bit).
+      laneMinutes[k] = jobsByMachine[k].reduce((s, j) => {
+        const total = jobTotalMinutes(j);
+        if (j.status === 'in_progress') {
+          const elapsed = (j.accumulatedMinutes || 0) + minutesSince(j.actualStartTime);
+          return s + Math.max(0, total - elapsed);
+        }
+        return s + total;
+      }, 0);
     }
 
     // Backlog = unscheduled / unassigned work waiting to be placed on a machine.
@@ -85,8 +102,8 @@ export function ProductionCockpit() {
     const targetPieces =
       activeMachines.reduce((s, m) => s + (m.dailyPieceTarget || settings.dailyPieceTarget || 0), 0) || settings.dailyPieceTarget || 0;
     const madePieces = completedToday.reduce((s, j) => s + (j.quantityCompleted || j.quantity || 0), 0);
-    return { jobsByMachine, backlog, completedToday, problems, targetPieces, madePieces };
-  }, [productionJobs, machines, lanes, settings, today]);
+    return { jobsByMachine, laneMinutes, backlog, completedToday, problems, targetPieces, madePieces };
+  }, [productionJobs, machines, lanes, settings, today, mineOnly, me]);
 
   const readyConcepts = useMemo(() => {
     const openConceptIds = new Set(
@@ -109,7 +126,11 @@ export function ProductionCockpit() {
 
   // ── Job actions ─────────────────────────────────────────────────────────
   const start = (j: ProductionJob) =>
-    updateProductionJob(j.id, { status: 'in_progress', actualStartTime: new Date().toISOString(), scheduledDate: j.scheduledDate || today });
+    updateProductionJob(j.id, {
+      status: 'in_progress', actualStartTime: new Date().toISOString(), scheduledDate: j.scheduledDate || today,
+      // Stamp who's running it (keep an existing operator if already set).
+      operatorName: j.operatorName || me, operatorId: j.operatorId || currentUser?.id || '',
+    });
   const pause = (j: ProductionJob) =>
     updateProductionJob(j.id, {
       status: 'paused',
@@ -127,6 +148,7 @@ export function ProductionCockpit() {
       status: 'completed', actualEndTime: new Date().toISOString(),
       actualTotalMinutes: (j.accumulatedMinutes || 0) + extra,
       quantityCompleted: qtyMade, quantityFailed: qtyFailed, qcResult, qcNotes, scheduledDate: j.scheduledDate || today,
+      operatorName: j.operatorName || me, operatorId: j.operatorId || currentUser?.id || '',
     });
     setCompleting(null);
     toast(qcResult === 'pass' ? 'Job completed ✓' : 'Completed — QC flagged', qcResult === 'pass' ? 'success' : 'info');
@@ -139,6 +161,21 @@ export function ProductionCockpit() {
     toast(kind === 'rework' ? 'Marked for rework' : 'Flagged as a problem', 'info');
   };
   const resolveProblem = (j: ProductionJob) => updateProductionJob(j.id, { status: 'scheduled', scheduledDate: today, machineId: j.machineId || lanes[0].id });
+
+  // Start the next queued job on an idle etcher (one tap keeps a laser fed).
+  const startNext = (machineId: string) => {
+    const list = jobsByMachine[machineId] || [];
+    if (list.some((j) => j.status === 'in_progress')) return;
+    const next = list.find((j) => j.status === 'scheduled' || j.status === 'paused');
+    if (next) start(next);
+    else toast('Nothing queued on this etcher — drag a design over.', 'info');
+  };
+
+  const saveLane = (m: Machine, name: string, target: number) => {
+    if (!m.id) { setEditingLaneId(null); return; } // the synthetic fallback lane
+    updateMachine(m.id, { name: name.trim() || m.name, dailyPieceTarget: Math.max(0, target || 0) });
+    setEditingLaneId(null);
+  };
 
   const createJobFromConcept = async (conceptId: string, extra: Partial<ProductionJob>) => {
     const c = concepts.find((x) => x.id === conceptId);
@@ -205,6 +242,12 @@ export function ProductionCockpit() {
           <h1 className="text-2xl sm:text-3xl font-bold">Hi {firstName} — production floor</h1>
         </div>
         <div className="flex items-center gap-2">
+          {me && (
+            <button onClick={() => setMineOnly((v) => !v)}
+              className={`px-3 py-2 text-sm rounded-lg border ${mineOnly ? 'bg-accent text-white border-accent' : 'border-border bg-surface hover:bg-surface-hover'}`}>
+              {mineOnly ? '👤 Mine only' : '👥 Everyone'}
+            </button>
+          )}
           <button onClick={() => setShowChat((v) => !v)} className="px-3 py-2 text-sm rounded-lg border border-border bg-surface hover:bg-surface-hover">
             🤖 {showChat ? 'Hide chat' : 'Bot chat'}
           </button>
@@ -254,24 +297,57 @@ export function ProductionCockpit() {
             ))}
           </Column>
 
-          {/* Machine lanes */}
+          {/* Machine lanes — one per etcher, running in parallel */}
           {lanes.map((m) => {
             const laneJobs = jobsByMachine[m.id];
             const madeHere = completedToday.filter((j) => (j.machineId || lanes[0].id) === m.id).reduce((s, j) => s + (j.quantityCompleted || j.quantity || 0), 0);
+            const mins = laneMinutes[m.id] || 0;
+            const workMins = Math.round(workdayHours(settings) * 60);
+            const overloaded = mins > workMins;
+            const running = laneJobs.some((j) => j.status === 'in_progress');
             return (
-              <Column key={m.id || 'unassigned'} title={m.name} count={laneJobs.length} droppableId={m.id} subtitle={`${madeHere}/${m.dailyPieceTarget || settings.dailyPieceTarget} pcs`}>
-                {laneJobs.length === 0 && <p className="px-3 py-6 text-xs text-muted text-center">Drop a design or job here.</p>}
-                {laneJobs.map((j, i) => (
-                  <Draggable key={j.id} draggableId={j.id} index={i}>
-                    {(p, snap) => (
-                      <div ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps}
-                        className={`mx-2 mb-2 ${snap.isDragging ? 'opacity-90' : ''}`}>
-                        <LaneJob job={j} onStart={() => start(j)} onPause={() => pause(j)} onComplete={() => openComplete(j)} onProblem={(k) => flagProblem(j, k)} />
+              <div key={m.id || 'unassigned'} className="shrink-0 w-[280px] bg-background border border-border rounded-xl flex flex-col max-h-[70vh]">
+                <div className="px-3 py-2 border-b border-border">
+                  {editingLaneId === m.id ? (
+                    <LaneEditor machine={m} onSave={(name, target) => saveLane(m, name, target)} onCancel={() => setEditingLaneId(null)} />
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-sm font-semibold truncate">{m.name}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-xs text-muted">{madeHere}/{m.dailyPieceTarget || settings.dailyPieceTarget}</span>
+                          {m.id && <button onClick={() => setEditingLaneId(m.id)} title="Rename / set target" className="text-muted hover:text-foreground">⚙</button>}
+                        </div>
                       </div>
-                    )}
-                  </Draggable>
-                ))}
-              </Column>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className={`text-[11px] ${overloaded ? 'text-red-600 font-medium' : 'text-muted'}`}>
+                          {mins > 0 ? `~${fmtMinutes(mins)} left${overloaded ? ' ⚠ over day' : ''}` : 'idle'}
+                        </span>
+                        {!running && laneJobs.length > 0 && (
+                          <button onClick={() => startNext(m.id)} className="text-[11px] text-accent font-medium hover:underline">▶ Start next</button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <Droppable droppableId={m.id}>
+                  {(prov, snap) => (
+                    <div ref={prov.innerRef} {...prov.droppableProps} className={`flex-1 overflow-y-auto py-2 ${snap.isDraggingOver ? 'bg-accent/5' : ''}`}>
+                      {laneJobs.length === 0 && <p className="px-3 py-6 text-xs text-muted text-center">Drop a design or job here.</p>}
+                      {laneJobs.map((j, i) => (
+                        <Draggable key={j.id} draggableId={j.id} index={i}>
+                          {(p, snap2) => (
+                            <div ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`mx-2 mb-2 ${snap2.isDragging ? 'opacity-90' : ''}`}>
+                              <LaneJob job={j} onStart={() => start(j)} onPause={() => pause(j)} onComplete={() => openComplete(j)} onProblem={(k) => flagProblem(j, k)} onEdit={() => setEditing(j)} />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {prov.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
             );
           })}
 
@@ -282,12 +358,19 @@ export function ProductionCockpit() {
               <Draggable key={j.id} draggableId={j.id} index={i}>
                 {(p, snap) => (
                   <div ref={p.innerRef} {...p.draggableProps} {...p.dragHandleProps} className={`mx-2 mb-2 ${snap.isDragging ? 'opacity-90' : ''}`}>
-                    <LaneJob job={j} compact onProblem={(k) => flagProblem(j, k)} />
+                    <LaneJob job={j} compact onProblem={(k) => flagProblem(j, k)} onEdit={() => setEditing(j)} />
                   </div>
                 )}
               </Draggable>
             ))}
           </Column>
+
+          {/* Add etcher */}
+          <div className="shrink-0 w-[160px] flex items-start pt-1">
+            <button onClick={() => addMachine()} className="w-full px-3 py-3 text-sm rounded-xl border border-dashed border-border text-muted hover:text-foreground hover:border-foreground">
+              ＋ Add etcher
+            </button>
+          </div>
         </div>
 
         {/* Drop zones + problems + done */}
@@ -377,6 +460,72 @@ export function ProductionCockpit() {
           <div className="flex-1 overflow-hidden"><BotChat heightClass="h-full" compact /></div>
         </div>
       )}
+
+      {/* Quick-edit drawer */}
+      {editing && (
+        <JobEditDrawer
+          job={editing}
+          onClose={() => setEditing(null)}
+          onSave={async (patch) => { await updateProductionJob(editing.id, patch); setEditing(null); toast('Saved', 'success'); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Lane header editor (rename + target) ────────────────────────────────────
+function LaneEditor({ machine, onSave, onCancel }: { machine: Machine; onSave: (name: string, target: number) => void; onCancel: () => void }) {
+  const [name, setName] = useState(machine.name);
+  const [target, setTarget] = useState(machine.dailyPieceTarget || 0);
+  return (
+    <div className="space-y-1.5">
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Etcher name"
+        className="w-full text-sm bg-surface border border-border rounded px-2 py-1 focus:outline-none focus:border-accent" />
+      <div className="flex items-center gap-1.5">
+        <label className="text-[11px] text-muted">Target</label>
+        <input type="number" min={0} value={target} onChange={(e) => setTarget(Math.max(0, parseInt(e.target.value) || 0))}
+          className="w-16 text-sm bg-surface border border-border rounded px-2 py-1" />
+        <button onClick={() => onSave(name, target)} className="ml-auto text-xs px-2 py-1 rounded bg-accent text-white">Save</button>
+        <button onClick={onCancel} className="text-xs px-2 py-1 rounded border border-border text-muted">✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Quick-edit job drawer ───────────────────────────────────────────────────
+function JobEditDrawer({ job, onClose, onSave }: { job: ProductionJob; onClose: () => void; onSave: (patch: Partial<ProductionJob>) => void }) {
+  const [quantity, setQuantity] = useState(job.quantity || 1);
+  const [priority, setPriority] = useState<PriorityLevel>(job.priority);
+  const [rush, setRush] = useState(!!job.rush);
+  const [textName, setTextName] = useState(job.textName || '');
+  const [machineSettings, setMachineSettings] = useState(job.machineSettings || '');
+  const [notes, setNotes] = useState(job.notes || '');
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface border border-border rounded-xl w-full max-w-md p-5 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold mb-4">Edit “{job.title}”</h3>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <label className="text-sm"><span className="block text-muted mb-1">Quantity</span>
+            <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} className="w-full bg-background border border-border rounded-lg px-3 py-2" /></label>
+          <label className="text-sm"><span className="block text-muted mb-1">Priority</span>
+            <select value={priority} onChange={(e) => setPriority(e.target.value as PriorityLevel)} className="w-full bg-background border border-border rounded-lg px-3 py-2">
+              <option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+            </select></label>
+        </div>
+        <label className="flex items-center gap-2 text-sm mb-3">
+          <input type="checkbox" checked={rush} onChange={(e) => setRush(e.target.checked)} /> Rush order
+        </label>
+        <label className="block text-sm mb-3"><span className="block text-muted mb-1">Text to etch</span>
+          <input value={textName} onChange={(e) => setTextName(e.target.value)} placeholder="Personalized name / text" className="w-full bg-background border border-border rounded-lg px-3 py-2" /></label>
+        <label className="block text-sm mb-3"><span className="block text-muted mb-1">Machine settings</span>
+          <input value={machineSettings} onChange={(e) => setMachineSettings(e.target.value)} placeholder="Power / speed / passes" className="w-full bg-background border border-border rounded-lg px-3 py-2" /></label>
+        <label className="block text-sm mb-4"><span className="block text-muted mb-1">Notes</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full bg-background border border-border rounded-lg px-3 py-2" /></label>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-muted hover:text-foreground">Cancel</button>
+          <button onClick={() => onSave({ quantity, priority, rush, textName, machineSettings, notes })} className="px-4 py-2 text-sm bg-accent hover:bg-accent-hover text-white rounded-lg font-medium">Save</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -433,10 +582,10 @@ function ConceptRow({ concept }: { concept: Concept }) {
 
 // ── Lane job card ───────────────────────────────────────────────────────────
 function LaneJob({
-  job, compact, onStart, onPause, onComplete, onProblem,
+  job, compact, onStart, onPause, onComplete, onProblem, onEdit,
 }: {
   job: ProductionJob; compact?: boolean;
-  onStart?: () => void; onPause?: () => void; onComplete?: () => void; onProblem?: (k: 'held' | 'rework') => void;
+  onStart?: () => void; onPause?: () => void; onComplete?: () => void; onProblem?: (k: 'held' | 'rework') => void; onEdit?: () => void;
 }) {
   const running = job.status === 'in_progress';
   return (
@@ -445,11 +594,13 @@ function LaneJob({
         <span className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_DOT[job.priority] || 'bg-slate-300'}`} />
         <span className="text-sm font-semibold truncate flex-1">{job.title}</span>
         {job.rush && <span className="text-[10px] text-red-600 font-bold">RUSH</span>}
+        {onEdit && <button onClick={onEdit} title="Edit" className="text-muted hover:text-foreground text-xs shrink-0">✎</button>}
       </div>
       <div className="text-[11px] text-muted mt-0.5 flex flex-wrap gap-x-2">
         {job.textName && <span>“{job.textName}”</span>}
         <span>Qty {job.quantity}</span>
         {job.customerName && <span className="truncate">{job.customerName}</span>}
+        {job.operatorName && <span className="text-foreground/70">👤 {job.operatorName}</span>}
       </div>
       {running && <div className="text-[11px] text-accent mt-0.5">▶ Running · {fmtMinutes((job.accumulatedMinutes || 0) + minutesSince(job.actualStartTime))}</div>}
       {job.status === 'paused' && <div className="text-[11px] text-amber-600 mt-0.5">⏸ Paused</div>}
