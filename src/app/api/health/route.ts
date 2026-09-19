@@ -180,8 +180,24 @@ export async function GET(request: NextRequest) {
 
   const ok = Object.values(checks).every((c) => c.ok);
 
+  // Deploy provenance — lets you (and the bot) confirm which commit is actually
+  // live, instead of guessing whether Railway picked up the latest push.
+  // Railway injects RAILWAY_GIT_* at build time; the others are best-effort.
+  const commit = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
+  const version = {
+    // Baked into the bundle at build time (next.config.ts), so these values are
+    // frozen at the moment of the build the server is running — a stale bundle
+    // reveals itself here even if Railway's git env vars are absent.
+    buildSha: process.env.NEXT_PUBLIC_BUILD_SHA || null,
+    builtAt: process.env.NEXT_PUBLIC_BUILD_TIME || null,
+    commit,
+    commitShort: commit ? commit.slice(0, 7) : null,
+    branch: process.env.RAILWAY_GIT_BRANCH || null,
+    deploymentId: process.env.RAILWAY_DEPLOYMENT_ID || null,
+  };
+
   return NextResponse.json(
-    { ok, checks, features, timestamp: new Date().toISOString() },
+    { ok, version, checks, features, timestamp: new Date().toISOString() },
     { status: ok ? 200 : 500 }
   );
 }
