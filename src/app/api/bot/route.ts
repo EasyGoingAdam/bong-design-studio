@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       'POST /api/bot/performance':
         'Bulk record sales/sell-through/rating. { records: [{ conceptId? | externalId?, unitsSold?, revenue?, sellThroughRate?, rating?, periodStart?, periodEnd?, metrics?, notes? }] }.',
       'GET /api/bot/performance': 'Read recent performance rows. Query: conceptId?, limit.',
+      'GET /api/bot/insights':
+        'Aggregated "what\'s working": top sellers, top-rated, best sell-through, and which tags/collections perform. Query: topN (<=50).',
       'POST /api/bot/decisions':
         'Bulk approve/rate/highlight/prioritize/archive. { decisions: [{ conceptId? | externalId?, action?, status?, highlighted?, priority?, rating?, notes? }] }. action: approve|ready|manufactured|review|reject|archive|highlight|unhighlight|rate. priority: urgent|high|medium|low.',
       'GET /api/bot/production': 'Read the production queue + machines. Query: status?, limit.',
@@ -43,6 +45,8 @@ export async function GET(request: NextRequest) {
         'Pull messages from the manufacturing team. Default = unread human messages (marks them read); ?all=true for the whole thread.',
       'POST /api/bot/messages': 'Reply into the team chat thread. { text, metadata? }.',
     },
+    webhook:
+      'Set BOT_WEBHOOK_URL to receive instant POSTs (with Authorization: Bearer <BOT_API_KEY>) when the team sends a chat message: { type: "chat.message", message }. Otherwise poll GET /api/bot/messages.',
     identifiers: {
       conceptId: 'This app\'s design id (uuid).',
       externalId:

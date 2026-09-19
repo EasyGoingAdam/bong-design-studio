@@ -42,6 +42,10 @@ newest sales/rating snapshot for that design.
 
 `GET /api/bot/performance?conceptId=&limit=` → raw performance history.
 
+`GET /api/bot/insights?topN=10` → aggregated **what's working**: top sellers,
+top-rated, best sell-through, and which tags/collections perform. Pull this first
+to be the expert fast, instead of crunching every performance row yourself.
+
 ### 2. Invent designs (uses the studio's AI)
 `POST /api/bot/ideas`  `{ "prompt": "fall / mushrooms", "count": 6, "create": true }`
 → `{ ideas: [{ name, description, tags, designIdeas, coilNotes }], created: [ids] }`.
@@ -76,8 +80,12 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
 - `GET /api/bot/messages` → unread human messages (and marks them read).
   Use `?all=true` for the full thread.
 - `POST /api/bot/messages`  `{ "text": "Got it — I'll redesign the base to avoid thin lines." }`
-  → posts your reply into that thread. **Poll `GET /api/bot/messages` regularly**
-  so you catch the tech's issues and ideas, and let them steer your designs.
+  → posts your reply into that thread.
+- **Instant notify (optional):** if `BOT_WEBHOOK_URL` is set on the studio side,
+  the studio POSTs to it the moment the tech sends a message —
+  `{ "type": "chat.message", "message": {...} }` with `Authorization: Bearer <BOT_API_KEY>`
+  so you can verify it. Otherwise **poll `GET /api/bot/messages` regularly** so you
+  catch the tech's issues and ideas, and let them steer your designs.
 
 ---
 
@@ -93,7 +101,9 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
 
 ## One-time setup (studio side)
 1. Set env var **`BOT_API_KEY`** to a long random secret (Railway → Variables).
-2. Run these migrations in Supabase (dashboard → **System & Setup** card has a
+2. (Optional) Set **`BOT_WEBHOOK_URL`** to the bot's endpoint to get instant chat
+   notifications instead of polling.
+3. Run these migrations in Supabase (dashboard → **System & Setup** card has a
    Copy-SQL button for each): `design-performance`, `bot-messages`. (Also
    `coil-sizes`, `manufacturing-products`, `production-tasks`, `calendar-mockups`
    if not already run.)

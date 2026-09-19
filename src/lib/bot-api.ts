@@ -28,6 +28,23 @@ export function requireBotKey(request: NextRequest): NextResponse | null {
   return null;
 }
 
+/**
+ * Notify the bot instantly of an event (e.g. a new chat message) by POSTing to
+ * BOT_WEBHOOK_URL if configured. Fire-and-forget: never blocks or throws into
+ * the request path, so a down webhook can't break the app. The bot can verify
+ * the caller via the Bearer key we send.
+ */
+export function notifyBotWebhook(payload: Record<string, unknown>): void {
+  const url = process.env.BOT_WEBHOOK_URL;
+  if (!url) return;
+  const key = process.env.BOT_API_KEY || '';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('bot webhook failed:', err instanceof Error ? err.message : err));
+}
+
 /** Concept statuses the bot may set. */
 export const BOT_STATUSES = [
   'ideation',

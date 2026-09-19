@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { notifyBotWebhook } from '@/lib/bot-api';
 
 export const maxDuration = 30;
 
@@ -42,6 +43,9 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
     if (error || !data) return NextResponse.json({ error: error?.message ?? 'Send failed' }, { status: 500 });
+    // Instantly notify the bot (if BOT_WEBHOOK_URL is set) so it doesn't have to
+    // poll to catch the tech's message.
+    notifyBotWebhook({ type: 'chat.message', message: toMsg(data) });
     return NextResponse.json(toMsg(data), { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Send failed' }, { status: 500 });
