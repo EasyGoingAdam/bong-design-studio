@@ -6,7 +6,7 @@ export const maxDuration = 30;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toMsg(r: any) {
-  return { id: r.id, role: r.role, author: r.author ?? null, text: r.text ?? '', createdAt: r.created_at };
+  return { id: r.id, role: r.role, author: r.author ?? null, text: r.text ?? '', readByBot: r.read_by_bot ?? false, createdAt: r.created_at };
 }
 
 /**
