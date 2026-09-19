@@ -86,24 +86,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
-  const currentUser = useAppStore((s) => s.currentUser);
-  const isAdmin = currentUser?.role === 'admin';
 
-  // Top-level mode: the streamlined Production cockpit (default, and the only
-  // thing the manufacturing tech ever sees) vs. the full design Studio (the
-  // 19 tabs). Admins can switch; everyone else is locked to Production.
-  // Remembered per-browser so the tech always lands back in the cockpit.
-  const [mode, setMode] = useState<'production' | 'studio'>('production');
+  // Top-level mode: the full design Studio (the default main experience, all 19
+  // tabs) vs. the streamlined Production cockpit (a secondary, focused view for
+  // working the shop floor). Anyone can switch; remembered per-browser.
+  const [mode, setMode] = useState<'production' | 'studio'>('studio');
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('app-mode');
       if (saved === 'studio' || saved === 'production') setMode(saved);
     } catch {}
   }, []);
-  // Non-admins can never be in studio mode.
-  useEffect(() => {
-    if (!isAdmin && mode !== 'production') setMode('production');
-  }, [isAdmin, mode]);
   const switchMode = (m: 'production' | 'studio') => {
     setMode(m);
     try { window.localStorage.setItem('app-mode', m); } catch {}
@@ -289,24 +282,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Production ⇄ Studio switch — admins only. The tech never sees this
-              and stays in the streamlined cockpit. */}
-          {isAdmin && (
-            <div className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden text-xs font-medium">
-              <button
-                onClick={() => switchMode('production')}
-                className={`px-3 py-1.5 transition-colors ${mode === 'production' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
-              >
-                Production
-              </button>
-              <button
-                onClick={() => switchMode('studio')}
-                className={`px-3 py-1.5 transition-colors ${mode === 'studio' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
-              >
-                Studio
-              </button>
-            </div>
-          )}
+          {/* Studio ⇄ Production switch. Studio is the main experience;
+              Production is the secondary shop-floor cockpit. */}
+          <div className="flex items-center rounded-lg border border-border overflow-hidden text-xs font-medium">
+            <button
+              onClick={() => switchMode('studio')}
+              className={`px-3 py-1.5 transition-colors ${mode === 'studio' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+            >
+              Studio
+            </button>
+            <button
+              onClick={() => switchMode('production')}
+              className={`px-3 py-1.5 transition-colors ${mode === 'production' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+            >
+              Production
+            </button>
+          </div>
           {/* Visible build indicator — confirms which deploy is actually
               running in your browser. Hover for the build time. The bright
               color (vs muted) makes it impossible to miss when checking

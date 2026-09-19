@@ -5,7 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
 import { BotChat } from './bot-chat';
 import { todayKey, fmtMinutes } from '@/lib/production';
-import { ProductionJob, PriorityLevel, REWORK_REASONS, COIL_SIZE_LABELS } from '@/lib/types';
+import { ProductionJob, PriorityLevel, REWORK_REASONS, COIL_SIZE_LABELS, Concept } from '@/lib/types';
 
 const PRIORITY_DOT: Record<PriorityLevel, string> = {
   urgent: 'bg-red-500',
@@ -27,15 +27,19 @@ const minutesSince = (iso?: string) => (iso ? Math.round((Date.now() - new Date(
  */
 export function ProductionCockpit() {
   const productionJobs = useAppStore((s) => s.productionJobs);
+  const concepts = useAppStore((s) => s.concepts);
   const machines = useAppStore((s) => s.machines);
   const scheduleDays = useAppStore((s) => s.scheduleDays);
   const settings = useAppStore((s) => s.productionSettings);
   const currentUser = useAppStore((s) => s.currentUser);
   const updateProductionJob = useAppStore((s) => s.updateProductionJob);
+  const addProductionJob = useAppStore((s) => s.addProductionJob);
   const closeOutDay = useAppStore((s) => s.closeOutDay);
   const { toast } = useToast();
 
   const today = todayKey();
+  const [pickSearch, setPickSearch] = useState('');
+  const [starting, setStarting] = useState<string | null>(null); // conceptId being added
 
   // Complete flow modal state.
   const [completing, setCompleting] = useState<ProductionJob | null>(null);
@@ -67,6 +71,25 @@ export function ProductionCockpit() {
     const madePieces = completedToday.reduce((s, j) => s + (j.quantityCompleted || j.quantity || 0), 0);
     return { active, queue, completedToday, problems, targetPieces, madePieces };
   }, [productionJobs, machines, settings, today]);
+
+  // Approved designs the tech can pull work from — anything approved / ready for
+  // manufacturing that doesn't already have an open (non-completed) job.
+  const readyConcepts = useMemo(() => {
+    const openConceptIds = new Set(
+      productionJobs.filter((j) => j.status !== 'completed' && j.conceptId).map((j) => j.conceptId as string),
+    );
+    const term = pickSearch.trim().toLowerCase();
+    return concepts
+      .filter((c) => c.status === 'approved' || c.status === 'ready_for_manufacturing')
+      .filter((c) => !openConceptIds.has(c.id))
+      .filter((c) => !term || c.name.toLowerCase().includes(term) || (c.tags || []).some((t) => t.toLowerCase().includes(term)))
+      .sort((a, b) => {
+        // Highlighted first, then higher priority, then newest.
+        const rank: Record<PriorityLevel, number> = { urgent: 3, high: 2, medium: 1, low: 0 };
+        if (!!b.highlighted !== !!a.highlighted) return b.highlighted ? 1 : -1;
+        return (rank[b.priority] ?? 0) - (rank[a.priority] ?? 0) || (b.updatedAt || '').localeCompare(a.updatedAt || '');
+      });
+  }, [concepts, productionJobs, pickSearch]);
 
   const todayRow = scheduleDays.find((d) => d.date === today);
   const dayClosed = !!todayRow?.closed;
@@ -124,6 +147,37 @@ export function ProductionCockpit() {
 
   const resolveProblem = (j: ProductionJob) =>
     updateProductionJob(j.id, { status: 'scheduled', scheduledDate: today });
+
+  // Pull a job from an approved design. `startNow` starts it immediately (only
+  // offered when nothing is already running); otherwise it lands in today's queue.
+  const pickConcept = async (c: Concept, startNow: boolean) => {
+    if (starting) return;
+    setStarting(c.id);
+    try {
+      const lc = c.specs?.laserComplexity || 3;
+      const complexity = lc <= 1 ? 'low' : lc <= 3 ? 'medium' : lc === 4 ? 'high' : 'very_high';
+      const created = await addProductionJob({
+        title: c.name,
+        sourceType: 'workflow',
+        conceptId: c.id,
+        designName: c.name,
+        designImageUrl: c.coilImageUrl || c.combinedImageUrl || c.baseImageUrl || '',
+        productType: c.collection || '',
+        complexity: complexity as ProductionJob['complexity'],
+        priority: c.priority,
+        tags: Array.from(new Set([...(c.tags || []), 'One of Ones'])),
+        designNotes: c.manufacturingNotes || c.description || '',
+        quantity: 1,
+        scheduledDate: today,
+        status: startNow ? 'in_progress' : 'scheduled',
+        ...(startNow ? { actualStartTime: new Date().toISOString() } : {}),
+      });
+      if (created) toast(startNow ? `Started “${created.title}” ▶` : `Queued “${created.title}”`, 'success');
+      else toast('Could not create the job', 'error');
+    } finally {
+      setStarting(null);
+    }
+  };
 
   const doCloseout = async (summary: string, unfinishedNote: string) => {
     await closeOutDay(today, {
@@ -199,10 +253,15 @@ export function ProductionCockpit() {
                   ▶ Start “{queue[0].title}”
                 </button>
               </div>
+            ) : readyConcepts.length > 0 ? (
+              <div className="bg-surface border border-dashed border-border rounded-xl p-5 text-center">
+                <p className="text-sm font-medium">Nothing running.</p>
+                <p className="text-sm text-muted mt-1">Pick your next piece from the approved designs below 👇</p>
+              </div>
             ) : (
               <div className="bg-surface border border-border rounded-xl p-6 text-center">
                 <p className="text-lg font-medium">All caught up 🎉</p>
-                <p className="text-sm text-muted mt-1">No jobs left in today&apos;s queue.</p>
+                <p className="text-sm text-muted mt-1">No jobs queued and no approved designs waiting.</p>
               </div>
             )}
           </section>
@@ -218,6 +277,42 @@ export function ProductionCockpit() {
               </div>
             </section>
           )}
+
+          {/* Choose your next piece — pull work from approved designs */}
+          <section>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Choose your next piece ({readyConcepts.length})</h2>
+              {concepts.some((c) => c.status === 'approved' || c.status === 'ready_for_manufacturing') && (
+                <input
+                  value={pickSearch}
+                  onChange={(e) => setPickSearch(e.target.value)}
+                  placeholder="Search designs…"
+                  className="text-sm bg-background border border-border rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:border-accent"
+                />
+              )}
+            </div>
+            {readyConcepts.length === 0 ? (
+              <div className="bg-surface border border-dashed border-border rounded-xl p-5 text-center text-sm text-muted">
+                {pickSearch ? 'No approved designs match your search.' : 'No approved designs waiting. Once designs are approved they show up here to make.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {readyConcepts.slice(0, 18).map((c) => (
+                  <PickCard
+                    key={c.id}
+                    concept={c}
+                    busy={starting === c.id}
+                    canStartNow={!active}
+                    onStart={() => pickConcept(c, true)}
+                    onQueue={() => pickConcept(c, false)}
+                  />
+                ))}
+              </div>
+            )}
+            {readyConcepts.length > 18 && (
+              <p className="text-xs text-muted mt-2">Showing 18 of {readyConcepts.length}. Search to narrow.</p>
+            )}
+          </section>
 
           {/* Problems */}
           {problems.length > 0 && (
@@ -375,6 +470,50 @@ function JobCard({
               <button onClick={() => onProblem('rework')} className="px-3 py-1.5 text-sm font-medium rounded-lg bg-background border border-border text-amber-700 hover:bg-amber-50">↻ Rework</button>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Approved-design pick card ───────────────────────────────────────────────
+function PickCard({
+  concept, busy, canStartNow, onStart, onQueue,
+}: {
+  concept: Concept;
+  busy: boolean;
+  canStartNow: boolean;
+  onStart: () => void;
+  onQueue: () => void;
+}) {
+  const img = concept.coilImageUrl || concept.combinedImageUrl || concept.baseImageUrl || '';
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden flex flex-col">
+      <div className="aspect-square bg-background relative">
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={img} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted text-xs">no art</div>
+        )}
+        {concept.highlighted && <span className="absolute top-1 left-1 text-amber-400 text-sm">★</span>}
+        {concept.status === 'ready_for_manufacturing' && (
+          <span className="absolute top-1 right-1 text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">READY</span>
+        )}
+      </div>
+      <div className="p-2 flex flex-col gap-1.5 flex-1">
+        <div className="text-sm font-medium leading-tight line-clamp-2">{concept.name}</div>
+        <div className="mt-auto flex gap-1.5">
+          {canStartNow && (
+            <button onClick={onStart} disabled={busy}
+              className="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-accent hover:bg-accent-hover text-white disabled:opacity-50">
+              {busy ? '…' : '▶ Start'}
+            </button>
+          )}
+          <button onClick={onQueue} disabled={busy}
+            className={`${canStartNow ? '' : 'flex-1'} px-2 py-1.5 text-xs font-medium rounded-lg bg-background border border-border hover:bg-surface-hover disabled:opacity-50`}>
+            {busy && !canStartNow ? '…' : '＋ Queue'}
+          </button>
         </div>
       </div>
     </div>
