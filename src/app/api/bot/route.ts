@@ -23,12 +23,18 @@ export async function GET(request: NextRequest) {
     statuses: BOT_STATUSES,
     endpoints: {
       'GET /api/bot': 'This manifest + auth check.',
+      'GET /api/bot/tools': 'The endpoints as an OpenAI/Grok function-calling tools array (register these as tools).',
+      'GET /api/bot/stats': 'Studio KPIs: design + production counts, performance totals.',
+      'GET /api/bot/search': 'Find designs by name/description/tag. Query: q, limit.',
+      'GET /api/bot/calendar': 'Upcoming holidays/events to design drops for. Query: days.',
       'GET /api/bot/designs':
         'Bulk export of designs (specs + latest performance). Query: status, collection, updatedSince (ISO), limit (<=500), offset.',
       'POST /api/bot/designs':
         'Bulk create/update designs. { designs: [{ externalId?, id?, name, description?, tags?, status?, coilOnly?, coilImageUrl?, coilDimensions?, source? }] }. Matches on id or externalId.',
       'POST /api/bot/designs/generate':
         'Generate a real coil image for a design and save it. { conceptId? | externalId?, prompt?, size? }.',
+      'POST /api/bot/designs/marketing':
+        'Generate taglines + product story for a design. { conceptId? | externalId?, apply? }.',
       'POST /api/bot/ideas':
         'AI brainstorm laser-etch design ideas. { prompt?, count? (1..12), create? }. create=true also saves them as ideation concepts.',
       'POST /api/bot/performance':
@@ -41,12 +47,14 @@ export async function GET(request: NextRequest) {
       'GET /api/bot/production': 'Read the production queue + machines. Query: status?, limit.',
       'POST /api/bot/production':
         'Create/update production jobs. { jobs: [{ id?, conceptId? | externalId?, title?, status?, priority?, machineId?, scheduledDate?, quantity?, notes? }] }.',
+      'GET /api/bot/comments': 'Read notes on a design. Query: conceptId? | externalId?.',
+      'POST /api/bot/comments': 'Leave a note on a design (visible to the team). { conceptId? | externalId?, text, author? }.',
       'GET /api/bot/messages':
         'Pull messages from the manufacturing team. Default = unread human messages (marks them read); ?all=true for the whole thread.',
       'POST /api/bot/messages': 'Reply into the team chat thread. { text, metadata? }.',
     },
     webhook:
-      'Set BOT_WEBHOOK_URL to receive instant POSTs (with Authorization: Bearer <BOT_API_KEY>) when the team sends a chat message: { type: "chat.message", message }. Otherwise poll GET /api/bot/messages.',
+      'Set BOT_WEBHOOK_URL to receive instant POSTs (with Authorization: Bearer <BOT_API_KEY>). Events: { type: "chat.message", message } when the team sends a message; { type: "design.approved", conceptId, status } on approval; { type: "production.completed", jobId } when a job finishes. Otherwise poll GET /api/bot/messages.',
     identifiers: {
       conceptId: 'This app\'s design id (uuid).',
       externalId:

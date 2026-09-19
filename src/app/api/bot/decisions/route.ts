@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { requireBotKey, resolveConceptId, BOT_STATUSES } from '@/lib/bot-api';
+import { requireBotKey, resolveConceptId, BOT_STATUSES, notifyBotWebhook } from '@/lib/bot-api';
 
 export const maxDuration = 60;
 
@@ -84,6 +84,10 @@ export async function POST(request: NextRequest) {
         }
 
         applied.push(conceptId);
+        // Instant event to the bot on approval / ready-for-production.
+        if (status === 'approved' || status === 'ready_for_manufacturing') {
+          notifyBotWebhook({ type: 'design.approved', conceptId, externalId: (d.externalId as string) ?? null, status });
+        }
       } catch (err) {
         errors.push({ index: i, error: err instanceof Error ? err.message : 'failed' });
       }

@@ -89,6 +89,22 @@ The tech chats with you from inside the app (the "Bot Chat" tab).
 
 ---
 
+## More endpoints
+- `GET /api/bot/tools` — all endpoints as an OpenAI/Grok **function-calling tools** array. Register these as tools so the model calls them structurally; each carries an `endpoint {method,path}` your runner uses to make the HTTP request.
+- `GET /api/bot/stats` — studio KPIs (design + production counts, performance totals).
+- `GET /api/bot/search?q=&limit=` — find designs by name/description/tag.
+- `GET /api/bot/calendar?days=` — upcoming holidays/events (with design-idea hints) to plan drops.
+- `POST /api/bot/designs/marketing` — `{ conceptId? | externalId?, apply? }` → taglines + product story (apply=true saves them).
+- `GET /api/bot/comments?conceptId=` and `POST /api/bot/comments` `{ conceptId? | externalId?, text }` — read/leave notes on a design (visible to the team).
+
+## Events (webhook)
+If `BOT_WEBHOOK_URL` is set, the studio POSTs these to you (with `Authorization: Bearer <BOT_API_KEY>`):
+- `{ type: "chat.message", message }` — the tech sent a message.
+- `{ type: "design.approved", conceptId, status }` — a design was approved / moved to ready.
+- `{ type: "production.completed", jobId }` — a production job finished.
+
+---
+
 ## Suggested loop
 1. `GET /api/bot/messages` — pick up anything the tech said; adjust accordingly.
 2. `GET /api/bot/designs` + `GET /api/bot/performance` — study what's selling.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { dbJobToFrontend, jobToDbRow, insertWithFallback, updateWithFallback } from '@/lib/production-db';
 import { ProductionJob } from '@/lib/types';
-import { requireBotKey, resolveConceptId } from '@/lib/bot-api';
+import { requireBotKey, resolveConceptId, notifyBotWebhook } from '@/lib/bot-api';
 
 export const maxDuration = 60;
 
@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
           const { data, error } = await updateWithFallback('production_jobs', String(j.id), row);
           if (error || !data) { errors.push({ index: i, error: error?.message ?? 'not found' }); continue; }
           updated.push(String(j.id));
+          if (partial.status === 'completed') {
+            notifyBotWebhook({ type: 'production.completed', jobId: String(j.id), conceptId: partial.conceptId ?? null });
+          }
         } else {
           if (!partial.title) partial.title = 'Bot job';
           const insertRow = jobToDbRow(partial);
