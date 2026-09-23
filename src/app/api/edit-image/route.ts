@@ -7,6 +7,7 @@ import { uploadImage } from '@/lib/supabase';
 import { PROVIDER_CONFIG } from '@/lib/ai-providers';
 import { callOpenAIImageEdit, openAIErrorResponse } from '@/lib/openai';
 import { ENGRAVING_RULES } from '@/lib/prompt-builder';
+import { enforceMonochrome } from '@/lib/monochrome';
 
 /**
  * Edit an existing generated image with small targeted changes,
@@ -139,6 +140,9 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json({ error: 'OpenAI returned no image payload' }, { status: 500 });
     }
+
+    // Edited etch designs must stay pure B&W — enforce before storing.
+    base64Data = await enforceMonochrome(base64Data);
 
     // Upload the edited result to Supabase Storage
     let url: string;

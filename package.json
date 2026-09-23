@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:monochrome": "tsx scripts/test-monochrome.ts",
     "data:pull": "node scripts/pull-data.mjs",
     "data:push": "node scripts/push-data.mjs"
   },

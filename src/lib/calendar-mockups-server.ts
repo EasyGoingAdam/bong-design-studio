@@ -16,6 +16,7 @@ import {
   getAuthHeaders,
   PROVIDER_CONFIG,
 } from './ai-providers';
+import { enforceMonochrome } from './monochrome';
 import { HOLIDAY_EVENTS, HolidayEvent, nextOccurrence } from './holiday-events';
 import {
   CalendarMockup,
@@ -94,6 +95,9 @@ async function generateCoilImage(
     if (!imgRes.ok) throw new Error(`Failed to download generated image (${imgRes.status})`);
     base64 = `data:image/png;base64,${Buffer.from(await imgRes.arrayBuffer()).toString('base64')}`;
   }
+  // Hard-enforce monochrome before storing (models return grays/tints despite
+  // the B&W prompt).
+  base64 = await enforceMonochrome(base64);
 
   let url: string;
   try {

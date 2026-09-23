@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin, uploadImage } from './supabase';
 import { validateParams, getOpenAIRequestBody, getEndpoint, getAuthHeaders } from './ai-providers';
+import { enforceMonochrome } from './monochrome';
 
 /**
  * Shared helpers for the bot-facing bulk API (`/api/bot/*`).
@@ -126,6 +127,9 @@ export async function generateCoilImageServer(
     const r = await fetch(img.url);
     base64 = `data:image/png;base64,${Buffer.from(await r.arrayBuffer()).toString('base64')}`;
   }
+  // Hard-enforce monochrome: the model's B&W is only a request, so strip any
+  // chroma at the pixel level before the image is ever stored.
+  base64 = await enforceMonochrome(base64);
   try {
     return await uploadImage(base64, 'bot', filename);
   } catch {

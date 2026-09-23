@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
     // PNG is lossless so no quality loss.
     const metadata = await sharp(sourceBuffer).metadata();
     const invertedBuffer = await sharp(sourceBuffer)
+      // grayscale() first guarantees a colorless (monochrome) etch design even
+      // if the source somehow carried chroma; negate() then flips black↔white.
+      .grayscale()
       .negate({ alpha: false })
       .png({ compressionLevel: 9, adaptiveFiltering: true }) // highest quality PNG
       .toBuffer();

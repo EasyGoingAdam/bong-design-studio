@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withLog, log, timer } from '@/lib/log';
 import { callOpenAIChat } from '@/lib/openai';
 import { uploadImage } from '@/lib/supabase';
+import { enforceMonochrome } from '@/lib/monochrome';
 import {
   validateParams,
   getOpenAIRequestBody,
@@ -182,6 +183,9 @@ async function generateStampDirect(
     base64Data = await callOpenAI('v1');
     modelUsed = 'gpt-image-1';
   }
+
+  // Stamps are B&W engraving graphics — enforce monochrome before storing.
+  base64Data = await enforceMonochrome(base64Data);
 
   // Upload to Supabase Storage so the URL outlives the data: URI.
   // Inline base64 fallback if upload fails (matches generate-image).

@@ -13,6 +13,7 @@ import {
   getAuthHeaders,
   PROVIDER_CONFIG,
 } from '@/lib/ai-providers';
+import { enforceMonochrome } from '@/lib/monochrome';
 
 async function generateWithOpenAI(
   params: ReturnType<typeof validateParams>,
@@ -149,6 +150,11 @@ export async function POST(request: NextRequest) {
     } else {
       base64Data = await generateWithOpenAI(params, 'v1');
     }
+
+    // HARD monochrome enforcement — every generated etch design must be pure
+    // B&W with zero chroma, regardless of what the model returned. This is the
+    // guarantee that the prompt alone can't provide.
+    base64Data = await enforceMonochrome(base64Data);
 
     // Upload to Supabase Storage. `stored` tells the client whether the image
     // is a persistable storage URL or a data-URI fallback (upload failed) —

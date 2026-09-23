@@ -33,7 +33,12 @@ async function downloadAs(imageUrl: string, filename: string, format: 'png' | 'j
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
+    // Belt-and-braces: force the exported pixels to grayscale so a downloaded
+    // etch design can never carry color, even if an older colored image is
+    // still stored. (Server generation is already monochrome-enforced.)
+    ctx.filter = 'grayscale(1)';
     ctx.drawImage(img, 0, 0);
+    ctx.filter = 'none';
 
     if (format === 'svg') {
       const dataUrl = canvas.toDataURL('image/png');

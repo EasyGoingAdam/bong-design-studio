@@ -194,10 +194,20 @@ export function validateParams(raw: Partial<ImageGenParams> & { prompt: string }
  * SAFETY: Only includes keys listed in allowedBodyKeys. Any extra keys are silently dropped.
  * This prevents "Invalid value" errors from unexpected parameters.
  */
+/**
+ * Monochrome reinforcement appended to the v1 OpenAI prompt. v2 and Gemini get
+ * their own tuners (tuneOpenAIv2Prompt / tuneGeminiPrompt); v1 previously got
+ * none, so it was the weakest path for color leaking through. Pixel-level
+ * enforcement (src/lib/monochrome.ts) is the hard guarantee; this just stops the
+ * model wasting effort on color that will be flattened anyway.
+ */
+export const MONO_PROMPT_TAIL =
+  ' STRICT: pure black-and-white only. No color, no tints, no chroma. Solid black on white background — grayscale line art at most, never colored.';
+
 export function getOpenAIRequestBody(params: ImageGenParams): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: PROVIDER_CONFIG.openai.model,
-    prompt: params.prompt,
+    prompt: `${params.prompt}${MONO_PROMPT_TAIL}`,
     n: 1,
     size: params.size,
     quality: params.quality,
