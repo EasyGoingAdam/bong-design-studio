@@ -222,6 +222,11 @@ export function SystemSetupCard({ unstoredImages }: { unstoredImages: number }) 
               check={features?.botMessages}
               trailing={migrationActions('bot-messages', features?.botMessages?.ok)}
             />
+            <Row
+              label="Studio 2.0 tables"
+              check={features?.studio2}
+              trailing={migrationActions('studio-2', features?.studio2?.ok)}
+            />
           </div>
 
           {/* Core services */}

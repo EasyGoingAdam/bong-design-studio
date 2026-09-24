@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:monochrome": "tsx scripts/test-monochrome.ts",
+    "test:studio": "tsx scripts/test-studio.ts",
     "data:pull": "node scripts/pull-data.mjs",
     "data:push": "node scripts/push-data.mjs"
   },

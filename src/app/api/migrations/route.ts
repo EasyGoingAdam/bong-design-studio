@@ -12,6 +12,7 @@ const MIGRATIONS: Record<string, string> = {
   'production-tasks': 'supabase-migration-production-tasks.sql',
   'design-performance': 'supabase-migration-design-performance.sql',
   'bot-messages': 'supabase-migration-bot-messages.sql',
+  'studio-2': 'supabase-migration-studio-2.sql',
 };
 
 export async function GET() {

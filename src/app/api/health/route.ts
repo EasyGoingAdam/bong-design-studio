@@ -178,6 +178,18 @@ export async function GET(request: NextRequest) {
     features.botMessages = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
   }
 
+  // studio 2.0 — product templates + design projects
+  try {
+    const { error, count } = await supabaseAdmin
+      .from('product_templates')
+      .select('id', { count: 'exact', head: true });
+    features.studio2 = error
+      ? { ok: false, detail: 'tables missing — run supabase-migration-studio-2.sql' }
+      : { ok: true, detail: `${count ?? 0} product templates` };
+  } catch (err) {
+    features.studio2 = { ok: false, detail: err instanceof Error ? err.message : 'check failed' };
+  }
+
   const ok = Object.values(checks).every((c) => c.ok);
 
   // Deploy provenance — lets you (and the bot) confirm which commit is actually

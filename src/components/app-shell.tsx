@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAppStore } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 import { Dashboard } from './dashboard';
+import { DesignStudio } from './design-studio';
 import { ProductionCockpit } from './production-cockpit';
 import { ConceptsLibrary } from './concepts-library';
 import { WorkflowBoard } from './workflow-board';
@@ -87,17 +88,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [showSettings, setShowSettings] = useState(false);
   const { initialize, initialized, loading, setAuthUser } = useAppStore();
 
-  // Top-level mode: the full design Studio (the default main experience, all 19
-  // tabs) vs. the streamlined Production cockpit (a secondary, focused view for
-  // working the shop floor). Anyone can switch; remembered per-browser.
-  const [mode, setMode] = useState<'production' | 'studio'>('studio');
+  // Top-level mode: the simplified Design studio (2.0, the default), the full
+  // Advanced studio (all 19 legacy tabs), or the Production cockpit. Anyone can
+  // switch; remembered per-browser.
+  type Mode = 'design' | 'advanced' | 'production';
+  const [mode, setMode] = useState<Mode>('design');
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('app-mode');
-      if (saved === 'studio' || saved === 'production') setMode(saved);
+      // Migrate the old 'studio' value → 'advanced'.
+      if (saved === 'studio') setMode('advanced');
+      else if (saved === 'design' || saved === 'advanced' || saved === 'production') setMode(saved);
     } catch {}
   }, []);
-  const switchMode = (m: 'production' | 'studio') => {
+  const switchMode = (m: Mode) => {
     setMode(m);
     try { window.localStorage.setItem('app-mode', m); } catch {}
   };
@@ -261,7 +265,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const studioReady = initialized && mode === 'studio';
+  const studioReady = initialized && mode === 'advanced';
 
   return (
     <ToastProvider>
@@ -282,21 +286,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Studio ⇄ Production switch. Studio is the main experience;
-              Production is the secondary shop-floor cockpit. */}
+          {/* Design (2.0) · Advanced (legacy tabs) · Production cockpit. */}
           <div className="flex items-center rounded-lg border border-border overflow-hidden text-xs font-medium">
-            <button
-              onClick={() => switchMode('studio')}
-              className={`px-3 py-1.5 transition-colors ${mode === 'studio' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
-            >
-              Studio
-            </button>
-            <button
-              onClick={() => switchMode('production')}
-              className={`px-3 py-1.5 transition-colors ${mode === 'production' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
-            >
-              Production
-            </button>
+            {([['design', 'Design'], ['advanced', 'Advanced'], ['production', 'Production']] as const).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className={`px-3 py-1.5 transition-colors ${mode === m ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           {/* Visible build indicator — confirms which deploy is actually
               running in your browser. Hover for the build time. The bright
@@ -323,7 +323,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           so the "More" dropdown can escape vertically without being clipped.
           Previously the dropdown was getting cropped because the parent
           `overflow-x-auto` implicitly clipped the y-axis too. */}
-      {mode === 'studio' && (
+      {mode === 'advanced' && (
       <nav className="border-b border-border bg-surface px-2 sm:px-6 shrink-0 relative" role="navigation" aria-label="Main navigation">
         <div className="flex gap-1 items-center min-w-max overflow-x-auto">
           {PRIMARY_TABS.map((tab) => (
@@ -432,7 +432,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             active tab so switching tabs always re-mounts a fresh boundary.
             A crash in one view (e.g. AI Generate) now shows an inline error
             with the message + stack instead of white-screening the app. */}
-        <ErrorBoundary key={mode === 'production' ? 'production' : activeTab} scope={mode === 'production' ? 'production' : activeTab} fallback={renderTabError}>
+        <ErrorBoundary key={mode === 'advanced' ? activeTab : mode} scope={mode === 'advanced' ? activeTab : mode} fallback={renderTabError}>
+          {initialized && mode === 'design' && <DesignStudio />}
           {initialized && mode === 'production' && <ProductionCockpit />}
           {studioReady && activeTab === 'dashboard' && <Dashboard onOpenConcept={openConcept} />}
           {studioReady && activeTab === 'concepts' && <ConceptsLibrary onOpenConcept={openConcept} />}
