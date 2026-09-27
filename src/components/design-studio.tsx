@@ -51,6 +51,8 @@ export function DesignStudio() {
   const [view, setView] = useState<'create' | 'archive'>('create');
   const [projects, setProjects] = useState<DesignProject[]>([]);
   const [showProducts, setShowProducts] = useState(false);
+  const [mockupUrl, setMockupUrl] = useState<string | null>(null);
+  const [mockupBusy, setMockupBusy] = useState(false);
   const isAdmin = currentUser?.role === 'admin';
 
   const loadTemplates = () => {
@@ -211,6 +213,28 @@ export function DesignStudio() {
     });
   };
 
+  const previewOnProduct = async () => {
+    if (!project) return;
+    const blank = templates.find((t) => t.productName === project.productName && t.previewImage)?.previewImage;
+    if (!blank) { toast('Add a product photo in ⚙ Products to enable previews', 'info'); return; }
+    const coil = project.targets?.find((t) => /coil/i.test(t.name))?.currentVersion?.imageUrl || project.targets?.[0]?.currentVersion?.imageUrl;
+    const base = project.targets?.find((t) => /base/i.test(t.name))?.currentVersion?.imageUrl;
+    if (!coil) { toast('Generate the design first', 'error'); return; }
+    setMockupBusy(true);
+    setMockupUrl(null);
+    try {
+      const res = await fetch('/api/mockup-product', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blankProductUrl: blank, coilDesignUrl: coil, baseDesignUrl: base, apiKey: openAIKey, angle: 'front', etchStyle: 'frosted', placement: 'auto', background: 'white_studio', folder: 'studio-mockups', filename: `mockup-${project.id.slice(0, 8)}` }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.url) { toast(data?.error || 'Preview failed', 'error'); return; }
+      setMockupUrl(data.url);
+    } finally {
+      setMockupBusy(false);
+    }
+  };
+
   const setStatus = async (status: string) => {
     if (!project) return;
     await fetch(`/api/studio/projects/${project.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
@@ -334,6 +358,7 @@ export function DesignStudio() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">{project.type === 'set' ? 'Design Set' : 'Generated Design'}</h2>
             <div className="flex gap-2">
+              <button onClick={previewOnProduct} disabled={mockupBusy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-50">{mockupBusy ? 'Rendering…' : '👓 Preview on Product'}</button>
               <button onClick={() => setStatus('favorite')} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground">☆ Save</button>
               <button onClick={() => setStatus('approved')} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white">✓ Approve</button>
             </div>
@@ -354,6 +379,20 @@ export function DesignStudio() {
       )}
 
       {showProducts && <ProductTemplateAdmin templates={templates} onClose={() => setShowProducts(false)} onChange={loadTemplates} />}
+
+      {mockupUrl && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setMockupUrl(null)}>
+          <div className="bg-surface border border-border rounded-xl max-w-lg w-full p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold">Preview on Product</span>
+              <button onClick={() => setMockupUrl(null)} className="text-muted hover:text-foreground text-lg">×</button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={mockupUrl} alt="Product mockup" className="w-full rounded-lg" />
+            <p className="text-[11px] text-muted mt-2">Mockup is illustrative (full color) — your production files stay binary black/white.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -481,17 +520,32 @@ function ArchiveView({ projects, onOpen }: { projects: DesignProject[]; onOpen: 
 // ── Admin: product template editor ──────────────────────────────────────────
 function ProductTemplateAdmin({ templates, onClose, onChange }: { templates: ProductTemplate[]; onClose: () => void; onChange: () => void }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({ productName: '', targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false });
+  const [form, setForm] = useState({ productName: '', targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false, previewImage: '' });
+  const [uploading, setUploading] = useState(false);
+
+  const uploadPhoto = async (file: File) => {
+    setUploading(true);
+    try {
+      const data = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = reject; fr.readAsDataURL(file);
+      });
+      const res = await fetch('/api/upload-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data, folder: 'product-blanks', filename: `blank-${Date.now()}` }) });
+      const out = await res.json();
+      if (out?.url) { setForm((f) => ({ ...f, previewImage: out.url })); toast('Photo uploaded', 'success'); }
+      else toast('Upload failed', 'error');
+    } catch { toast('Upload failed', 'error'); }
+    finally { setUploading(false); }
+  };
 
   const save = async () => {
     if (!form.productName.trim() || !form.targetName.trim()) { toast('Product and area name required', 'error'); return; }
     const shape = form.supportsWrap ? 'wrap' : (Number(form.widthIn) > Number(form.heightIn) * 1.25 ? 'wide' : 'standard');
     const res = await fetch('/api/product-templates', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productName: form.productName.trim(), targetName: form.targetName.trim(), widthIn: Number(form.widthIn) || null, heightIn: Number(form.heightIn) || null, supportsWrap: form.supportsWrap, seamlessDefault: form.seamlessDefault, shape }),
+      body: JSON.stringify({ productName: form.productName.trim(), targetName: form.targetName.trim(), widthIn: Number(form.widthIn) || null, heightIn: Number(form.heightIn) || null, supportsWrap: form.supportsWrap, seamlessDefault: form.seamlessDefault, previewImage: form.previewImage, shape }),
     });
     if (!res.ok) { toast('Save failed', 'error'); return; }
-    setForm({ productName: form.productName, targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false });
+    setForm({ productName: form.productName, targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false, previewImage: '' });
     onChange(); toast('Saved', 'success');
   };
   const remove = async (id: string) => {
@@ -522,11 +576,16 @@ function ProductTemplateAdmin({ templates, onClose, onChange }: { templates: Pro
             <input value={form.widthIn} onChange={(e) => setForm({ ...form, widthIn: e.target.value })} placeholder="Width (in)" type="number" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
             <input value={form.heightIn} onChange={(e) => setForm({ ...form, heightIn: e.target.value })} placeholder="Height (in)" type="number" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-4 text-sm flex-wrap">
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={form.supportsWrap} onChange={(e) => setForm({ ...form, supportsWrap: e.target.checked })} /> Wrap</label>
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={form.seamlessDefault} onChange={(e) => setForm({ ...form, seamlessDefault: e.target.checked })} /> Seamless default</label>
+            <label className="flex items-center gap-1.5 cursor-pointer text-muted hover:text-foreground">
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); }} />
+              {uploading ? 'Uploading…' : form.previewImage ? '✓ Photo set' : '+ Product photo'}
+            </label>
             <button onClick={save} className="ml-auto px-4 py-2 text-sm bg-accent text-white rounded-lg">Add / Update</button>
           </div>
+          <p className="text-[11px] text-muted">A product photo enables “Preview on Product” for that product.</p>
         </div>
       </div>
     </div>
