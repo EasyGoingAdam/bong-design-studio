@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
     const versionId = sp.get('versionId') || '';
     const format = (sp.get('format') || 'png').toLowerCase();
     const name = safeName(sp.get('name') || 'design');
+    const wIn = parseFloat(sp.get('wIn') || '') || 0;
+    const hIn = parseFloat(sp.get('hIn') || '') || 0;
     if (!versionId) return NextResponse.json({ error: 'versionId required' }, { status: 400 });
 
     const { data: v } = await supabaseAdmin.from('design_versions').select('image_url').eq('id', versionId).maybeSingle();
@@ -45,18 +47,38 @@ export async function GET(request: NextRequest) {
     // svg
     try {
       const { svg } = await traceToSvg(master);
-      return fileResponse(Buffer.from(svg, 'utf8'), 'image/svg+xml', `${name}.svg`, { 'X-Svg-Kind': 'vector' });
+      return fileResponse(Buffer.from(withPhysicalSize(svg, wIn, hIn), 'utf8'), 'image/svg+xml', `${name}.svg`, { 'X-Svg-Kind': 'vector' });
     } catch (err) {
       console.warn('[studio/export] vector trace failed, embedding raster:', err instanceof Error ? err.message : err);
       const meta = await sharp(master).metadata();
       const b64 = (await sharp(master).png().toBuffer()).toString('base64');
       const w = meta.width ?? 1024, h = meta.height ?? 1024;
       const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" xlink:href="data:image/png;base64,${b64}"/></svg>`;
-      return fileResponse(Buffer.from(svg, 'utf8'), 'image/svg+xml', `${name}.svg`, { 'X-Svg-Kind': 'embedded' });
+      return fileResponse(Buffer.from(withPhysicalSize(svg, wIn, hIn), 'utf8'), 'image/svg+xml', `${name}.svg`, { 'X-Svg-Kind': 'embedded' });
     }
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Export failed' }, { status: 500 });
   }
+}
+
+/**
+ * Stamp real physical size onto an SVG so the laser software imports it at the
+ * correct inches. Keeps a pixel viewBox for geometry; sets width/height in `in`.
+ */
+function withPhysicalSize(svg: string, wIn: number, hIn: number): string {
+  if (!wIn || !hIn) return svg;
+  const openMatch = svg.match(/<svg\b[^>]*>/);
+  if (!openMatch) return svg;
+  let tag = openMatch[0];
+  const wPx = tag.match(/\bwidth="([\d.]+)(?:px)?"/)?.[1];
+  const hPx = tag.match(/\bheight="([\d.]+)(?:px)?"/)?.[1];
+  // Ensure a viewBox exists (fall back to the pixel dimensions).
+  if (!/viewBox=/.test(tag) && wPx && hPx) {
+    tag = tag.replace(/<svg\b/, `<svg viewBox="0 0 ${wPx} ${hPx}"`);
+  }
+  tag = tag.replace(/\bwidth="[^"]*"/, `width="${wIn}in"`).replace(/\bheight="[^"]*"/, `height="${hIn}in"`);
+  if (!/\bwidth=/.test(tag)) tag = tag.replace(/<svg\b/, `<svg width="${wIn}in" height="${hIn}in"`);
+  return svg.replace(openMatch[0], tag);
 }
 
 function fileResponse(buf: Buffer, contentType: string, filename: string, extra: Record<string, string> = {}): NextResponse {

@@ -213,6 +213,39 @@ export function DesignStudio() {
     });
   };
 
+  const reverseAll = async () => {
+    if (!project) return;
+    for (const t of project.targets ?? []) { if (t.currentVersion?.id) await reverseTarget(t); }
+  };
+
+  const downloadOne = async (versionId: string, name: string, format: 'svg' | 'png' | 'jpg', wIn?: number | null, hIn?: number | null) => {
+    const dim = wIn && hIn ? `&wIn=${wIn}&hIn=${hIn}` : '';
+    const res = await fetch(`/api/studio/export?versionId=${versionId}&format=${format}&name=${encodeURIComponent(name)}${dim}`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${name}.${format}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+
+  const downloadSet = async () => {
+    if (!project) return;
+    const base = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+    for (const t of project.targets ?? []) {
+      if (!t.currentVersion?.id) continue;
+      const fn = `${base}-${t.name.toLowerCase()}`;
+      for (const f of ['svg', 'png', 'jpg'] as const) await downloadOne(t.currentVersion.id, fn, f, t.physicalWidth, t.physicalHeight);
+    }
+    toast('Downloaded the full set', 'success');
+  };
+
+  const deleteProject = async (id: string) => {
+    if (!window.confirm('Delete this design permanently?')) return;
+    await fetch(`/api/studio/projects/${id}`, { method: 'DELETE' });
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    if (project?.id === id) { setProject(null); }
+  };
+
   const previewOnProduct = async () => {
     if (!project) return;
     const blank = templates.find((t) => t.productName === project.productName && t.previewImage)?.previewImage;
@@ -258,7 +291,7 @@ export function DesignStudio() {
       </div>
 
       {view === 'archive' && (
-        <ArchiveView projects={projects} onOpen={openProject} />
+        <ArchiveView projects={projects} onOpen={openProject} onDelete={deleteProject} />
       )}
 
       {view === 'create' && (
@@ -357,7 +390,13 @@ export function DesignStudio() {
         <section className="border-t border-border pt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">{project.type === 'set' ? 'Design Set' : 'Generated Design'}</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {(project.targets?.length ?? 0) > 1 && (
+                <>
+                  <button onClick={reverseAll} disabled={busyTarget !== null} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-50">Reverse Set</button>
+                  <button onClick={downloadSet} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground">Download Set</button>
+                </>
+              )}
               <button onClick={previewOnProduct} disabled={mockupBusy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-50">{mockupBusy ? 'Rendering…' : '👓 Preview on Product'}</button>
               <button onClick={() => setStatus('favorite')} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground">☆ Save</button>
               <button onClick={() => setStatus('approved')} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white">✓ Approve</button>
@@ -427,7 +466,7 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, 
         <button onClick={onRegenerate} disabled={busy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-40">Regenerate</button>
         <button onClick={onReverse} disabled={busy || !v} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-40">Reverse ◑</button>
       </div>
-      {v && <StudioExport versionId={v.id} name={fileBase} />}
+      {v && <StudioExport versionId={v.id} name={fileBase} wIn={target.physicalWidth} hIn={target.physicalHeight} />}
 
       <div className="mt-3">
         <div className="text-xs text-muted mb-1">Tell AI what to change:</div>
@@ -467,22 +506,31 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, 
 }
 
 // ── Archive (visual project library) ────────────────────────────────────────
-function ArchiveView({ projects, onOpen }: { projects: DesignProject[]; onOpen: (id: string) => void }) {
+function ArchiveView({ projects, onOpen, onDelete }: { projects: DesignProject[]; onOpen: (id: string) => void; onDelete: (id: string) => void }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'single' | 'set'>('all');
+  const [productFilter, setProductFilter] = useState('all');
+  const productList = Array.from(new Set(projects.map((p) => p.productName).filter(Boolean)));
   const filtered = projects
     .filter((p) => filter === 'all' || p.type === filter)
+    .filter((p) => productFilter === 'all' || p.productName === productFilter)
     .filter((p) => {
       const t = q.trim().toLowerCase();
-      return !t || p.name.toLowerCase().includes(t) || (p.productName || '').toLowerCase().includes(t) || (p.originalRequest || '').toLowerCase().includes(t);
+      return !t || p.name.toLowerCase().includes(t) || (p.productName || '').toLowerCase().includes(t) || (p.originalRequest || '').toLowerCase().includes(t) || (p.createdBy || '').toLowerCase().includes(t);
     });
   const thumb = (p: DesignProject) => p.targets?.find((t) => t.currentVersion?.imageUrl)?.currentVersion?.imageUrl || '';
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search designs, products…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search designs, products, creator…"
           className="flex-1 min-w-[200px] bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent" />
+        {productList.length > 0 && (
+          <select value={productFilter} onChange={(e) => setProductFilter(e.target.value)} className="bg-surface border border-border rounded-lg px-2 py-2 text-sm">
+            <option value="all">All products</option>
+            {productList.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
         <div className="flex rounded-lg border border-border overflow-hidden text-xs">
           {(['all', 'single', 'set'] as const).map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={`px-3 py-2 capitalize ${filter === f ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>{f}</button>
@@ -494,22 +542,25 @@ function ArchiveView({ projects, onOpen }: { projects: DesignProject[]; onOpen: 
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {filtered.map((p) => (
-            <button key={p.id} onClick={() => onOpen(p.id)} className="text-left bg-surface border border-border rounded-xl overflow-hidden hover:border-accent transition-colors">
-              <div className="aspect-square bg-white">
-                {thumb(p) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={thumb(p)} alt={p.name} className="w-full h-full object-contain" />
-                ) : null}
-              </div>
-              <div className="p-2">
-                <div className="text-sm font-medium line-clamp-1">{p.name}</div>
-                <div className="text-[11px] text-muted flex items-center gap-1.5">
-                  {p.productName && <span className="truncate">{p.productName}</span>}
-                  {p.type === 'set' && <span className="text-accent">set</span>}
-                  <span className="ml-auto capitalize">{p.status}</span>
+            <div key={p.id} className="group relative bg-surface border border-border rounded-xl overflow-hidden hover:border-accent transition-colors">
+              <button onClick={() => onDelete(p.id)} title="Delete" className="absolute top-1 right-1 z-10 w-6 h-6 rounded-full bg-black/50 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+              <button onClick={() => onOpen(p.id)} className="text-left w-full">
+                <div className="aspect-square bg-white">
+                  {thumb(p) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumb(p)} alt={p.name} className="w-full h-full object-contain" />
+                  ) : null}
                 </div>
-              </div>
-            </button>
+                <div className="p-2">
+                  <div className="text-sm font-medium line-clamp-1">{p.name}</div>
+                  <div className="text-[11px] text-muted flex items-center gap-1.5">
+                    {p.productName && <span className="truncate">{p.productName}</span>}
+                    {p.type === 'set' && <span className="text-accent">set</span>}
+                    <span className="ml-auto capitalize">{p.status}</span>
+                  </div>
+                </div>
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -593,14 +644,15 @@ function ProductTemplateAdmin({ templates, onClose, onChange }: { templates: Pro
 }
 
 // ── Export bar (true-vector SVG / PNG / JPG / Download All) ─────────────────
-function StudioExport({ versionId, name }: { versionId: string; name: string }) {
+function StudioExport({ versionId, name, wIn, hIn }: { versionId: string; name: string; wIn?: number | null; hIn?: number | null }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const dimQuery = wIn && hIn ? `&wIn=${wIn}&hIn=${hIn}` : '';
 
   const download = async (format: 'svg' | 'png' | 'jpg') => {
     setBusy(format);
     try {
-      const res = await fetch(`/api/studio/export?versionId=${versionId}&format=${format}&name=${encodeURIComponent(name)}`);
+      const res = await fetch(`/api/studio/export?versionId=${versionId}&format=${format}&name=${encodeURIComponent(name)}${dimQuery}`);
       if (!res.ok) { toast('Export failed', 'error'); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
