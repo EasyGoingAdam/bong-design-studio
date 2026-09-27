@@ -128,6 +128,23 @@ export function buildEtchingPrompt(input: EtchingPromptInput): string {
 }
 
 /**
+ * Build the prompt for an image-to-image EDIT. Combines the original concept,
+ * the user's change request, and the mandatory engraving rules (the user never
+ * has to restate "black and white"). Preserves composition/subject by default
+ * so refining doesn't restart the design.
+ */
+export function buildEtchingEditPrompt(input: { concept: string; feedback: string; targetName?: string }): string {
+  return [
+    ENGRAVING_RULES.forEdit,
+    input.targetName ? `This is the ${input.targetName} artwork of a glass piece.` : '',
+    input.concept ? `Original concept: ${input.concept.trim()}.` : '',
+    `EDIT: ${input.feedback.trim()}.`,
+    'Keep the overall composition, framing and main subject the same — apply the change without redrawing the whole design.',
+    'Output stays pure black on white, binary line art for laser etching — no color, no gray, no gradients.',
+  ].filter(Boolean).join(' ');
+}
+
+/**
  * Build the shared creative brief for a coordinated set from the top-level
  * concept + detail choice. Kept deterministic (no AI) so it always produces a
  * consistent family direction the per-target prompts can share.

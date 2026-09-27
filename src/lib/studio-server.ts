@@ -8,7 +8,10 @@ import {
 } from './ai-providers';
 import { uploadImage } from './supabase';
 import { getServerOpenAIKey } from './calendar-mockups-server';
+import { callOpenAIImageEdit } from './openai';
+import { PROVIDER_CONFIG } from './ai-providers';
 import { toProductionMaster, validateEtchingArtwork, EtchingValidation } from './production-master';
+import sharp from 'sharp';
 
 /**
  * Server-side generation for Bong Design Studio 2.0.
@@ -70,6 +73,60 @@ export interface ProducedVersion {
   blackCoverage: number;
   validation: EtchingValidation;
   stored: boolean;
+}
+
+/** Load image bytes from a storage URL or data URI. */
+async function loadBytes(url: string): Promise<Buffer> {
+  if (url.startsWith('data:')) return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not fetch source image (${res.status})`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Image-to-image EDIT: refine an existing design's actual pixels with the edits
+ * endpoint, then re-master to binary. Preserves the artwork instead of
+ * regenerating from scratch.
+ */
+export async function produceEditedVersion(opts: {
+  sourceUrl: string;
+  prompt: string;
+  size: string;
+  filename: string;
+  aspectRatio?: number;
+}): Promise<ProducedVersion> {
+  const apiKey = await getServerOpenAIKey();
+  if (!apiKey) throw new Error('No OpenAI key configured in Settings.');
+
+  // Normalize the source to PNG for the edits endpoint.
+  const srcBytes = await loadBytes(opts.sourceUrl);
+  const png = await sharp(srcBytes).png().toBuffer();
+
+  const form = new FormData();
+  form.append('model', PROVIDER_CONFIG.openai.model);
+  form.append('prompt', opts.prompt);
+  form.append('n', '1');
+  form.append('size', opts.size);
+  form.append('quality', 'high');
+  form.append('image', new Blob([new Uint8Array(png)], { type: 'image/png' }), 'source.png');
+
+  const img = await callOpenAIImageEdit(form, apiKey);
+  let rawDataUri: string;
+  if (img.b64_json) rawDataUri = `data:image/png;base64,${img.b64_json}`;
+  else {
+    const r = await fetch(img.url as string);
+    rawDataUri = `data:image/png;base64,${Buffer.from(await r.arrayBuffer()).toString('base64')}`;
+  }
+
+  const master = await toProductionMaster(rawDataUri);
+  const validation = await validateEtchingArtwork(master.buffer, { aspectRatio: opts.aspectRatio });
+  let imageUrl = master.dataUri;
+  let stored = true;
+  try { imageUrl = await uploadImage(master.dataUri, 'studio', `${opts.filename}-master`); } catch { stored = false; }
+  let rawImageUrl = '';
+  try { rawImageUrl = await uploadImage(rawDataUri, 'studio', `${opts.filename}-raw`); } catch { rawImageUrl = ''; }
+
+  return { imageUrl, rawImageUrl, provider: 'openai-edit', blackCoverage: master.blackCoverage, validation, stored };
 }
 
 /**

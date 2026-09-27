@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useToast } from './toast';
-import { ImageDownloadButtons } from './image-download';
 import type { ProductTemplate, DesignProject, DesignTarget, DesignVersion } from '@/lib/studio-db';
 
 type Shape = 'standard' | 'wide' | 'tall' | 'wrap';
@@ -49,13 +48,42 @@ export function DesignStudio() {
   const [generating, setGenerating] = useState(false);
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [view, setView] = useState<'create' | 'archive'>('create');
+  const [projects, setProjects] = useState<DesignProject[]>([]);
+  const [showProducts, setShowProducts] = useState(false);
+  const isAdmin = currentUser?.role === 'admin';
+
+  const loadTemplates = () => {
     fetch('/api/product-templates').then((r) => r.json()).then((d) => {
       const t: ProductTemplate[] = Array.isArray(d.templates) ? d.templates : [];
       setTemplates(t);
-      if (t.length && !productName) setProductName(t[0].productName);
+      setProductName((prev) => prev || (t[0]?.productName ?? ''));
     }).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  };
+  useEffect(() => { loadTemplates(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadArchive = () => {
+    fetch('/api/studio/projects').then((r) => r.json()).then((d) => setProjects(Array.isArray(d.projects) ? d.projects : [])).catch(() => {});
+  };
+  useEffect(() => { if (view === 'archive') loadArchive(); }, [view]);
+
+  const openProject = async (id: string) => {
+    const res = await fetch(`/api/studio/projects/${id}`);
+    const proj = await res.json();
+    if (res.ok && proj?.id) { setProject(proj); setView('create'); }
+  };
+
+  const restoreVersion = async (targetId: string, versionId: string) => {
+    setBusyTarget(targetId);
+    try {
+      const res = await fetch('/api/studio/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versionId }) });
+      const data = await res.json();
+      if (res.ok && data?.version) {
+        // Just move the "current" pointer — don't append (it's already in history).
+        setProject((prev) => prev ? { ...prev, targets: (prev.targets ?? []).map((t) => t.id === targetId ? { ...t, currentVersionId: data.version.id, currentVersion: data.version } : t) } : prev);
+      }
+    } finally { setBusyTarget(null); }
+  };
 
   const products = useMemo(() => Array.from(new Set(templates.map((t) => t.productName))), [templates]);
   const areasForProduct = useMemo(() => templates.filter((t) => t.productName === productName), [templates, productName]);
@@ -136,6 +164,23 @@ export function DesignStudio() {
     }
   };
 
+  const editTarget = async (targetId: string, feedback: string) => {
+    if (!feedback.trim()) return;
+    setBusyTarget(targetId);
+    try {
+      const res = await fetch('/api/studio/edit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId, feedback, createdBy: currentUser?.name ?? '' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.version) { toast(data?.error || 'Edit failed', 'error'); return; }
+      applyVersion(targetId, data.version);
+      if (data.validation?.warnings?.length) toast(data.validation.warnings[0], 'info');
+    } finally {
+      setBusyTarget(null);
+    }
+  };
+
   const reverseTarget = async (target: DesignTarget) => {
     const vId = target.currentVersion?.id;
     if (!vId) return;
@@ -177,6 +222,23 @@ export function DesignStudio() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center rounded-lg border border-border overflow-hidden text-sm font-medium">
+          <button onClick={() => { setView('create'); }} className={`px-3 py-1.5 ${view === 'create' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>New Design</button>
+          <button onClick={() => setView('archive')} className={`px-3 py-1.5 ${view === 'archive' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>Archive</button>
+        </div>
+        {isAdmin && (
+          <button onClick={() => setShowProducts(true)} className="text-sm text-muted hover:text-foreground">⚙ Products</button>
+        )}
+      </div>
+
+      {view === 'archive' && (
+        <ArchiveView projects={projects} onOpen={openProject} />
+      )}
+
+      {view === 'create' && (
+      <>
       {/* ── Request form ─────────────────────────────────────────── */}
       <section className="space-y-5">
         <div>
@@ -280,24 +342,31 @@ export function DesignStudio() {
             {(project.targets ?? []).map((t) => (
               <TargetCard key={t.id} target={t} busy={busyTarget === t.id}
                 onRegenerate={() => generateTarget(t.id, '')}
-                onEdit={(fb) => generateTarget(t.id, fb)}
+                onEdit={(fb) => editTarget(t.id, fb)}
                 onReverse={() => reverseTarget(t)}
+                onRestore={(vid) => restoreVersion(t.id, vid)}
                 projectName={project.name} />
             ))}
           </div>
         </section>
       )}
+      </>
+      )}
+
+      {showProducts && <ProductTemplateAdmin templates={templates} onClose={() => setShowProducts(false)} onChange={loadTemplates} />}
     </div>
   );
 }
 
 // ── One target's result: preview + refine + export ──────────────────────────
-function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, projectName }: {
+function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, projectName }: {
   target: DesignTarget; busy: boolean;
-  onRegenerate: () => void; onEdit: (feedback: string) => void; onReverse: () => void; projectName: string;
+  onRegenerate: () => void; onEdit: (feedback: string) => void; onReverse: () => void; onRestore: (versionId: string) => void; projectName: string;
 }) {
   const [feedback, setFeedback] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
   const v = target.currentVersion;
+  const history = target.versions ?? [];
   const dims = target.physicalWidth && target.physicalHeight ? `${target.physicalWidth}" × ${target.physicalHeight}"` : '';
   const fileBase = `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}-${target.name.toLowerCase()}`;
 
@@ -318,8 +387,8 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, projectName
       <div className="flex flex-wrap gap-2 mt-3">
         <button onClick={onRegenerate} disabled={busy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-40">Regenerate</button>
         <button onClick={onReverse} disabled={busy || !v} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-40">Reverse ◑</button>
-        {v?.imageUrl && <ImageDownloadButtons imageUrl={v.imageUrl} filename={fileBase} />}
       </div>
+      {v && <StudioExport versionId={v.id} name={fileBase} />}
 
       <div className="mt-3">
         <div className="text-xs text-muted mb-1">Tell AI what to change:</div>
@@ -331,7 +400,181 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, projectName
             className="px-3 py-2 text-sm rounded-lg bg-accent text-white disabled:opacity-40">Update</button>
         </div>
       </div>
-      {v && v.versionNumber > 1 && <div className="text-[11px] text-muted mt-2">Version {v.versionNumber}{v.inverted ? ' · reversed' : ''}</div>}
+      <div className="flex items-center justify-between mt-2">
+        {v && v.versionNumber > 0 && <span className="text-[11px] text-muted">Version {v.versionNumber}{v.inverted ? ' · reversed' : ''}</span>}
+        {history.length > 1 && (
+          <button onClick={() => setShowHistory((s) => !s)} className="text-[11px] text-accent hover:underline">{showHistory ? 'Hide' : `History (${history.length})`}</button>
+        )}
+      </div>
+      {showHistory && history.length > 1 && (
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {history.map((h) => (
+            <button key={h.id} onClick={() => onRestore(h.id)} disabled={busy}
+              title={`v${h.versionNumber}${h.feedback ? ' · ' + h.feedback : ''}`}
+              className={`shrink-0 w-14 rounded-lg border overflow-hidden ${h.id === v?.id ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-foreground'}`}>
+              <div className="aspect-square bg-white">
+                {h.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={h.imageUrl} alt={`v${h.versionNumber}`} className="w-full h-full object-contain" />
+                ) : null}
+              </div>
+              <div className="text-[9px] text-center text-muted py-0.5">v{h.versionNumber}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Archive (visual project library) ────────────────────────────────────────
+function ArchiveView({ projects, onOpen }: { projects: DesignProject[]; onOpen: (id: string) => void }) {
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<'all' | 'single' | 'set'>('all');
+  const filtered = projects
+    .filter((p) => filter === 'all' || p.type === filter)
+    .filter((p) => {
+      const t = q.trim().toLowerCase();
+      return !t || p.name.toLowerCase().includes(t) || (p.productName || '').toLowerCase().includes(t) || (p.originalRequest || '').toLowerCase().includes(t);
+    });
+  const thumb = (p: DesignProject) => p.targets?.find((t) => t.currentVersion?.imageUrl)?.currentVersion?.imageUrl || '';
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search designs, products…"
+          className="flex-1 min-w-[200px] bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent" />
+        <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+          {(['all', 'single', 'set'] as const).map((f) => (
+            <button key={f} onClick={() => setFilter(f)} className={`px-3 py-2 capitalize ${filter === f ? 'bg-accent text-white' : 'text-muted hover:text-foreground'}`}>{f}</button>
+          ))}
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted text-center py-16">No designs yet. Make one in “New Design”.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {filtered.map((p) => (
+            <button key={p.id} onClick={() => onOpen(p.id)} className="text-left bg-surface border border-border rounded-xl overflow-hidden hover:border-accent transition-colors">
+              <div className="aspect-square bg-white">
+                {thumb(p) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={thumb(p)} alt={p.name} className="w-full h-full object-contain" />
+                ) : null}
+              </div>
+              <div className="p-2">
+                <div className="text-sm font-medium line-clamp-1">{p.name}</div>
+                <div className="text-[11px] text-muted flex items-center gap-1.5">
+                  {p.productName && <span className="truncate">{p.productName}</span>}
+                  {p.type === 'set' && <span className="text-accent">set</span>}
+                  <span className="ml-auto capitalize">{p.status}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admin: product template editor ──────────────────────────────────────────
+function ProductTemplateAdmin({ templates, onClose, onChange }: { templates: ProductTemplate[]; onClose: () => void; onChange: () => void }) {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ productName: '', targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false });
+
+  const save = async () => {
+    if (!form.productName.trim() || !form.targetName.trim()) { toast('Product and area name required', 'error'); return; }
+    const shape = form.supportsWrap ? 'wrap' : (Number(form.widthIn) > Number(form.heightIn) * 1.25 ? 'wide' : 'standard');
+    const res = await fetch('/api/product-templates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productName: form.productName.trim(), targetName: form.targetName.trim(), widthIn: Number(form.widthIn) || null, heightIn: Number(form.heightIn) || null, supportsWrap: form.supportsWrap, seamlessDefault: form.seamlessDefault, shape }),
+    });
+    if (!res.ok) { toast('Save failed', 'error'); return; }
+    setForm({ productName: form.productName, targetName: '', widthIn: '', heightIn: '', supportsWrap: false, seamlessDefault: false });
+    onChange(); toast('Saved', 'success');
+  };
+  const remove = async (id: string) => {
+    await fetch(`/api/product-templates?id=${id}`, { method: 'DELETE' });
+    onChange();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface border border-border rounded-xl w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Product templates</h3>
+          <button onClick={onClose} className="text-muted hover:text-foreground text-lg">×</button>
+        </div>
+        <div className="space-y-1.5 mb-4">
+          {templates.map((t) => (
+            <div key={t.id} className="flex items-center justify-between text-sm bg-background border border-border rounded-lg px-3 py-2">
+              <span>{t.productName} · <b>{t.targetName}</b> <span className="text-muted">{t.widthIn}×{t.heightIn} in{t.supportsWrap ? ' · wrap' : ''}</span></span>
+              <button onClick={() => remove(t.id)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+            </div>
+          ))}
+          {templates.length === 0 && <p className="text-sm text-muted">No templates yet — add one below.</p>}
+        </div>
+        <div className="border-t border-border pt-3 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <input value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder="Product (e.g. Freeze Pipe Bong)" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            <input value={form.targetName} onChange={(e) => setForm({ ...form, targetName: e.target.value })} placeholder="Area (e.g. Coil)" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            <input value={form.widthIn} onChange={(e) => setForm({ ...form, widthIn: e.target.value })} placeholder="Width (in)" type="number" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            <input value={form.heightIn} onChange={(e) => setForm({ ...form, heightIn: e.target.value })} placeholder="Height (in)" type="number" className="bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={form.supportsWrap} onChange={(e) => setForm({ ...form, supportsWrap: e.target.checked })} /> Wrap</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={form.seamlessDefault} onChange={(e) => setForm({ ...form, seamlessDefault: e.target.checked })} /> Seamless default</label>
+            <button onClick={save} className="ml-auto px-4 py-2 text-sm bg-accent text-white rounded-lg">Add / Update</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Export bar (true-vector SVG / PNG / JPG / Download All) ─────────────────
+function StudioExport({ versionId, name }: { versionId: string; name: string }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const download = async (format: 'svg' | 'png' | 'jpg') => {
+    setBusy(format);
+    try {
+      const res = await fetch(`/api/studio/export?versionId=${versionId}&format=${format}&name=${encodeURIComponent(name)}`);
+      if (!res.ok) { toast('Export failed', 'error'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${name}.${format}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast('Export failed', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const downloadAll = async () => {
+    for (const f of ['svg', 'png', 'jpg'] as const) await download(f);
+  };
+
+  const Btn = ({ f, label, ready }: { f: 'svg' | 'png' | 'jpg'; label: string; ready: boolean }) => (
+    <button onClick={() => download(f)} disabled={!!busy}
+      className="px-2.5 py-1.5 text-xs rounded-lg border border-border hover:border-foreground disabled:opacity-40 flex flex-col items-center leading-tight">
+      <span className="font-semibold">{busy === f ? '…' : label}</span>
+      <span className={`text-[9px] ${ready ? 'text-emerald-600' : 'text-muted'}`}>{ready ? 'Machine Ready' : 'Standard'}</span>
+    </button>
+  );
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] text-muted mr-1">Export:</span>
+      <Btn f="svg" label="SVG" ready />
+      <Btn f="png" label="PNG" ready />
+      <Btn f="jpg" label="JPG" ready={false} />
+      <button onClick={downloadAll} disabled={!!busy} className="px-2.5 py-1.5 text-xs rounded-lg bg-accent text-white disabled:opacity-40">Download All</button>
     </div>
   );
 }

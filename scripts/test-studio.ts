@@ -6,6 +6,7 @@
 import sharp from 'sharp';
 import { toProductionMaster, validateEtchingArtwork } from '../src/lib/production-master';
 import { buildEtchingPrompt } from '../src/lib/etching-prompt';
+import { traceToSvg } from '../src/lib/trace-svg';
 
 let failures = 0;
 const ok = (name: string, cond: boolean, detail = '') => {
@@ -58,6 +59,17 @@ async function main() {
     ok('ends with a binary black-and-white reminder', /binary black-and-white/i.test(p));
     const set = buildEtchingPrompt({ concept: 'aliens', targetName: 'Base', designFamilyContext: { theme: 'Alien', visualStyle: 'pulp', lineStyle: 'bold', density: 'balanced', sharedElements: ['stars'] } });
     ok('coordinated set injects the family brief', /coordinated set/i.test(set) && /stars/i.test(set));
+  }
+
+  console.log('vector SVG (potrace):');
+  {
+    const circle = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="100%" height="100%" fill="white"/><circle cx="32" cy="32" r="20" fill="black"/></svg>`;
+    const png = await sharp(Buffer.from(circle)).png().toBuffer();
+    const res = await traceToSvg(png);
+    ok('produces real vector paths', (res.svg.match(/<path/g) || []).length >= 1);
+    ok('no embedded raster image', !res.svg.includes('<image'));
+    ok('carries correct dimensions', res.width === 64 && res.height === 64, `${res.width}x${res.height}`);
+    ok('no color fills beyond black/white', !/fill="#(?!000000|ffffff)[0-9a-f]{6}"/i.test(res.svg));
   }
 
   console.log(failures === 0 ? '\nAll studio tests passed.' : `\n${failures} test(s) FAILED.`);
