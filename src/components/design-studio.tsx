@@ -89,6 +89,9 @@ export function DesignStudio() {
 
   const products = useMemo(() => Array.from(new Set(templates.map((t) => t.productName))), [templates]);
   const areasForProduct = useMemo(() => templates.filter((t) => t.productName === productName), [templates, productName]);
+  // Freeform = no product chosen (or none exist): generate a single design from
+  // just the shape + detail, no physical dimensions required.
+  const isFreeform = !productName || areasForProduct.length === 0;
 
   // Default the selected areas + shape when the product changes.
   useEffect(() => {
@@ -101,29 +104,33 @@ export function DesignStudio() {
     setSelectedAreas((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   };
 
-  const buildTargets = () => selectedAreas.map((name, i) => {
-    const tpl = areasForProduct.find((t) => t.targetName === name);
-    const isWrap = shape === 'wrap' || tpl?.shape === 'wrap';
-    return {
-      name,
-      targetType: tpl?.targetType ?? 'coil',
-      productTemplateId: tpl?.id ?? null,
-      physicalWidth: tpl?.widthIn ?? null,
-      physicalHeight: tpl?.heightIn ?? null,
-      units: tpl?.units ?? 'in',
-      aspectRatio: tpl?.aspectRatio ?? null,
-      shape,
-      wrap: isWrap,
-      seamless: isWrap ? seamless : false,
-      detailLevel: detail,
-      etchCoverage: coverage,
-      sortOrder: i,
-    };
-  });
+  const buildTargets = () => {
+    const shapeAspect = shape === 'wide' ? 1.5 : shape === 'tall' ? 0.667 : shape === 'wrap' ? 3 : 1;
+    // Freeform (or no area picked) → a single generic "Design" target.
+    const areas = (!isFreeform && selectedAreas.length > 0) ? selectedAreas : ['Design'];
+    return areas.map((name, i) => {
+      const tpl = areasForProduct.find((t) => t.targetName === name);
+      const isWrap = shape === 'wrap' || tpl?.shape === 'wrap';
+      return {
+        name,
+        targetType: tpl?.targetType ?? 'custom',
+        productTemplateId: tpl?.id ?? null,
+        physicalWidth: tpl?.widthIn ?? null,
+        physicalHeight: tpl?.heightIn ?? null,
+        units: tpl?.units ?? 'in',
+        aspectRatio: tpl?.aspectRatio ?? shapeAspect,
+        shape,
+        wrap: isWrap,
+        seamless: isWrap ? seamless : false,
+        detailLevel: detail,
+        etchCoverage: coverage,
+        sortOrder: i,
+      };
+    });
+  };
 
   const generate = async () => {
     if (!describe.trim()) { toast('Describe your design first', 'error'); return; }
-    if (selectedAreas.length === 0) { toast('Pick at least one area', 'error'); return; }
     setGenerating(true);
     setProject(null);
     try {
@@ -275,7 +282,7 @@ export function DesignStudio() {
     toast(status === 'approved' ? 'Approved ✓' : 'Saved', 'success');
   };
 
-  const canGenerate = describe.trim().length > 0 && selectedAreas.length > 0 && !generating;
+  const canGenerate = describe.trim().length > 0 && !generating;
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
@@ -314,20 +321,23 @@ export function DesignStudio() {
         </div>
 
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2">Where does it go?</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted mb-2">Where does it go? <span className="text-muted font-normal normal-case">(optional)</span></h2>
           <div className="flex flex-wrap items-center gap-3">
             <select value={productName} onChange={(e) => setProductName(e.target.value)} className="bg-surface border border-border rounded-lg px-3 py-2 text-sm">
-              {products.length === 0 && <option value="">No products yet</option>}
+              <option value="">Just a design (no product)</option>
               {products.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <div className="flex flex-wrap gap-2">
-              {areasForProduct.map((a) => (
-                <button key={a.id} onClick={() => toggleArea(a.targetName)}
-                  className={`px-3 py-2 text-sm rounded-lg border ${selectedAreas.includes(a.targetName) ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'}`}>
-                  {a.targetName}
-                </button>
-              ))}
-            </div>
+            {!isFreeform && (
+              <div className="flex flex-wrap gap-2">
+                {areasForProduct.map((a) => (
+                  <button key={a.id} onClick={() => toggleArea(a.targetName)}
+                    className={`px-3 py-2 text-sm rounded-lg border ${selectedAreas.includes(a.targetName) ? 'bg-accent text-white border-accent' : 'border-border hover:border-foreground'}`}>
+                    {a.targetName}
+                  </button>
+                ))}
+              </div>
+            )}
+            {isFreeform && <span className="text-xs text-muted">Freeform — pick a shape below and generate.</span>}
             {selectedAreas.length > 1 && <span className="text-xs text-muted">Coordinated set · {selectedAreas.length} pieces</span>}
           </div>
         </div>
