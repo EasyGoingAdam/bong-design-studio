@@ -246,6 +246,17 @@ export function DesignStudio() {
     toast('Downloaded the full set', 'success');
   };
 
+  const duplicateProject = async (id: string) => {
+    const res = await fetch(`/api/studio/projects/${id}/duplicate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ createdBy: currentUser?.name ?? '' }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.id) { toast(data?.error || 'Duplicate failed', 'error'); return; }
+    toast('Duplicated — editing the copy', 'success');
+    await openProject(data.id);
+  };
+
   const deleteProject = async (id: string) => {
     if (!window.confirm('Delete this design permanently?')) return;
     await fetch(`/api/studio/projects/${id}`, { method: 'DELETE' });
@@ -408,6 +419,7 @@ export function DesignStudio() {
                 </>
               )}
               <button onClick={previewOnProduct} disabled={mockupBusy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-50">{mockupBusy ? 'Rendering…' : '👓 Preview on Product'}</button>
+              <button onClick={() => duplicateProject(project.id)} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground">⧉ Duplicate</button>
               <button onClick={() => setStatus('favorite')} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground">☆ Save</button>
               <button onClick={() => setStatus('approved')} className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white">✓ Approve</button>
             </div>
@@ -453,8 +465,17 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, 
 }) {
   const [feedback, setFeedback] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [compareId, setCompareId] = useState<string | null>(null);
   const v = target.currentVersion;
   const history = target.versions ?? [];
+  const compareV = compareId ? history.find((h) => h.id === compareId) ?? null : null;
+  // Only surface density when a human should actually look.
+  const cov = v?.blackCoverage;
+  const densityNote = cov == null ? '' : cov < 0.02
+    ? 'This came out nearly blank — try Regenerate, or Heavy coverage under Advanced.'
+    : cov > 0.85
+      ? 'This is very heavy — it may etch as a near-solid block. Try Reverse or Light coverage.'
+      : '';
   const dims = target.physicalWidth && target.physicalHeight ? `${target.physicalWidth}" × ${target.physicalHeight}"` : '';
   const fileBase = `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}-${target.name.toLowerCase()}`;
 
@@ -471,6 +492,9 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, 
           <img src={v.imageUrl} alt={target.name} className="w-full h-full object-contain" />
         ) : <span className="text-xs text-muted">generating…</span>}
       </div>
+      {densityNote && (
+        <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{densityNote}</div>
+      )}
 
       <div className="flex flex-wrap gap-2 mt-3">
         <button onClick={onRegenerate} disabled={busy} className="px-3 py-1.5 text-sm rounded-lg border border-border hover:border-foreground disabled:opacity-40">Regenerate</button>
@@ -495,20 +519,60 @@ function TargetCard({ target, busy, onRegenerate, onEdit, onReverse, onRestore, 
         )}
       </div>
       {showHistory && history.length > 1 && (
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-          {history.map((h) => (
-            <button key={h.id} onClick={() => onRestore(h.id)} disabled={busy}
-              title={`v${h.versionNumber}${h.feedback ? ' · ' + h.feedback : ''}`}
-              className={`shrink-0 w-14 rounded-lg border overflow-hidden ${h.id === v?.id ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-foreground'}`}>
-              <div className="aspect-square bg-white">
-                {h.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={h.imageUrl} alt={`v${h.versionNumber}`} className="w-full h-full object-contain" />
-                ) : null}
+        <>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {history.map((h) => (
+              <div key={h.id} className="shrink-0 w-14">
+                <button onClick={() => onRestore(h.id)} disabled={busy}
+                  title={`Restore v${h.versionNumber}${h.feedback ? ' · ' + h.feedback : ''}`}
+                  className={`w-full rounded-lg border overflow-hidden ${h.id === v?.id ? 'border-accent ring-1 ring-accent' : 'border-border hover:border-foreground'}`}>
+                  <div className="aspect-square bg-white">
+                    {h.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={h.imageUrl} alt={`v${h.versionNumber}`} className="w-full h-full object-contain" />
+                    ) : null}
+                  </div>
+                  <div className="text-[9px] text-center text-muted py-0.5">v{h.versionNumber}</div>
+                </button>
+                {h.id !== v?.id && (
+                  <button onClick={() => setCompareId(compareId === h.id ? null : h.id)}
+                    className={`w-full text-[9px] mt-0.5 ${compareId === h.id ? 'text-accent font-semibold' : 'text-muted hover:text-foreground'}`}>
+                    ⇄ compare
+                  </button>
+                )}
               </div>
-              <div className="text-[9px] text-center text-muted py-0.5">v{h.versionNumber}</div>
-            </button>
-          ))}
+            ))}
+          </div>
+          <p className="text-[10px] text-muted">Tap a version to restore it · ⇄ to compare with the current one.</p>
+        </>
+      )}
+
+      {compareV && v && (
+        <div className="mt-3 border border-border rounded-lg p-2 bg-background">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold">Compare</span>
+            <button onClick={() => setCompareId(null)} className="text-muted hover:text-foreground text-sm">×</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[compareV, v].map((cv, i) => (
+              <div key={cv.id}>
+                <div className="aspect-square bg-white rounded border border-border overflow-hidden">
+                  {cv.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={cv.imageUrl} alt={`v${cv.versionNumber}`} className="w-full h-full object-contain" />
+                  ) : null}
+                </div>
+                <div className="text-[11px] mt-1">
+                  <b>v{cv.versionNumber}</b>{i === 1 ? ' · current' : ''}
+                  {cv.feedback && <div className="text-muted line-clamp-2">“{cv.feedback}”</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => { onRestore(compareV.id); setCompareId(null); }} disabled={busy}
+            className="mt-2 w-full text-xs py-1.5 rounded-lg border border-border hover:border-foreground disabled:opacity-40">
+            Restore v{compareV.versionNumber}
+          </button>
         </div>
       )}
     </div>
